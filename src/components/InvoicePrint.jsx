@@ -65,7 +65,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
           </div>
         )}
 
-        <div style={s.footer}>Thank you for supporting alainprints ❤️</div>
+        <div style={s.footer}>Thank you for supporting alainprints 🤍</div>
       </div>
     </div>
   );
