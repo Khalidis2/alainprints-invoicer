@@ -35,6 +35,7 @@ function dbToItem(row) {
     category: row.category,
     price: Number(row.price),
     description: row.description ?? "",
+    imageUrl: row.image_url ?? null,
   };
 }
 function itemToDb(item) {
@@ -43,7 +44,22 @@ function itemToDb(item) {
     category: item.category,
     price: item.price,
     description: item.description ?? "",
+    image_url: item.imageUrl ?? null,
   };
+}
+
+// ---------- item images ----------
+
+export async function uploadItemImage(file) {
+  const ext = file.name.split(".").pop();
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from("item-images").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from("item-images").getPublicUrl(path);
+  return data.publicUrl;
 }
 
 // ---------- invoices ----------

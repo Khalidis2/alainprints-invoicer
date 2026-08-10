@@ -1,19 +1,34 @@
 import { useState } from "react";
 import { AED, CATEGORIES, CAT_STYLE } from "../lib/helpers";
+import { uploadItemImage } from "../lib/storage";
 
 export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast }) {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState("All");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const startNew = () => {
-    setEditing({ id: null, name: "", category: "3D Print", price: "", description: "" });
+    setEditing({ id: null, name: "", category: "3D Print", price: "", description: "", imageUrl: null });
     setShowForm(true);
   };
   const startEdit = (item) => {
     setEditing({ ...item });
     setShowForm(true);
+  };
+  const handleImagePick = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadItemImage(file);
+      setEditing((prev) => ({ ...prev, imageUrl: url }));
+    } catch (err) {
+      showToast("Image upload failed — check connection");
+    } finally {
+      setUploading(false);
+    }
   };
   const remove = async (id) => {
     try {
@@ -76,6 +91,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
           const cs = CAT_STYLE[item.category] || CAT_STYLE.Custom;
           return (
             <div key={item.id} style={s.card}>
+              {item.imageUrl && <img src={item.imageUrl} alt={item.name} style={s.thumb} />}
               <div style={s.cardTop}>
                 <span style={{ ...s.badge, color: cs.fg, background: cs.bg }}>{item.category}</span>
                 <span style={s.price}>{AED(item.price)}</span>
@@ -99,6 +115,13 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
         <div style={s.overlay} onClick={() => setShowForm(false)}>
           <div style={s.modal} onClick={(e) => e.stopPropagation()}>
             <div style={s.modalTitle}>{editing.id ? "Edit item" : "New item"}</div>
+
+            <label style={s.label}>Photo</label>
+            {editing.imageUrl && (
+              <img src={editing.imageUrl} alt="" style={{ ...s.thumb, marginBottom: 8 }} />
+            )}
+            <input type="file" accept="image/*" onChange={handleImagePick} disabled={uploading} style={{ marginBottom: 4 }} />
+            {uploading && <div style={{ fontSize: 12, color: "#8A7F6D" }}>Uploading…</div>}
 
             <label style={s.label}>Name</label>
             <input
@@ -166,6 +189,7 @@ const s = {
   chipActive: { borderColor: "#1B2A3D", color: "#1B2A3D", background: "#EFEAE0" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 },
   card: { background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 8 },
+  thumb: { width: "100%", height: 140, objectFit: "cover", borderRadius: 8, background: "#F1EDE3" },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   badge: { fontSize: 10, padding: "3px 8px", borderRadius: 6, fontWeight: 700 },
   price: { fontWeight: 800, fontSize: 14.5 },

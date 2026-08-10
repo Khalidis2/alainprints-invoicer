@@ -64,6 +64,7 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
             const cs = CAT_STYLE[item.category] || CAT_STYLE.Custom;
             return (
               <button key={item.id} style={s.pickCard} onClick={() => addItem(item)}>
+                {item.imageUrl && <img src={item.imageUrl} alt="" style={s.pickThumb} />}
                 <span style={{ ...s.badge, color: cs.fg, background: cs.bg, alignSelf: "flex-start" }}>
                   {item.category}
                 </span>
@@ -126,6 +127,7 @@ const s = {
   sub: { fontSize: 13, color: "#8A7F6D", marginTop: 4, marginBottom: 16 },
   pickGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 10 },
   pickCard: { textAlign: "left", background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 6, cursor: "pointer" },
+  pickThumb: { width: "100%", height: 90, objectFit: "cover", borderRadius: 6, background: "#F1EDE3" },
   pickName: { fontWeight: 700, fontSize: 13, color: "#1B2A3D" },
   pickPrice: { fontSize: 12.5, color: "#8A7F6D" },
   badge: { fontSize: 10, padding: "3px 8px", borderRadius: 6, fontWeight: 700 },
