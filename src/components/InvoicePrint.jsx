@@ -65,7 +65,18 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
           </div>
         )}
 
-        <div style={s.footer}>Thank you for supporting alainprints 🤍</div>
+        <div style={s.footer}>
+          Thank you for supporting alainprints
+          <svg viewBox="0 0 100 90" style={s.heart} fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M50,84 C24,63 5,44 5,26 C5,12 17,4 29,7 C39,9 46,17 50,23 C54,17 62,9 72,7 C85,4 96,13 95,27 C94,45 77,63 50,84 Z"
+              stroke="#8A7F6D"
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
       </div>
     </div>
   );
@@ -91,4 +102,5 @@ const s = {
   totalRow: { display: "flex", justifyContent: "space-between", marginTop: 16, paddingTop: 12, borderTop: "2px solid #1B2A3D", fontWeight: 800, fontSize: 15, color: "#1B2A3D" },
   totalAmt: { color: "#E8792D", fontSize: 19 },
   footer: { marginTop: 30, textAlign: "center", fontSize: 11.5, color: "#8A7F6D" },
+  heart: { width: 13, height: 13, marginLeft: 6, verticalAlign: -1 },
 };
