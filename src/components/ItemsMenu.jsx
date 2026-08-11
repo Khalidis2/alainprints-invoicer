@@ -5,6 +5,7 @@ import { uploadItemImage } from "../lib/storage";
 export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast }) {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState("All");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sharingId, setSharingId] = useState(null);
@@ -102,12 +103,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     }
   };
 
-  const knownCategories = new Set(CATEGORIES);
-  const groups = CATEGORIES.map((cat) => ({ category: cat, items: items.filter((i) => i.category === cat) })).filter(
-    (g) => g.items.length > 0
-  );
-  const leftover = items.filter((i) => !knownCategories.has(i.category));
-  if (leftover.length > 0) groups.push({ category: "Other", items: leftover });
+  const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
 
   return (
     <div>
@@ -121,49 +117,51 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
         </button>
       </div>
 
-      {items.length === 0 && <div style={s.empty}>No items yet — add one to get started.</div>}
+      <div style={s.filterRow}>
+        {["All", ...CATEGORIES].map((c) => (
+          <button
+            key={c}
+            onClick={() => setFilter(c)}
+            style={{ ...s.chip, ...(filter === c ? s.chipActive : {}) }}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
 
-      {groups.map((g) => {
-        const cs = CAT_STYLE[g.category] || CAT_STYLE.Custom;
-        return (
-          <div key={g.category} style={s.section}>
-            <div style={s.sectionHead}>
-              <span style={{ ...s.badge, color: cs.fg, background: cs.bg }}>{g.category}</span>
-              <span style={s.sectionCount}>
-                {g.items.length} item{g.items.length !== 1 ? "s" : ""}
-              </span>
+      {filtered.length === 0 && <div style={s.empty}>No items in this category yet.</div>}
+
+      <div style={s.grid}>
+        {filtered.map((item) => {
+          const cs = CAT_STYLE[item.category] || CAT_STYLE.Custom;
+          return (
+            <div key={item.id} style={s.card}>
+              {item.imageUrl && <img src={item.imageUrl} alt={item.name} style={s.thumb} />}
+              <div style={s.cardTop}>
+                <span style={{ ...s.badge, color: cs.fg, background: cs.bg }}>{item.category}</span>
+                <span style={s.price}>{AED(item.price)}</span>
+              </div>
+              <div style={s.name}>{item.name}</div>
+              <div style={s.desc}>{item.description}</div>
+              <div style={s.actions}>
+                <button
+                  style={{ ...s.link, color: "#E8792D", opacity: sharingId === item.id ? 0.6 : 1 }}
+                  onClick={() => shareItem(item)}
+                  disabled={sharingId === item.id}
+                >
+                  {sharingId === item.id ? "Sharing…" : "Share"}
+                </button>
+                <button style={s.link} onClick={() => startEdit(item)}>
+                  Edit
+                </button>
+                <button style={{ ...s.link, color: "#B3451D" }} onClick={() => remove(item.id)}>
+                  Delete
+                </button>
+              </div>
             </div>
-            <div style={s.grid}>
-              {g.items.map((item) => (
-                <div key={item.id} style={s.card}>
-                  {item.imageUrl && <img src={item.imageUrl} alt={item.name} style={s.thumb} />}
-                  <div style={s.cardTop}>
-                    <span style={{ ...s.badge, color: cs.fg, background: cs.bg }}>{item.category}</span>
-                    <span style={s.price}>{AED(item.price)}</span>
-                  </div>
-                  <div style={s.name}>{item.name}</div>
-                  <div style={s.desc}>{item.description}</div>
-                  <div style={s.actions}>
-                    <button
-                      style={{ ...s.link, color: "#E8792D", opacity: sharingId === item.id ? 0.6 : 1 }}
-                      onClick={() => shareItem(item)}
-                      disabled={sharingId === item.id}
-                    >
-                      {sharingId === item.id ? "Sharing…" : "Share"}
-                    </button>
-                    <button style={s.link} onClick={() => startEdit(item)}>
-                      Edit
-                    </button>
-                    <button style={{ ...s.link, color: "#B3451D" }} onClick={() => remove(item.id)}>
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
       {showForm && (
         <div style={s.overlay} onClick={() => setShowForm(false)}>
@@ -376,9 +374,9 @@ const s = {
   sub: { fontSize: 13, color: "#8A7F6D", marginTop: 4 },
   primaryBtn: { background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
-  section: { marginBottom: 26 },
-  sectionHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 },
-  sectionCount: { fontSize: 12, color: "#8A7F6D" },
+  filterRow: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" },
+  chip: { fontSize: 11.5, padding: "6px 12px", borderRadius: 20, border: "1.5px solid #DCD5C6", background: "#fff", color: "#8A7F6D", cursor: "pointer" },
+  chipActive: { borderColor: "#1B2A3D", color: "#1B2A3D", background: "#EFEAE0" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 },
   card: { background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 8 },
   thumb: { width: "100%", height: 140, objectFit: "cover", borderRadius: 8, background: "#F1EDE3" },
