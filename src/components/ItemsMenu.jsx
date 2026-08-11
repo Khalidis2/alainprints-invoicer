@@ -51,7 +51,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     }
   };
   const shareItem = async (item) => {
-    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @_alainprints to order`;
+    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @alainprints to order`;
     const safeName = item.name.replace(/[^\w-]+/g, "_") || "item";
     setSharingId(item.id);
     try {
@@ -65,19 +65,17 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
             await navigator.share({ files: [file], title: item.name, text: caption });
             return;
           }
-          if (!navigator.share) {
-            const dlUrl = URL.createObjectURL(cardBlob);
-            const a = document.createElement("a");
-            a.href = dlUrl;
-            a.download = `${safeName}.jpg`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(dlUrl);
-            await navigator.clipboard.writeText(caption);
-            showToast("Image downloaded & caption copied — share isn't supported on this browser");
-            return;
-          }
+          const dlUrl = URL.createObjectURL(cardBlob);
+          const a = document.createElement("a");
+          a.href = dlUrl;
+          a.download = `${safeName}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(dlUrl);
+          await navigator.clipboard.writeText(caption);
+          showToast("Share image downloaded & caption copied");
+          return;
         } catch (composeErr) {
           // couldn't fetch/compose the image — fall through to a link/text share
         }
@@ -268,18 +266,13 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   );
 }
 
-// Square (1:1) ecommerce-style listing card. Photo fills the right side
-// full-bleed (cover-fit); a clean typographic panel sits on the left —
-// mineral-white background, graphite text, one restrained lime accent on
-// the price only. No icons, dots, gradients, or shadows.
 const CARD_SIZE = 1080;
-const PANEL_W = 460;
+const PANEL_W = 500;
 const HEAD_FONT = "'Archivo Condensed', -apple-system, system-ui, sans-serif";
 const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
 const INK = "#2E2C28";
-const INK_MUTED = "rgba(46,44,40,0.6)";
 const PANEL_BG = "#FAF8F4";
-const ACCENT = "#B7BE5A";
+const ACCENT = "#B8D84A";
 
 async function ensureShareFontLoaded() {
   if (!document.fonts) return;
@@ -295,8 +288,6 @@ async function ensureShareFontLoaded() {
   }
 }
 
-// Shrinks font-size (never truncates text) until it fits within maxWidth —
-// used for the price, where cutting off digits would misrepresent the number.
 function fitFontSize(ctx, text, weight, family, maxWidth, maxSize, minSize) {
   let size = maxSize;
   while (size > minSize) {
@@ -305,6 +296,24 @@ function fitFontSize(ctx, text, weight, family, maxWidth, maxSize, minSize) {
     size -= 2;
   }
   return size;
+}
+
+function fitWrappedText(ctx, text, weight, family, maxWidth, maxLines, maxSize, minSize) {
+  for (let size = maxSize; size >= minSize; size -= 2) {
+    ctx.font = `${weight} ${size}px ${family}`;
+    const lines = wrapText(ctx, text, maxWidth);
+    if (lines.length <= maxLines) return { size, lines };
+  }
+  ctx.font = `${weight} ${minSize}px ${family}`;
+  return { size: minSize, lines: wrapText(ctx, text, maxWidth).slice(0, maxLines) };
+}
+
+function formatCardPrice(value) {
+  const amount = Number(value || 0);
+  return `AED ${amount.toLocaleString("en-AE", {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function drawImageCover(ctx, img, x, y, w, h) {
@@ -338,83 +347,85 @@ async function composeShareCard(item, sourceBlob) {
     canvas.width = CARD_SIZE;
     canvas.height = CARD_SIZE;
     const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
     drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
 
-    const PAD = 56;
+    const PAD = 64;
     const contentW = PANEL_W - PAD * 2;
     ctx.textBaseline = "top";
 
     // brand
-    ctx.font = `700 26px ${HEAD_FONT}`;
+    ctx.font = `700 24px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
-    ctx.fillText("ALAINPRINTS", PAD, 60);
+    ctx.fillText("ALAINPRINTS", PAD, 64);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
-    let y = 60 + 46;
+    let y = 154;
 
-    // headline — full item name, uppercase, condensed, wraps as many lines as needed
-    const headFont = `800 54px ${HEAD_FONT}`;
-    ctx.font = headFont;
-    const nameLines = wrapText(ctx, item.name.toUpperCase(), contentW, 6);
-    const nameLineH = 52;
+    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 800, HEAD_FONT, contentW, 5, 62, 38);
+    const nameLineH = Math.round(headline.size * 0.94);
+    ctx.font = `800 ${headline.size}px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
-    for (const line of nameLines) {
+    for (const line of headline.lines) {
       ctx.fillText(line, PAD, y);
       y += nameLineH;
     }
 
     // Arabic name, right-aligned within the panel, full, wraps as needed
     if (item.nameAr) {
-      y += 14;
-      const arFont = `700 36px ${AR_FONT_FAMILY}`;
-      ctx.font = arFont;
-      const arLines = wrapText(ctx, item.nameAr, contentW, 3);
-      const arLineH = 44;
+      y += 24;
+      const arabic = fitWrappedText(ctx, item.nameAr, 700, AR_FONT_FAMILY, contentW, 3, 38, 28);
+      const arLineH = Math.round(arabic.size * 1.3);
+      ctx.font = `700 ${arabic.size}px ${AR_FONT_FAMILY}`;
       ctx.fillStyle = INK;
       ctx.textAlign = "right";
-      for (const line of arLines) {
+      ctx.direction = "rtl";
+      for (const line of arabic.lines) {
         ctx.fillText(line, PAD + contentW, y);
         y += arLineH;
       }
+      ctx.direction = "inherit";
       ctx.textAlign = "left";
-      y += 4;
     }
 
-    // full description — what the product does — fills the rest of the panel
     if (item.description) {
-      y += 22;
-      const descFont = `600 24px ${HEAD_FONT}`;
-      ctx.font = descFont;
-      const descLines = wrapText(ctx, item.description, contentW, 8);
-      const descLineH = 31;
-      ctx.fillStyle = INK_MUTED;
-      for (const line of descLines) {
-        ctx.fillText(line, PAD, y);
-        y += descLineH;
+      y += 28;
+      const feature = fitWrappedText(ctx, item.description.toUpperCase(), 700, HEAD_FONT, contentW - 36, 3, 28, 20);
+      const featureLineH = Math.round(feature.size * 1.15);
+      const boxH = feature.lines.length * featureLineH + 30;
+      ctx.fillStyle = ACCENT;
+      ctx.fillRect(PAD, y, contentW, boxH);
+      ctx.font = `700 ${feature.size}px ${HEAD_FONT}`;
+      ctx.fillStyle = INK;
+      let featureY = y + 15;
+      for (const line of feature.lines) {
+        ctx.fillText(line, PAD + 18, featureY);
+        featureY += featureLineH;
       }
+      y += boxH;
     }
 
-    // price — the one accented element. Never truncated (that would misrepresent
-    // the number) — the font shrinks to fit the panel width instead.
     y += 34;
-    const priceText = AED(item.price);
-    const priceSize = fitFontSize(ctx, priceText, 800, HEAD_FONT, contentW, 80, 34);
+    ctx.fillStyle = INK;
+    ctx.fillRect(PAD, y, 132, 3);
+    y += 34;
+    const priceText = formatCardPrice(item.price);
+    const priceSize = fitFontSize(ctx, priceText, 800, HEAD_FONT, contentW, 76, 40);
     ctx.font = `800 ${priceSize}px ${HEAD_FONT}`;
-    ctx.fillStyle = ACCENT;
+    ctx.fillStyle = INK;
     ctx.fillText(priceText, PAD, y);
-    y += priceSize + 34;
 
-    // footer — sits just below the content, but never higher than a fixed
-    // near-bottom position, so short content still anchors nicely
-    const footerText = "3D PRINTED IN UAE  •  DM @_ALAINPRINTS";
-    ctx.font = `600 20px ${HEAD_FONT}`;
-    ctx.fillStyle = INK_MUTED;
+    const footerText = "3D PRINTED IN UAE  •  DM @alainprints";
+    const footerSize = fitFontSize(ctx, footerText, 600, HEAD_FONT, contentW, 18, 14);
+    ctx.font = `600 ${footerSize}px ${HEAD_FONT}`;
+    ctx.fillStyle = INK;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
-    ctx.fillText(footerText, PAD, Math.max(CARD_SIZE - PAD - 24, y), contentW);
+    ctx.fillText(footerText, PAD, CARD_SIZE - PAD - footerSize);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
     return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.94));
@@ -423,7 +434,7 @@ async function composeShareCard(item, sourceBlob) {
   }
 }
 
-function wrapText(ctx, text, maxWidth, maxLines) {
+function wrapText(ctx, text, maxWidth) {
   const words = text.trim().split(/\s+/).filter(Boolean);
   const lines = [];
   let current = "";
@@ -433,33 +444,12 @@ function wrapText(ctx, text, maxWidth, maxLines) {
     if (current && ctx.measureText(test).width > maxWidth) {
       lines.push(current);
       current = word;
-      if (lines.length === maxLines) break;
     } else {
       current = test;
     }
     consumed++;
   }
-  if (lines.length < maxLines && current) lines.push(current);
-
-  // If content overflows, prefer dropping whole trailing words over chopping
-  // mid-word — walk backward from the last line until "<line>…" fits.
-  if (consumed < words.length && lines.length) {
-    for (let idx = lines.length - 1; idx >= 0; idx--) {
-      const withEllipsis = `${lines[idx]}…`;
-      if (ctx.measureText(withEllipsis).width <= maxWidth) {
-        lines[idx] = withEllipsis;
-        lines.length = idx + 1;
-        return lines;
-      }
-    }
-    // fallback: even a single word doesn't fit — character-truncate it
-    let last = lines[0] || "";
-    while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) {
-      last = last.slice(0, -1).trim();
-    }
-    lines[0] = `${last}…`;
-    lines.length = 1;
-  }
+  if (current) lines.push(current);
   return lines.length ? lines : [""];
 }
 
