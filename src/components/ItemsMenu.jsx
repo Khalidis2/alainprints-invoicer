@@ -9,7 +9,6 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sharingId, setSharingId] = useState(null);
-  const [shareStage, setShareStage] = useState("");
   const [translating, setTranslating] = useState(false);
 
   const startNew = () => {
@@ -59,19 +58,8 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       if (item.imageUrl) {
         try {
           const res = await fetch(item.imageUrl);
-          const rawBlob = await res.blob();
-          let sourceBlob = rawBlob;
-          let isolated = false;
-          setShareStage("Removing background…");
-          try {
-            sourceBlob = await removeProductBackground(rawBlob);
-            isolated = true;
-          } catch (bgErr) {
-            console.error("Background removal failed:", bgErr);
-            showToast("Background removal failed — using the original photo");
-          }
-          setShareStage("Preparing…");
-          const cardBlob = await composeShareCard(item, sourceBlob, isolated);
+          const sourceBlob = await res.blob();
+          const cardBlob = await composeShareCard(item, sourceBlob);
           const file = new File([cardBlob], `${safeName}.jpg`, { type: "image/jpeg" });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: item.name, text: caption });
@@ -104,7 +92,6 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       if (err.name !== "AbortError") showToast("Couldn't share — try again");
     } finally {
       setSharingId(null);
-      setShareStage("");
     }
   };
   const remove = async (id) => {
@@ -182,7 +169,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
                   onClick={() => shareItem(item)}
                   disabled={sharingId === item.id}
                 >
-                  {sharingId === item.id ? shareStage || "Sharing…" : "Share"}
+                  {sharingId === item.id ? "Sharing…" : "Share"}
                 </button>
                 <button style={s.link} onClick={() => startEdit(item)}>
                   Edit
@@ -292,16 +279,7 @@ const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
 const INK = "#2E2C28";
 const INK_MUTED = "rgba(46,44,40,0.6)";
 const PANEL_BG = "#FAF8F4";
-const PHOTO_BG = "#E7E4DC";
 const ACCENT = "#B7BE5A";
-
-// Loaded on demand (only when Share is used) so it doesn't bloat the main
-// app bundle — the model itself (~40MB) is fetched from IMG.LY's CDN on
-// first use per device, then cached by the browser.
-async function removeProductBackground(blob) {
-  const { default: removeBackground } = await import("@imgly/background-removal");
-  return await removeBackground(blob, { model: "isnet_quint8" });
-}
 
 async function ensureShareFontLoaded() {
   if (!document.fonts) return;
@@ -343,18 +321,7 @@ function drawImageCover(ctx, img, x, y, w, h) {
   ctx.restore();
 }
 
-function drawImageContain(ctx, img, x, y, w, h, padding) {
-  const availW = w - padding * 2;
-  const availH = h - padding * 2;
-  const scale = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
-  const drawW = img.naturalWidth * scale;
-  const drawH = img.naturalHeight * scale;
-  const drawX = x + (w - drawW) / 2;
-  const drawY = y + (h - drawH) / 2;
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
-}
-
-async function composeShareCard(item, sourceBlob, isolated) {
+async function composeShareCard(item, sourceBlob) {
   const objectUrl = URL.createObjectURL(sourceBlob);
   try {
     const [img] = await Promise.all([
@@ -374,13 +341,7 @@ async function composeShareCard(item, sourceBlob, isolated) {
 
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
-    if (isolated) {
-      ctx.fillStyle = PHOTO_BG;
-      ctx.fillRect(PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
-      drawImageContain(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE, 60);
-    } else {
-      drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
-    }
+    drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
 
     const PAD = 56;
     const contentW = PANEL_W - PAD * 2;
@@ -395,24 +356,24 @@ async function composeShareCard(item, sourceBlob, isolated) {
 
     let y = 60 + 46;
 
-    // headline — item name, uppercase, condensed
-    const headFont = `800 62px ${HEAD_FONT}`;
+    // headline — full item name, uppercase, condensed, wraps as many lines as needed
+    const headFont = `800 54px ${HEAD_FONT}`;
     ctx.font = headFont;
-    const nameLines = wrapText(ctx, item.name.toUpperCase(), contentW, 4);
-    const nameLineH = 60;
+    const nameLines = wrapText(ctx, item.name.toUpperCase(), contentW, 6);
+    const nameLineH = 52;
     ctx.fillStyle = INK;
     for (const line of nameLines) {
       ctx.fillText(line, PAD, y);
       y += nameLineH;
     }
 
-    // Arabic name, right-aligned within the panel, wrapped to fit
+    // Arabic name, right-aligned within the panel, full, wraps as needed
     if (item.nameAr) {
       y += 14;
-      const arFont = `700 38px ${AR_FONT_FAMILY}`;
+      const arFont = `700 36px ${AR_FONT_FAMILY}`;
       ctx.font = arFont;
-      const arLines = wrapText(ctx, item.nameAr, contentW, 2);
-      const arLineH = 46;
+      const arLines = wrapText(ctx, item.nameAr, contentW, 3);
+      const arLineH = 44;
       ctx.fillStyle = INK;
       ctx.textAlign = "right";
       for (const line of arLines) {
@@ -423,34 +384,37 @@ async function composeShareCard(item, sourceBlob, isolated) {
       y += 4;
     }
 
-    // feature line, from the description if present
+    // full description — what the product does — fills the rest of the panel
     if (item.description) {
-      y += 20;
-      const featureFont = `700 22px ${HEAD_FONT}`;
-      ctx.font = featureFont;
-      const [featureLine] = wrapText(ctx, item.description.toUpperCase(), contentW, 1);
+      y += 22;
+      const descFont = `600 24px ${HEAD_FONT}`;
+      ctx.font = descFont;
+      const descLines = wrapText(ctx, item.description, contentW, 8);
+      const descLineH = 31;
       ctx.fillStyle = INK_MUTED;
-      if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
-      ctx.fillText(featureLine, PAD, y);
-      if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
-      y += 40;
+      for (const line of descLines) {
+        ctx.fillText(line, PAD, y);
+        y += descLineH;
+      }
     }
 
     // price — the one accented element. Never truncated (that would misrepresent
     // the number) — the font shrinks to fit the panel width instead.
-    y += 36;
+    y += 34;
     const priceText = AED(item.price);
     const priceSize = fitFontSize(ctx, priceText, 800, HEAD_FONT, contentW, 80, 34);
     ctx.font = `800 ${priceSize}px ${HEAD_FONT}`;
     ctx.fillStyle = ACCENT;
     ctx.fillText(priceText, PAD, y);
+    y += priceSize + 34;
 
-    // footer, pinned to the bottom of the panel
+    // footer — sits just below the content, but never higher than a fixed
+    // near-bottom position, so short content still anchors nicely
     const footerText = "3D PRINTED IN UAE  •  DM @_ALAINPRINTS";
     ctx.font = `600 20px ${HEAD_FONT}`;
     ctx.fillStyle = INK_MUTED;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
-    ctx.fillText(footerText, PAD, CARD_SIZE - PAD - 24, contentW);
+    ctx.fillText(footerText, PAD, Math.max(CARD_SIZE - PAD - 24, y), contentW);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
     return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.94));
