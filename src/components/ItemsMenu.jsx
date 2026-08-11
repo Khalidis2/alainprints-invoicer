@@ -9,6 +9,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sharingId, setSharingId] = useState(null);
+  const [translating, setTranslating] = useState(false);
 
   const startNew = () => {
     setEditing({ id: null, name: "", nameAr: "", category: "3D Print", price: "", description: "", imageUrl: null });
@@ -29,6 +30,24 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       showToast("Image upload failed — check connection");
     } finally {
       setUploading(false);
+    }
+  };
+  const translateName = async () => {
+    const text = editing.name.trim();
+    if (!text) return;
+    setTranslating(true);
+    try {
+      const res = await fetch(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q=${encodeURIComponent(text)}`
+      );
+      if (!res.ok) throw new Error("translate request failed");
+      const data = await res.json();
+      const translated = data[0].map((chunk) => chunk[0]).join("");
+      setEditing((prev) => ({ ...prev, nameAr: translated }));
+    } catch (err) {
+      showToast("Couldn't auto-translate — type it manually instead");
+    } finally {
+      setTranslating(false);
     }
   };
   const shareItem = async (item) => {
@@ -184,7 +203,17 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               placeholder="e.g. Keychain — UAE Plate Style"
             />
 
-            <label style={s.label}>Name (Arabic) — optional</label>
+            <div style={s.labelRow}>
+              <label style={{ ...s.label, marginTop: 0 }}>Name (Arabic) — optional</label>
+              <button
+                type="button"
+                style={{ ...s.link, opacity: translating || !editing.name.trim() ? 0.6 : 1 }}
+                onClick={translateName}
+                disabled={translating || !editing.name.trim()}
+              >
+                {translating ? "Translating…" : "Auto-translate"}
+              </button>
+            </div>
             <input
               style={{ ...s.input, direction: "rtl", textAlign: "right" }}
               value={editing.nameAr || ""}
@@ -441,5 +470,6 @@ const s = {
   modalTitle: { fontWeight: 800, fontSize: 17, marginBottom: 14 },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 },
   label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#8A7F6D", marginTop: 12, marginBottom: 5 },
+  labelRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, marginBottom: 5 },
   input: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, border: "1.5px solid #DCD5C6", fontSize: 14, background: "#fff", color: "#1B2A3D" },
 };
