@@ -9,6 +9,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sharingId, setSharingId] = useState(null);
+  const [shareStage, setShareStage] = useState("");
   const [translating, setTranslating] = useState(false);
 
   const startNew = () => {
@@ -58,8 +59,18 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       if (item.imageUrl) {
         try {
           const res = await fetch(item.imageUrl);
-          const sourceBlob = await res.blob();
-          const cardBlob = await composeShareCard(item, sourceBlob);
+          const rawBlob = await res.blob();
+          let sourceBlob = rawBlob;
+          let isolated = false;
+          setShareStage("Removing background…");
+          try {
+            sourceBlob = await removeProductBackground(rawBlob);
+            isolated = true;
+          } catch (bgErr) {
+            // background removal unavailable/failed — fall back to the photo as-is
+          }
+          setShareStage("Preparing…");
+          const cardBlob = await composeShareCard(item, sourceBlob, isolated);
           const file = new File([cardBlob], `${safeName}.jpg`, { type: "image/jpeg" });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: item.name, text: caption });
@@ -92,6 +103,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       if (err.name !== "AbortError") showToast("Couldn't share — try again");
     } finally {
       setSharingId(null);
+      setShareStage("");
     }
   };
   const remove = async (id) => {
@@ -169,7 +181,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
                   onClick={() => shareItem(item)}
                   disabled={sharingId === item.id}
                 >
-                  {sharingId === item.id ? "Sharing…" : "Share"}
+                  {sharingId === item.id ? shareStage || "Sharing…" : "Share"}
                 </button>
                 <button style={s.link} onClick={() => startEdit(item)}>
                   Edit
@@ -279,7 +291,16 @@ const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
 const INK = "#2E2C28";
 const INK_MUTED = "rgba(46,44,40,0.6)";
 const PANEL_BG = "#FAF8F4";
+const PHOTO_BG = "#E7E4DC";
 const ACCENT = "#B7BE5A";
+
+// Loaded on demand (only when Share is used) so it doesn't bloat the main
+// app bundle — the model itself (~40MB) is fetched from IMG.LY's CDN on
+// first use per device, then cached by the browser.
+async function removeProductBackground(blob) {
+  const { default: removeBackground } = await import("@imgly/background-removal");
+  return await removeBackground(blob, { model: "isnet_quint8" });
+}
 
 async function ensureShareFontLoaded() {
   if (!document.fonts) return;
@@ -309,7 +330,18 @@ function drawImageCover(ctx, img, x, y, w, h) {
   ctx.restore();
 }
 
-async function composeShareCard(item, sourceBlob) {
+function drawImageContain(ctx, img, x, y, w, h, padding) {
+  const availW = w - padding * 2;
+  const availH = h - padding * 2;
+  const scale = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+  const drawW = img.naturalWidth * scale;
+  const drawH = img.naturalHeight * scale;
+  const drawX = x + (w - drawW) / 2;
+  const drawY = y + (h - drawH) / 2;
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+}
+
+async function composeShareCard(item, sourceBlob, isolated) {
   const objectUrl = URL.createObjectURL(sourceBlob);
   try {
     const [img] = await Promise.all([
@@ -329,7 +361,13 @@ async function composeShareCard(item, sourceBlob) {
 
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
-    drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    if (isolated) {
+      ctx.fillStyle = PHOTO_BG;
+      ctx.fillRect(PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+      drawImageContain(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE, 60);
+    } else {
+      drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    }
 
     const PAD = 56;
     const contentW = PANEL_W - PAD * 2;
