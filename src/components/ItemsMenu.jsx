@@ -67,7 +67,8 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
             sourceBlob = await removeProductBackground(rawBlob);
             isolated = true;
           } catch (bgErr) {
-            // background removal unavailable/failed — fall back to the photo as-is
+            console.error("Background removal failed:", bgErr);
+            showToast("Background removal failed — using the original photo");
           }
           setShareStage("Preparing…");
           const cardBlob = await composeShareCard(item, sourceBlob, isolated);
@@ -316,6 +317,18 @@ async function ensureShareFontLoaded() {
   }
 }
 
+// Shrinks font-size (never truncates text) until it fits within maxWidth —
+// used for the price, where cutting off digits would misrepresent the number.
+function fitFontSize(ctx, text, weight, family, maxWidth, maxSize, minSize) {
+  let size = maxSize;
+  while (size > minSize) {
+    ctx.font = `${weight} ${size}px ${family}`;
+    if (ctx.measureText(text).width <= maxWidth) break;
+    size -= 2;
+  }
+  return size;
+}
+
 function drawImageCover(ctx, img, x, y, w, h) {
   const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
   const drawW = img.naturalWidth * scale;
@@ -413,20 +426,24 @@ async function composeShareCard(item, sourceBlob, isolated) {
     // feature line, from the description if present
     if (item.description) {
       y += 20;
-      const feature = item.description.length > 42 ? `${item.description.slice(0, 41).trim()}…` : item.description;
-      ctx.font = `700 22px ${HEAD_FONT}`;
+      const featureFont = `700 22px ${HEAD_FONT}`;
+      ctx.font = featureFont;
+      const [featureLine] = wrapText(ctx, item.description.toUpperCase(), contentW, 1);
       ctx.fillStyle = INK_MUTED;
       if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
-      ctx.fillText(feature.toUpperCase(), PAD, y);
+      ctx.fillText(featureLine, PAD, y);
       if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
       y += 40;
     }
 
-    // price — the one accented element
+    // price — the one accented element. Never truncated (that would misrepresent
+    // the number) — the font shrinks to fit the panel width instead.
     y += 36;
-    ctx.font = `800 80px ${HEAD_FONT}`;
+    const priceText = AED(item.price);
+    const priceSize = fitFontSize(ctx, priceText, 800, HEAD_FONT, contentW, 80, 34);
+    ctx.font = `800 ${priceSize}px ${HEAD_FONT}`;
     ctx.fillStyle = ACCENT;
-    ctx.fillText(AED(item.price), PAD, y);
+    ctx.fillText(priceText, PAD, y);
 
     // footer, pinned to the bottom of the panel
     const footerText = "3D PRINTED IN UAE  •  DM @_ALAINPRINTS";
