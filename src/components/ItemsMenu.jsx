@@ -239,25 +239,45 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   );
 }
 
-// Instagram Story canvas (1080x1920, 9:16). The photo sits in a shadowed,
-// framed card up top; name + price sit on a solid panel below it — not
-// overlaid on the photo itself — so they stay fully legible no matter what's
-// in the shot.
-const CARD_W = 1080;
-const CARD_H = 1920;
-const SHARE_FONT = "'Plus Jakarta Sans', -apple-system, system-ui, sans-serif";
+// Square (1:1) ecommerce-style listing card. Photo fills the right side
+// full-bleed (cover-fit); a clean typographic panel sits on the left —
+// mineral-white background, graphite text, one restrained lime accent on
+// the price only. No icons, dots, gradients, or shadows.
+const CARD_SIZE = 1080;
+const PANEL_W = 460;
+const HEAD_FONT = "'Archivo Condensed', -apple-system, system-ui, sans-serif";
+const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
+const INK = "#2E2C28";
+const INK_MUTED = "rgba(46,44,40,0.6)";
+const PANEL_BG = "#FAF8F4";
+const ACCENT = "#B7BE5A";
 
 async function ensureShareFontLoaded() {
   if (!document.fonts) return;
   try {
     await Promise.all([
-      document.fonts.load(`800 1em ${SHARE_FONT}`),
-      document.fonts.load(`700 1em ${SHARE_FONT}`),
-      document.fonts.load(`600 1em ${SHARE_FONT}`),
+      document.fonts.load(`800 1em ${HEAD_FONT}`),
+      document.fonts.load(`700 1em ${HEAD_FONT}`),
+      document.fonts.load(`600 1em ${HEAD_FONT}`),
+      document.fonts.load(`700 1em ${AR_FONT_FAMILY}`),
     ]);
   } catch (err) {
     // font failed to load — canvas will fall back to the system font
   }
+}
+
+function drawImageCover(ctx, img, x, y, w, h) {
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+  const drawW = img.naturalWidth * scale;
+  const drawH = img.naturalHeight * scale;
+  const offsetX = x - (drawW - w) / 2;
+  const offsetY = y - (drawH - h) / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+  ctx.restore();
 }
 
 async function composeShareCard(item, sourceBlob) {
@@ -274,140 +294,85 @@ async function composeShareCard(item, sourceBlob) {
     ]);
 
     const canvas = document.createElement("canvas");
-    canvas.width = CARD_W;
-    canvas.height = CARD_H;
+    canvas.width = CARD_SIZE;
+    canvas.height = CARD_SIZE;
     const ctx = canvas.getContext("2d");
 
-    const bgGradient = ctx.createLinearGradient(0, 0, CARD_W, CARD_H);
-    bgGradient.addColorStop(0, "#22364C");
-    bgGradient.addColorStop(1, "#0F1826");
-    ctx.fillStyle = bgGradient;
-    ctx.fillRect(0, 0, CARD_W, CARD_H);
+    ctx.fillStyle = PANEL_BG;
+    ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
+    drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
 
-    const PAD = 64;
-    const TOP_H = 108;
-    const CAP_H = 620;
+    const PAD = 56;
+    const contentW = PANEL_W - PAD * 2;
+    ctx.textBaseline = "top";
 
-    drawLogoMark(ctx, PAD + 20, TOP_H / 2, 20);
-    ctx.font = `700 32px ${SHARE_FONT}`;
-    ctx.fillStyle = "#FAF8F4";
-    ctx.textBaseline = "middle";
-    if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
-    ctx.fillText("alainprints", PAD + 52, TOP_H / 2 + 2);
+    // brand
+    ctx.font = `700 26px ${HEAD_FONT}`;
+    ctx.fillStyle = INK;
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
+    ctx.fillText("ALAINPRINTS", PAD, 60);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
-    // photo, contain-fit inside its framed card, with a soft drop shadow for depth
-    const boxX = PAD;
-    const boxY = TOP_H;
-    const boxW = CARD_W - PAD * 2;
-    const boxH = CARD_H - TOP_H - CAP_H;
-    const fitScale = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
-    const drawW = Math.round(img.naturalWidth * fitScale);
-    const drawH = Math.round(img.naturalHeight * fitScale);
-    const drawX = Math.round(boxX + (boxW - drawW) / 2);
-    const drawY = Math.round(boxY + (boxH - drawH) / 2);
+    let y = 60 + 46;
 
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.45)";
-    ctx.shadowBlur = 44;
-    ctx.shadowOffsetY = 20;
-    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 32);
-    ctx.clip();
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
-    ctx.restore();
-
-    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 32);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.stroke();
-
-    // caption panel — solid background, guaranteed contrast regardless of the photo
-    const capTop = TOP_H + boxH;
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(PAD, capTop);
-    ctx.lineTo(CARD_W - PAD, capTop);
-    ctx.stroke();
-
-    const nameFont = `700 56px ${SHARE_FONT}`;
-    const arFont = `700 46px ${SHARE_FONT}`;
-    const priceFont = `800 98px ${SHARE_FONT}`;
-    const ctaFont = `600 32px ${SHARE_FONT}`;
-    ctx.font = nameFont;
-    const nameLines = wrapText(ctx, item.name, CARD_W - PAD * 2, 2);
-    const nameLineH = 68;
-    const arLineH = item.nameAr ? 58 : 0;
-    const arGap = item.nameAr ? 10 : 0;
-    const priceLineH = 112;
-    const ctaLineH = 44;
-    const gap = 26;
-    const gap2 = 22;
-    const contentH = nameLines.length * nameLineH + arGap + arLineH + gap + priceLineH + gap2 + ctaLineH;
-
-    ctx.textBaseline = "top";
-    let y = capTop + (CAP_H - contentH) / 2;
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = nameFont;
+    // headline — item name, uppercase, condensed
+    const headFont = `800 62px ${HEAD_FONT}`;
+    ctx.font = headFont;
+    const nameLines = wrapText(ctx, item.name.toUpperCase(), contentW, 4);
+    const nameLineH = 60;
+    ctx.fillStyle = INK;
     for (const line of nameLines) {
       ctx.fillText(line, PAD, y);
       y += nameLineH;
     }
+
+    // Arabic name, right-aligned within the panel, wrapped to fit
     if (item.nameAr) {
-      y += arGap;
+      y += 14;
+      const arFont = `700 38px ${AR_FONT_FAMILY}`;
       ctx.font = arFont;
-      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      const arLines = wrapText(ctx, item.nameAr, contentW, 2);
+      const arLineH = 46;
+      ctx.fillStyle = INK;
       ctx.textAlign = "right";
-      ctx.fillText(item.nameAr, CARD_W - PAD, y);
+      for (const line of arLines) {
+        ctx.fillText(line, PAD + contentW, y);
+        y += arLineH;
+      }
       ctx.textAlign = "left";
-      y += arLineH;
+      y += 4;
     }
-    y += gap;
-    ctx.font = priceFont;
-    ctx.fillStyle = "#FFA85C";
+
+    // feature line, from the description if present
+    if (item.description) {
+      y += 20;
+      const feature = item.description.length > 42 ? `${item.description.slice(0, 41).trim()}…` : item.description;
+      ctx.font = `700 22px ${HEAD_FONT}`;
+      ctx.fillStyle = INK_MUTED;
+      if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
+      ctx.fillText(feature.toUpperCase(), PAD, y);
+      if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+      y += 40;
+    }
+
+    // price — the one accented element
+    y += 36;
+    ctx.font = `800 80px ${HEAD_FONT}`;
+    ctx.fillStyle = ACCENT;
     ctx.fillText(AED(item.price), PAD, y);
-    y += priceLineH + gap2;
-    ctx.font = ctaFont;
-    ctx.fillStyle = "rgba(255,255,255,0.72)";
-    if ("letterSpacing" in ctx) ctx.letterSpacing = "0.5px";
-    ctx.fillText("DM @_alainprints to order", PAD, y);
+
+    // footer, pinned to the bottom of the panel
+    const footerText = "3D PRINTED IN UAE  •  DM @_ALAINPRINTS";
+    ctx.font = `600 20px ${HEAD_FONT}`;
+    ctx.fillStyle = INK_MUTED;
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
+    ctx.fillText(footerText, PAD, CARD_SIZE - PAD - 24, contentW);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
-    return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.94));
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
-}
-
-// Same "spool" mark used in the app header (App.jsx), redrawn for canvas.
-function drawLogoMark(ctx, cx, cy, r) {
-  ctx.save();
-  ctx.strokeStyle = "#E8792D";
-  ctx.lineWidth = r * 0.16;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([r * 0.12, r * 0.32]);
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = "#FAF8F4";
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function roundedRectPath(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
 }
 
 function wrapText(ctx, text, maxWidth, maxLines) {
@@ -428,12 +393,24 @@ function wrapText(ctx, text, maxWidth, maxLines) {
   }
   if (lines.length < maxLines && current) lines.push(current);
 
+  // If content overflows, prefer dropping whole trailing words over chopping
+  // mid-word — walk backward from the last line until "<line>…" fits.
   if (consumed < words.length && lines.length) {
-    let last = lines[lines.length - 1];
-    while (ctx.measureText(`${last}…`).width > maxWidth && last.length > 1) {
+    for (let idx = lines.length - 1; idx >= 0; idx--) {
+      const withEllipsis = `${lines[idx]}…`;
+      if (ctx.measureText(withEllipsis).width <= maxWidth) {
+        lines[idx] = withEllipsis;
+        lines.length = idx + 1;
+        return lines;
+      }
+    }
+    // fallback: even a single word doesn't fit — character-truncate it
+    let last = lines[0] || "";
+    while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) {
       last = last.slice(0, -1).trim();
     }
-    lines[lines.length - 1] = `${last}…`;
+    lines[0] = `${last}…`;
+    lines.length = 1;
   }
   return lines.length ? lines : [""];
 }
