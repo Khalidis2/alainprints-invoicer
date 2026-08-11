@@ -6,6 +6,7 @@ import {
   deleteItemRow,
   fetchInvoices,
   insertInvoice,
+  deleteInvoiceRow,
   fetchInvoiceNo,
   persistInvoiceNo,
   subscribeToChanges,
@@ -85,6 +86,10 @@ export default function App() {
     refreshInvoices();
     return saved;
   };
+  const handleDeleteInvoice = async (id) => {
+    await deleteInvoiceRow(id);
+    refreshInvoices();
+  };
 
   const tabs = [
     { id: "items", label: "Items menu" },
@@ -150,7 +155,9 @@ export default function App() {
         {tab === "invoice" && (
           <InvoiceBuilder items={items} invoiceNo={invoiceNo} onGenerate={handleGenerateInvoice} showToast={showToast} />
         )}
-        {tab === "history" && <InvoiceHistory invoices={invoices} />}
+        {tab === "history" && (
+          <InvoiceHistory invoices={invoices} onDelete={handleDeleteInvoice} showToast={showToast} />
+        )}
       </div>
 
       {toast && <div style={s.toast}>{toast}</div>}

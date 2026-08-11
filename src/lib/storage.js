@@ -76,6 +76,11 @@ export async function insertInvoice(invoice) {
   return dbToInvoice(data);
 }
 
+export async function deleteInvoiceRow(id) {
+  const { error } = await supabase.from("invoices").delete().eq("id", id);
+  if (error) throw error;
+}
+
 function dbToInvoice(row) {
   return {
     id: row.id,
