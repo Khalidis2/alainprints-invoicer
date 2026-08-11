@@ -230,40 +230,64 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   );
 }
 
-// Instagram Story canvas (1080x1920, 9:16). The photo sits in a framed box
-// up top; name + price sit on a solid navy panel below it — not overlaid on
-// the photo itself — so they stay fully legible no matter what's in the shot.
+// Instagram Story canvas (1080x1920, 9:16). The photo sits in a shadowed,
+// framed card up top; name + price sit on a solid panel below it — not
+// overlaid on the photo itself — so they stay fully legible no matter what's
+// in the shot.
 const CARD_W = 1080;
 const CARD_H = 1920;
+const SHARE_FONT = "'Plus Jakarta Sans', -apple-system, system-ui, sans-serif";
+
+async function ensureShareFontLoaded() {
+  if (!document.fonts) return;
+  try {
+    await Promise.all([
+      document.fonts.load(`800 1em ${SHARE_FONT}`),
+      document.fonts.load(`700 1em ${SHARE_FONT}`),
+      document.fonts.load(`600 1em ${SHARE_FONT}`),
+    ]);
+  } catch (err) {
+    // font failed to load — canvas will fall back to the system font
+  }
+}
 
 async function composeShareCard(item, sourceBlob) {
   const objectUrl = URL.createObjectURL(sourceBlob);
   try {
-    const img = await new Promise((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("image failed to load"));
-      el.src = objectUrl;
-    });
+    const [img] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("image failed to load"));
+        el.src = objectUrl;
+      }),
+      ensureShareFontLoaded(),
+    ]);
 
     const canvas = document.createElement("canvas");
     canvas.width = CARD_W;
     canvas.height = CARD_H;
     const ctx = canvas.getContext("2d");
 
-    ctx.fillStyle = "#1B2A3D";
+    const bgGradient = ctx.createLinearGradient(0, 0, CARD_W, CARD_H);
+    bgGradient.addColorStop(0, "#22364C");
+    bgGradient.addColorStop(1, "#0F1826");
+    ctx.fillStyle = bgGradient;
     ctx.fillRect(0, 0, CARD_W, CARD_H);
 
     const PAD = 64;
-    const TOP_H = 100;
+    const TOP_H = 108;
     const CAP_H = 620;
 
-    ctx.font = `800 34px -apple-system, system-ui, sans-serif`;
+    drawLogoMark(ctx, PAD + 20, TOP_H / 2, 20);
+    ctx.font = `700 32px ${SHARE_FONT}`;
     ctx.fillStyle = "#FAF8F4";
     ctx.textBaseline = "middle";
-    ctx.fillText("alainprints", PAD, TOP_H / 2 + 6);
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
+    ctx.fillText("alainprints", PAD + 52, TOP_H / 2 + 2);
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
-    // photo, contain-fit inside its framed box, rounded corners
+    // photo, contain-fit inside its framed card, with a soft drop shadow for depth
     const boxX = PAD;
     const boxY = TOP_H;
     const boxW = CARD_W - PAD * 2;
@@ -275,14 +299,17 @@ async function composeShareCard(item, sourceBlob) {
     const drawY = Math.round(boxY + (boxH - drawH) / 2);
 
     ctx.save();
-    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 28);
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = 44;
+    ctx.shadowOffsetY = 20;
+    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 32);
     ctx.clip();
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
     ctx.restore();
 
-    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 28);
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 32);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
     ctx.stroke();
 
     // caption panel — solid background, guaranteed contrast regardless of the photo
@@ -294,16 +321,16 @@ async function composeShareCard(item, sourceBlob) {
     ctx.lineTo(CARD_W - PAD, capTop);
     ctx.stroke();
 
-    const nameFont = `700 56px -apple-system, system-ui, sans-serif`;
-    const priceFont = `800 96px -apple-system, system-ui, sans-serif`;
-    const ctaFont = `700 34px -apple-system, system-ui, sans-serif`;
+    const nameFont = `700 56px ${SHARE_FONT}`;
+    const priceFont = `800 98px ${SHARE_FONT}`;
+    const ctaFont = `600 32px ${SHARE_FONT}`;
     ctx.font = nameFont;
     const nameLines = wrapText(ctx, item.name, CARD_W - PAD * 2, 2);
     const nameLineH = 68;
-    const priceLineH = 110;
-    const ctaLineH = 46;
-    const gap = 30;
-    const gap2 = 20;
+    const priceLineH = 112;
+    const ctaLineH = 44;
+    const gap = 26;
+    const gap2 = 22;
     const contentH = nameLines.length * nameLineH + gap + priceLineH + gap2 + ctaLineH;
 
     ctx.textBaseline = "top";
@@ -320,13 +347,35 @@ async function composeShareCard(item, sourceBlob) {
     ctx.fillText(AED(item.price), PAD, y);
     y += priceLineH + gap2;
     ctx.font = ctaFont;
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.fillStyle = "rgba(255,255,255,0.72)";
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0.5px";
     ctx.fillText("DM @_alainprints to order", PAD, y);
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
     return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+// Same "spool" mark used in the app header (App.jsx), redrawn for canvas.
+function drawLogoMark(ctx, cx, cy, r) {
+  ctx.save();
+  ctx.strokeStyle = "#E8792D";
+  ctx.lineWidth = r * 0.16;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([r * 0.12, r * 0.32]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#FAF8F4";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function roundedRectPath(ctx, x, y, w, h, r) {
