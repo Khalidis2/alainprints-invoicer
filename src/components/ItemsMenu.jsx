@@ -30,6 +30,33 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       setUploading(false);
     }
   };
+  const shareItem = async (item) => {
+    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}`;
+    try {
+      if (item.imageUrl && navigator.canShare) {
+        try {
+          const res = await fetch(item.imageUrl);
+          const blob = await res.blob();
+          const ext = (blob.type.split("/")[1] || "jpg").split("+")[0];
+          const file = new File([blob], `${item.name.replace(/[^\w-]+/g, "_")}.${ext}`, { type: blob.type });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: item.name, text: caption });
+            return;
+          }
+        } catch (fetchErr) {
+          // couldn't fetch/attach the image — fall through to a link/text share
+        }
+      }
+      if (navigator.share) {
+        await navigator.share({ title: item.name, text: caption, url: item.imageUrl || undefined });
+        return;
+      }
+      await navigator.clipboard.writeText(item.imageUrl ? `${caption}\n${item.imageUrl}` : caption);
+      showToast("Sharing isn't supported here — caption copied instead");
+    } catch (err) {
+      if (err.name !== "AbortError") showToast("Couldn't share — try again");
+    }
+  };
   const remove = async (id) => {
     try {
       await onDelete(id);
@@ -99,6 +126,9 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               <div style={s.name}>{item.name}</div>
               <div style={s.desc}>{item.description}</div>
               <div style={s.actions}>
+                <button style={{ ...s.link, color: "#E8792D" }} onClick={() => shareItem(item)}>
+                  Share
+                </button>
                 <button style={s.link} onClick={() => startEdit(item)}>
                   Edit
                 </button>
