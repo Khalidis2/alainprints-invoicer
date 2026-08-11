@@ -37,12 +37,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     if (!text) return;
     setTranslating(true);
     try {
-      const res = await fetch(
-        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q=${encodeURIComponent(text)}`
-      );
-      if (!res.ok) throw new Error("translate request failed");
-      const data = await res.json();
-      const translated = data[0].map((chunk) => chunk[0]).join("");
+      const translated = await translateToArabic(text);
       setEditing((prev) => ({ ...prev, nameAr: translated }));
     } catch (err) {
       showToast("Couldn't auto-translate — type it manually instead");
@@ -55,11 +50,20 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     const safeName = item.name.replace(/[^\w-]+/g, "_") || "item";
     setSharingId(item.id);
     try {
+      let cardItem = item;
+      if (!item.nameAr?.trim()) {
+        try {
+          cardItem = { ...item, nameAr: await translateToArabic(item.name) };
+        } catch (translationError) {
+          showToast("Couldn't translate the Arabic name — try sharing again");
+          return;
+        }
+      }
       if (item.imageUrl) {
         try {
           const res = await fetch(item.imageUrl);
           const sourceBlob = await res.blob();
-          const cardBlob = await composeShareCard(item, sourceBlob);
+          const cardBlob = await composeShareCard(cardItem, sourceBlob);
           const file = new File([cardBlob], `${safeName}.jpg`, { type: "image/jpeg" });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: item.name, text: caption });
@@ -266,9 +270,20 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   );
 }
 
+async function translateToArabic(text) {
+  const res = await fetch(
+    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q=${encodeURIComponent(text)}`
+  );
+  if (!res.ok) throw new Error("translate request failed");
+  const data = await res.json();
+  const translated = data[0].map((chunk) => chunk[0]).join("").trim();
+  if (!translated) throw new Error("empty translation");
+  return translated;
+}
+
 const CARD_SIZE = 1080;
 const PANEL_W = 500;
-const HEAD_FONT = "'Archivo Condensed', -apple-system, system-ui, sans-serif";
+const HEAD_FONT = "'Bebas Neue', 'Arial Narrow', sans-serif";
 const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
 const INK = "#2E2C28";
 const PANEL_BG = "#FAF8F4";
@@ -278,9 +293,7 @@ async function ensureShareFontLoaded() {
   if (!document.fonts) return;
   try {
     await Promise.all([
-      document.fonts.load(`800 1em ${HEAD_FONT}`),
-      document.fonts.load(`700 1em ${HEAD_FONT}`),
-      document.fonts.load(`600 1em ${HEAD_FONT}`),
+      document.fonts.load(`400 1em ${HEAD_FONT}`),
       document.fonts.load(`700 1em ${AR_FONT_FAMILY}`),
     ]);
   } catch (err) {
@@ -359,7 +372,7 @@ async function composeShareCard(item, sourceBlob) {
     ctx.textBaseline = "top";
 
     // brand
-    ctx.font = `700 24px ${HEAD_FONT}`;
+    ctx.font = `400 24px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
     ctx.fillText("ALAINPRINTS", PAD, 64);
@@ -367,9 +380,9 @@ async function composeShareCard(item, sourceBlob) {
 
     let y = 154;
 
-    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 800, HEAD_FONT, contentW, 5, 62, 38);
+    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 400, HEAD_FONT, contentW, 5, 62, 38);
     const nameLineH = Math.round(headline.size * 0.94);
-    ctx.font = `800 ${headline.size}px ${HEAD_FONT}`;
+    ctx.font = `400 ${headline.size}px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
     for (const line of headline.lines) {
       ctx.fillText(line, PAD, y);
@@ -395,12 +408,12 @@ async function composeShareCard(item, sourceBlob) {
 
     if (item.description) {
       y += 28;
-      const feature = fitWrappedText(ctx, item.description.toUpperCase(), 700, HEAD_FONT, contentW - 36, 3, 28, 20);
+      const feature = fitWrappedText(ctx, item.description.toUpperCase(), 400, HEAD_FONT, contentW - 36, 3, 28, 20);
       const featureLineH = Math.round(feature.size * 1.15);
       const boxH = feature.lines.length * featureLineH + 30;
       ctx.fillStyle = ACCENT;
       ctx.fillRect(PAD, y, contentW, boxH);
-      ctx.font = `700 ${feature.size}px ${HEAD_FONT}`;
+      ctx.font = `400 ${feature.size}px ${HEAD_FONT}`;
       ctx.fillStyle = INK;
       let featureY = y + 15;
       for (const line of feature.lines) {
@@ -415,14 +428,14 @@ async function composeShareCard(item, sourceBlob) {
     ctx.fillRect(PAD, y, 132, 3);
     y += 34;
     const priceText = formatCardPrice(item.price);
-    const priceSize = fitFontSize(ctx, priceText, 800, HEAD_FONT, contentW, 76, 40);
-    ctx.font = `800 ${priceSize}px ${HEAD_FONT}`;
+    const priceSize = fitFontSize(ctx, priceText, 400, HEAD_FONT, contentW, 76, 40);
+    ctx.font = `400 ${priceSize}px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
     ctx.fillText(priceText, PAD, y);
 
     const footerText = "3D PRINTED IN UAE  •  DM @alainprints";
-    const footerSize = fitFontSize(ctx, footerText, 600, HEAD_FONT, contentW, 18, 14);
-    ctx.font = `600 ${footerSize}px ${HEAD_FONT}`;
+    const footerSize = fitFontSize(ctx, footerText, 400, HEAD_FONT, contentW, 18, 14);
+    ctx.font = `400 ${footerSize}px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
     ctx.fillText(footerText, PAD, CARD_SIZE - PAD - footerSize);
