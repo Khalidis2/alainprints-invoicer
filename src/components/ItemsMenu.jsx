@@ -287,12 +287,18 @@ async function composeShareCard(item, sourceBlob) {
 
     // caption panel — solid background, guaranteed contrast regardless of the photo
     const capTop = TOP_H + boxH;
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    const heartSize = 44;
+    const heartGap = 26;
+    const centerX = CARD_W / 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(PAD, capTop);
+    ctx.lineTo(centerX - heartSize / 2 - heartGap, capTop);
+    ctx.moveTo(centerX + heartSize / 2 + heartGap, capTop);
     ctx.lineTo(CARD_W - PAD, capTop);
     ctx.stroke();
+    drawHeart(ctx, centerX, capTop, heartSize, "#FFA85C", 3.5);
 
     const nameFont = `700 56px -apple-system, system-ui, sans-serif`;
     const priceFont = `800 96px -apple-system, system-ui, sans-serif`;
@@ -327,6 +333,31 @@ async function composeShareCard(item, sourceBlob) {
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+// Same hand-drawn heart used in the printed invoice footer, for consistent branding.
+function drawHeart(ctx, cx, cy, w, color, lineWidth) {
+  const h = w * (90 / 100);
+  const x0 = cx - w / 2;
+  const y0 = cy - h / 2;
+  const px = (nx) => x0 + (nx / 100) * w;
+  const py = (ny) => y0 + (ny / 90) * h;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(px(50), py(84));
+  ctx.bezierCurveTo(px(24), py(63), px(5), py(44), px(5), py(26));
+  ctx.bezierCurveTo(px(5), py(12), px(17), py(4), px(29), py(7));
+  ctx.bezierCurveTo(px(39), py(9), px(46), py(17), px(50), py(23));
+  ctx.bezierCurveTo(px(54), py(17), px(62), py(9), px(72), py(7));
+  ctx.bezierCurveTo(px(85), py(4), px(96), py(13), px(95), py(27));
+  ctx.bezierCurveTo(px(94), py(45), px(77), py(63), px(50), py(84));
+  ctx.closePath();
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = color;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.restore();
 }
 
 function roundedRectPath(ctx, x, y, w, h, r) {
