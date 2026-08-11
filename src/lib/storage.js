@@ -32,6 +32,7 @@ function dbToItem(row) {
   return {
     id: row.id,
     name: row.name,
+    nameAr: row.name_ar ?? "",
     category: row.category,
     price: Number(row.price),
     description: row.description ?? "",
@@ -41,6 +42,7 @@ function dbToItem(row) {
 function itemToDb(item) {
   return {
     name: item.name,
+    name_ar: item.nameAr ?? "",
     category: item.category,
     price: item.price,
     description: item.description ?? "",

@@ -11,7 +11,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   const [sharingId, setSharingId] = useState(null);
 
   const startNew = () => {
-    setEditing({ id: null, name: "", category: "3D Print", price: "", description: "", imageUrl: null });
+    setEditing({ id: null, name: "", nameAr: "", category: "3D Print", price: "", description: "", imageUrl: null });
     setShowForm(true);
   };
   const startEdit = (item) => {
@@ -142,6 +142,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
                 <span style={s.price}>{AED(item.price)}</span>
               </div>
               <div style={s.name}>{item.name}</div>
+              {item.nameAr && <div style={s.nameAr}>{item.nameAr}</div>}
               <div style={s.desc}>{item.description}</div>
               <div style={s.actions}>
                 <button
@@ -181,6 +182,14 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               value={editing.name}
               onChange={(e) => setEditing({ ...editing, name: e.target.value })}
               placeholder="e.g. Keychain — UAE Plate Style"
+            />
+
+            <label style={s.label}>Name (Arabic) — optional</label>
+            <input
+              style={{ ...s.input, direction: "rtl", textAlign: "right" }}
+              value={editing.nameAr || ""}
+              onChange={(e) => setEditing({ ...editing, nameAr: e.target.value })}
+              placeholder="الاسم بالعربية"
             />
 
             <label style={s.label}>Category</label>
@@ -322,16 +331,19 @@ async function composeShareCard(item, sourceBlob) {
     ctx.stroke();
 
     const nameFont = `700 56px ${SHARE_FONT}`;
+    const arFont = `700 46px ${SHARE_FONT}`;
     const priceFont = `800 98px ${SHARE_FONT}`;
     const ctaFont = `600 32px ${SHARE_FONT}`;
     ctx.font = nameFont;
     const nameLines = wrapText(ctx, item.name, CARD_W - PAD * 2, 2);
     const nameLineH = 68;
+    const arLineH = item.nameAr ? 58 : 0;
+    const arGap = item.nameAr ? 10 : 0;
     const priceLineH = 112;
     const ctaLineH = 44;
     const gap = 26;
     const gap2 = 22;
-    const contentH = nameLines.length * nameLineH + gap + priceLineH + gap2 + ctaLineH;
+    const contentH = nameLines.length * nameLineH + arGap + arLineH + gap + priceLineH + gap2 + ctaLineH;
 
     ctx.textBaseline = "top";
     let y = capTop + (CAP_H - contentH) / 2;
@@ -340,6 +352,15 @@ async function composeShareCard(item, sourceBlob) {
     for (const line of nameLines) {
       ctx.fillText(line, PAD, y);
       y += nameLineH;
+    }
+    if (item.nameAr) {
+      y += arGap;
+      ctx.font = arFont;
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.textAlign = "right";
+      ctx.fillText(item.nameAr, CARD_W - PAD, y);
+      ctx.textAlign = "left";
+      y += arLineH;
     }
     y += gap;
     ctx.font = priceFont;
@@ -433,6 +454,7 @@ const s = {
   badge: { fontSize: 10, padding: "3px 8px", borderRadius: 6, fontWeight: 700 },
   price: { fontWeight: 800, fontSize: 14.5 },
   name: { fontWeight: 700, fontSize: 15 },
+  nameAr: { fontWeight: 700, fontSize: 14, color: "#1B2A3D", direction: "rtl", textAlign: "right" },
   desc: { fontSize: 12.5, color: "#6B6355", lineHeight: 1.5, flex: 1 },
   actions: { display: "flex", gap: 14, marginTop: 4 },
   link: { background: "none", border: "none", color: "#2E7D8C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 },
