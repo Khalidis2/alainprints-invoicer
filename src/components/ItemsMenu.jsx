@@ -8,6 +8,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   const [filter, setFilter] = useState("All");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [sharingId, setSharingId] = useState(null);
 
   const startNew = () => {
     setEditing({ id: null, name: "", category: "3D Print", price: "", description: "", imageUrl: null });
@@ -31,8 +32,9 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     }
   };
   const shareItem = async (item) => {
-    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}`;
+    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @_alainprints to order`;
     const safeName = item.name.replace(/[^\w-]+/g, "_") || "item";
+    setSharingId(item.id);
     try {
       if (item.imageUrl) {
         try {
@@ -69,6 +71,8 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       showToast("Sharing isn't supported here — caption copied instead");
     } catch (err) {
       if (err.name !== "AbortError") showToast("Couldn't share — try again");
+    } finally {
+      setSharingId(null);
     }
   };
   const remove = async (id) => {
@@ -140,8 +144,12 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               <div style={s.name}>{item.name}</div>
               <div style={s.desc}>{item.description}</div>
               <div style={s.actions}>
-                <button style={{ ...s.link, color: "#E8792D" }} onClick={() => shareItem(item)}>
-                  Share
+                <button
+                  style={{ ...s.link, color: "#E8792D", opacity: sharingId === item.id ? 0.6 : 1 }}
+                  onClick={() => shareItem(item)}
+                  disabled={sharingId === item.id}
+                >
+                  {sharingId === item.id ? "Sharing…" : "Share"}
                 </button>
                 <button style={s.link} onClick={() => startEdit(item)}>
                   Edit
@@ -248,7 +256,7 @@ async function composeShareCard(item, sourceBlob) {
 
     const PAD = 64;
     const TOP_H = 100;
-    const CAP_H = 560;
+    const CAP_H = 620;
 
     ctx.font = `800 34px -apple-system, system-ui, sans-serif`;
     ctx.fillStyle = "#FAF8F4";
@@ -288,12 +296,15 @@ async function composeShareCard(item, sourceBlob) {
 
     const nameFont = `700 56px -apple-system, system-ui, sans-serif`;
     const priceFont = `800 96px -apple-system, system-ui, sans-serif`;
+    const ctaFont = `700 34px -apple-system, system-ui, sans-serif`;
     ctx.font = nameFont;
     const nameLines = wrapText(ctx, item.name, CARD_W - PAD * 2, 2);
     const nameLineH = 68;
     const priceLineH = 110;
+    const ctaLineH = 46;
     const gap = 30;
-    const contentH = nameLines.length * nameLineH + gap + priceLineH;
+    const gap2 = 20;
+    const contentH = nameLines.length * nameLineH + gap + priceLineH + gap2 + ctaLineH;
 
     ctx.textBaseline = "top";
     let y = capTop + (CAP_H - contentH) / 2;
@@ -307,6 +318,10 @@ async function composeShareCard(item, sourceBlob) {
     ctx.font = priceFont;
     ctx.fillStyle = "#FFA85C";
     ctx.fillText(AED(item.price), PAD, y);
+    y += priceLineH + gap2;
+    ctx.font = ctaFont;
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.fillText("DM @_alainprints to order", PAD, y);
 
     return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
   } finally {
