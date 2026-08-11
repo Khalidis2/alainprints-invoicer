@@ -222,9 +222,12 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   );
 }
 
-// Draws the item photo onto a canvas with the name + price burned into a
-// gradient band at the bottom, so the branding survives even when apps
-// (like Instagram's share sheet) drop the accompanying share text.
+// Instagram Story canvas (1080x1920, 9:16). The photo sits in a framed box
+// up top; name + price sit on a solid navy panel below it — not overlaid on
+// the photo itself — so they stay fully legible no matter what's in the shot.
+const CARD_W = 1080;
+const CARD_H = 1920;
+
 async function composeShareCard(item, sourceBlob) {
   const objectUrl = URL.createObjectURL(sourceBlob);
   try {
@@ -235,56 +238,91 @@ async function composeShareCard(item, sourceBlob) {
       el.src = objectUrl;
     });
 
-    const MAX_DIM = 1400;
-    const scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.max(1, Math.round(img.naturalWidth * scale));
-    const h = Math.max(1, Math.round(img.naturalHeight * scale));
-
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = CARD_W;
+    canvas.height = CARD_H;
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, w, h);
 
-    const pad = Math.round(w * 0.055);
-    const nameFont = `700 ${Math.round(w * 0.05)}px -apple-system, system-ui, sans-serif`;
-    const priceFont = `800 ${Math.round(w * 0.066)}px -apple-system, system-ui, sans-serif`;
-    const tagFont = `700 ${Math.round(w * 0.026)}px -apple-system, system-ui, sans-serif`;
+    ctx.fillStyle = "#1B2A3D";
+    ctx.fillRect(0, 0, CARD_W, CARD_H);
 
+    const PAD = 64;
+    const TOP_H = 100;
+    const CAP_H = 560;
+
+    ctx.font = `800 34px -apple-system, system-ui, sans-serif`;
+    ctx.fillStyle = "#FAF8F4";
+    ctx.textBaseline = "middle";
+    ctx.fillText("alainprints", PAD, TOP_H / 2 + 6);
+
+    // photo, contain-fit inside its framed box, rounded corners
+    const boxX = PAD;
+    const boxY = TOP_H;
+    const boxW = CARD_W - PAD * 2;
+    const boxH = CARD_H - TOP_H - CAP_H;
+    const fitScale = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
+    const drawW = Math.round(img.naturalWidth * fitScale);
+    const drawH = Math.round(img.naturalHeight * fitScale);
+    const drawX = Math.round(boxX + (boxW - drawW) / 2);
+    const drawY = Math.round(boxY + (boxH - drawH) / 2);
+
+    ctx.save();
+    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 28);
+    ctx.clip();
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    ctx.restore();
+
+    roundedRectPath(ctx, drawX, drawY, drawW, drawH, 28);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.stroke();
+
+    // caption panel — solid background, guaranteed contrast regardless of the photo
+    const capTop = TOP_H + boxH;
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(PAD, capTop);
+    ctx.lineTo(CARD_W - PAD, capTop);
+    ctx.stroke();
+
+    const nameFont = `700 56px -apple-system, system-ui, sans-serif`;
+    const priceFont = `800 96px -apple-system, system-ui, sans-serif`;
     ctx.font = nameFont;
-    const nameLines = wrapText(ctx, item.name, w - pad * 2, 2);
-    const nameLineH = Math.round(w * 0.058);
-    const priceLineH = Math.round(w * 0.085);
+    const nameLines = wrapText(ctx, item.name, CARD_W - PAD * 2, 2);
+    const nameLineH = 68;
+    const priceLineH = 110;
+    const gap = 30;
+    const contentH = nameLines.length * nameLineH + gap + priceLineH;
 
-    const bandH = Math.round(pad * 1.6 + nameLines.length * nameLineH + priceLineH);
-    const gradient = ctx.createLinearGradient(0, h - bandH, 0, h);
-    gradient.addColorStop(0, "rgba(10,14,20,0)");
-    gradient.addColorStop(1, "rgba(10,14,20,0.85)");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, h - bandH, w, bandH);
-
-    ctx.textBaseline = "alphabetic";
-    let y = h - pad * 0.9 - priceLineH;
-    for (let i = nameLines.length - 1; i >= 0; i--) {
-      ctx.font = nameFont;
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillText(nameLines[i], pad, y);
-      y -= nameLineH;
+    ctx.textBaseline = "top";
+    let y = capTop + (CAP_H - contentH) / 2;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = nameFont;
+    for (const line of nameLines) {
+      ctx.fillText(line, PAD, y);
+      y += nameLineH;
     }
-
+    y += gap;
     ctx.font = priceFont;
     ctx.fillStyle = "#FFA85C";
-    ctx.fillText(AED(item.price), pad, h - pad * 0.9);
-
-    ctx.font = tagFont;
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.textBaseline = "top";
-    ctx.fillText("alainprints", pad, pad * 0.55);
+    ctx.fillText(AED(item.price), PAD, y);
 
     return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+function roundedRectPath(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
 }
 
 function wrapText(ctx, text, maxWidth, maxLines) {
