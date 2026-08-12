@@ -288,11 +288,9 @@ async function translateToArabic(text) {
 }
 
 const CARD_SIZE = 1080;
-const PANEL_W = 455;
 const HEAD_FONT = "'Sora', system-ui, sans-serif";
 const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
 const INK = "#2E2C28";
-const PANEL_BG = "#FAF8F4";
 const ACCENT = "#B8D84A";
 
 async function ensureShareFontLoaded() {
@@ -368,63 +366,6 @@ function drawImageCoverRounded(ctx, img, x, y, w, h, radius) {
   ctx.restore();
 }
 
-function drawImageContainRounded(ctx, img, x, y, w, h, radius, padding = 28) {
-  const scale = Math.min((w - padding * 2) / img.naturalWidth, (h - padding * 2) / img.naturalHeight);
-  const drawW = img.naturalWidth * scale;
-  const drawH = img.naturalHeight * scale;
-  const drawX = x + (w - drawW) / 2;
-  const drawY = y + (h - drawH) / 2;
-  ctx.save();
-  roundedRectPath(ctx, x, y, w, h, radius);
-  ctx.clip();
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
-  ctx.restore();
-}
-
-function drawTransparentProduct(ctx, img, x, y, w, h) {
-  const scan = document.createElement("canvas");
-  scan.width = img.naturalWidth;
-  scan.height = img.naturalHeight;
-  const scanCtx = scan.getContext("2d", { willReadFrequently: true });
-  scanCtx.drawImage(img, 0, 0);
-  const pixels = scanCtx.getImageData(0, 0, scan.width, scan.height).data;
-  let minX = scan.width;
-  let minY = scan.height;
-  let maxX = -1;
-  let maxY = -1;
-
-  for (let py = 0; py < scan.height; py++) {
-    for (let px = 0; px < scan.width; px++) {
-      if (pixels[(py * scan.width + px) * 4 + 3] > 12) {
-        minX = Math.min(minX, px);
-        minY = Math.min(minY, py);
-        maxX = Math.max(maxX, px);
-        maxY = Math.max(maxY, py);
-      }
-    }
-  }
-
-  const hasTransparencyBounds = maxX >= minX && maxY >= minY;
-  const sourceX = hasTransparencyBounds ? minX : 0;
-  const sourceY = hasTransparencyBounds ? minY : 0;
-  const sourceW = hasTransparencyBounds ? maxX - minX + 1 : img.naturalWidth;
-  const sourceH = hasTransparencyBounds ? maxY - minY + 1 : img.naturalHeight;
-  const paddingX = 8;
-  const paddingY = 24;
-  const scale = Math.min((w - paddingX * 2) / sourceW, (h - paddingY * 2) / sourceH);
-  const drawW = sourceW * scale;
-  const drawH = sourceH * scale;
-  const drawX = x + w - drawW + 18;
-  const drawY = y + (h - drawH) / 2;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.drawImage(img, sourceX, sourceY, sourceW, sourceH, drawX, drawY, drawW, drawH);
-  ctx.restore();
-}
-
 async function composeShareCard(item, sourceBlob) {
   const objectUrl = URL.createObjectURL(sourceBlob);
   try {
@@ -445,64 +386,82 @@ async function composeShareCard(item, sourceBlob) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    ctx.fillStyle = PANEL_BG;
-    ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
-
-    const photoX = PANEL_W + 24;
-    const photoY = 54;
-    const photoW = CARD_SIZE - photoX - 34;
-    const photoH = CARD_SIZE - 108;
-
-    ctx.save();
-    ctx.shadowColor = "rgba(30,30,26,0.18)";
-    ctx.shadowBlur = 36;
-    ctx.shadowOffsetY = 16;
-    ctx.fillStyle = "#FFFFFF";
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.fill();
-    ctx.restore();
-
-    ctx.save();
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.clip();
-    drawImageContainRounded(ctx, img, photoX, photoY, photoW, photoH, 38, 38);
-    ctx.restore();
-
-    ctx.strokeStyle = "rgba(46,44,40,0.10)";
-    ctx.lineWidth = 1.5;
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.stroke();
+    // Photo fills the entire square — poster style, no side panel.
+    drawImageCoverRounded(ctx, img, 0, 0, CARD_SIZE, CARD_SIZE, 0);
 
     const PAD = 64;
-    const contentW = PANEL_W - PAD * 2;
+    const contentW = CARD_SIZE - PAD * 2;
     ctx.textBaseline = "top";
 
+    // -- measure every block first, so the scrim + text can be bottom-anchored --
+    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 700, HEAD_FONT, contentW, 3, 68, 40);
+    const nameLineH = Math.round(headline.size * 1.14);
+    let blockH = headline.lines.length * nameLineH;
+
+    let arabicName = "";
+    let arabic = null;
+    let arLineH = 0;
+    if (item.nameAr) {
+      arabicName = formatArabicProductName(item.nameAr);
+      arabic = fitWrappedText(ctx, arabicName, 600, AR_FONT_FAMILY, contentW, 2, 38, 24);
+      arLineH = Math.round(arabic.size * 1.4);
+      blockH += 20 + arabic.lines.length * arLineH;
+    }
+
+    let feature = null;
+    let featureLineH = 0;
+    let featureBoxH = 0;
+    if (item.description) {
+      feature = fitWrappedText(ctx, item.description.toUpperCase(), 600, HEAD_FONT, contentW - 36, 2, 24, 17);
+      featureLineH = Math.round(feature.size * 1.15);
+      featureBoxH = feature.lines.length * featureLineH + 28;
+      blockH += 26 + featureBoxH;
+    }
+
+    const priceText = formatCardPrice(item.price);
+    const priceSize = fitFontSize(ctx, priceText, 700, HEAD_FONT, contentW, 84, 44);
+    const priceLineH = Math.round(priceSize * 1.1);
+    blockH += 32 + priceLineH;
+
+    const footerText = "3D PRINTED IN UAE  •  DM @_alainprints";
+    const footerSize = fitFontSize(ctx, footerText, 500, HEAD_FONT, contentW, 16, 12);
+    blockH += 24 + footerSize;
+
+    // -- scrims: dark bottom wash for the text block, light top wash for the brand mark --
+    const scrimTop = Math.min(CARD_SIZE * 0.45, CARD_SIZE - blockH - PAD - 40);
+    const scrim = ctx.createLinearGradient(0, scrimTop, 0, CARD_SIZE);
+    scrim.addColorStop(0, "rgba(15,16,12,0)");
+    scrim.addColorStop(1, "rgba(15,16,12,0.82)");
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0, scrimTop, CARD_SIZE, CARD_SIZE - scrimTop);
+
+    const topScrim = ctx.createLinearGradient(0, 0, 0, 150);
+    topScrim.addColorStop(0, "rgba(15,16,12,0.5)");
+    topScrim.addColorStop(1, "rgba(15,16,12,0)");
+    ctx.fillStyle = topScrim;
+    ctx.fillRect(0, 0, CARD_SIZE, 150);
+
     // brand
-    ctx.font = `600 20px ${HEAD_FONT}`;
-    ctx.fillStyle = INK;
+    ctx.font = `600 24px ${HEAD_FONT}`;
+    ctx.fillStyle = "#FAF8F4";
     if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
-    ctx.fillText("ALAINPRINTS", PAD, 64);
+    ctx.fillText("ALAINPRINTS", PAD, 56);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
-    let y = 154;
+    // -- draw the bottom-anchored text block --
+    let y = CARD_SIZE - PAD - blockH;
 
-    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 600, HEAD_FONT, contentW, 5, 48, 30);
-    const nameLineH = Math.round(headline.size * 1.18);
-    ctx.font = `600 ${headline.size}px ${HEAD_FONT}`;
-    ctx.fillStyle = INK;
+    ctx.font = `700 ${headline.size}px ${HEAD_FONT}`;
+    ctx.fillStyle = "#FFFFFF";
     for (const line of headline.lines) {
       ctx.fillText(line, PAD, y);
       y += nameLineH;
     }
 
-    // Arabic name, right-aligned within the panel, full, wraps as needed
-    if (item.nameAr) {
-      y += 24;
-      const arabicName = formatArabicProductName(item.nameAr);
-      const arabic = fitWrappedText(ctx, arabicName, 600, AR_FONT_FAMILY, contentW, 2, 34, 22);
-      const arLineH = Math.round(arabic.size * 1.42);
+    if (arabic) {
+      y += 20;
       ctx.font = `600 ${arabic.size}px ${AR_FONT_FAMILY}`;
-      ctx.fillStyle = INK;
+      ctx.fillStyle = "#FAF8F4";
       ctx.textAlign = "right";
       ctx.direction = "rtl";
       for (const line of arabic.lines) {
@@ -513,39 +472,31 @@ async function composeShareCard(item, sourceBlob) {
       ctx.textAlign = "left";
     }
 
-    if (item.description) {
-      y += 28;
-      const feature = fitWrappedText(ctx, item.description.toUpperCase(), 600, HEAD_FONT, contentW - 36, 3, 24, 17);
-      const featureLineH = Math.round(feature.size * 1.15);
-      const boxH = feature.lines.length * featureLineH + 30;
+    if (feature) {
+      y += 26;
       ctx.fillStyle = ACCENT;
-      ctx.fillRect(PAD, y, contentW, boxH);
+      ctx.fillRect(PAD, y, contentW, featureBoxH);
       ctx.font = `600 ${feature.size}px ${HEAD_FONT}`;
       ctx.fillStyle = INK;
-      let featureY = y + 15;
+      let featureY = y + 14;
       for (const line of feature.lines) {
         ctx.fillText(line, PAD + 18, featureY);
         featureY += featureLineH;
       }
-      y += boxH;
+      y += featureBoxH;
     }
 
-    y += 34;
-    ctx.fillStyle = INK;
-    ctx.fillRect(PAD, y, 132, 3);
-    y += 34;
-    const priceText = formatCardPrice(item.price);
-    const priceSize = fitFontSize(ctx, priceText, 600, HEAD_FONT, contentW, 64, 36);
-    ctx.font = `600 ${priceSize}px ${HEAD_FONT}`;
-    ctx.fillStyle = INK;
+    y += 32;
+    ctx.font = `700 ${priceSize}px ${HEAD_FONT}`;
+    ctx.fillStyle = ACCENT;
     ctx.fillText(priceText, PAD, y);
+    y += priceLineH;
 
-    const footerText = "3D PRINTED IN UAE  •  DM @_alainprints";
-    const footerSize = fitFontSize(ctx, footerText, 500, HEAD_FONT, contentW, 15, 12);
+    y += 24;
     ctx.font = `500 ${footerSize}px ${HEAD_FONT}`;
-    ctx.fillStyle = INK;
+    ctx.fillStyle = "rgba(250,248,244,0.85)";
     if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
-    ctx.fillText(footerText, PAD, CARD_SIZE - PAD - footerSize);
+    ctx.fillText(footerText, PAD, y);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
     return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.94));
