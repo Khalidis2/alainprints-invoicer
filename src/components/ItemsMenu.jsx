@@ -344,20 +344,6 @@ function formatCardPrice(value) {
   })}`;
 }
 
-function drawImageCover(ctx, img, x, y, w, h) {
-  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-  const drawW = img.naturalWidth * scale;
-  const drawH = img.naturalHeight * scale;
-  const offsetX = x - (drawW - w) / 2;
-  const offsetY = y - (drawH - h) / 2;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
-  ctx.restore();
-}
-
 function roundedRectPath(ctx, x, y, w, h, radius) {
   const r = Math.min(radius, w / 2, h / 2);
   ctx.beginPath();
@@ -462,23 +448,16 @@ async function composeShareCard(item, sourceBlob) {
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
 
-    const ambient = ctx.createRadialGradient(840, 240, 12, 840, 240, 520);
-    ambient.addColorStop(0, "rgba(184,216,74,0.25)");
-    ambient.addColorStop(0.52, "rgba(184,216,74,0.07)");
-    ambient.addColorStop(1, "rgba(184,216,74,0)");
-    ctx.fillStyle = ambient;
-    ctx.fillRect(PANEL_W - 40, 0, CARD_SIZE - PANEL_W + 40, CARD_SIZE);
-
     const photoX = PANEL_W + 24;
     const photoY = 54;
     const photoW = CARD_SIZE - photoX - 34;
     const photoH = CARD_SIZE - 108;
 
     ctx.save();
-    ctx.shadowColor = "rgba(30,30,26,0.22)";
-    ctx.shadowBlur = 42;
-    ctx.shadowOffsetY = 18;
-    ctx.fillStyle = "rgba(255,255,255,0.94)";
+    ctx.shadowColor = "rgba(30,30,26,0.18)";
+    ctx.shadowBlur = 36;
+    ctx.shadowOffsetY = 16;
+    ctx.fillStyle = "#FFFFFF";
     roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
     ctx.fill();
     ctx.restore();
@@ -486,50 +465,10 @@ async function composeShareCard(item, sourceBlob) {
     ctx.save();
     roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
     ctx.clip();
-    ctx.filter = "blur(28px) brightness(0.82) saturate(0.85)";
-    ctx.globalAlpha = 0.52;
-    drawImageCover(ctx, img, photoX - 32, photoY - 32, photoW + 64, photoH + 64);
-    ctx.restore();
-
-    const photoWash = ctx.createLinearGradient(photoX, photoY, photoX + photoW, photoY + photoH);
-    photoWash.addColorStop(0, "rgba(248,249,245,0.72)");
-    photoWash.addColorStop(0.55, "rgba(245,246,242,0.35)");
-    photoWash.addColorStop(1, "rgba(184,216,74,0.20)");
-    ctx.save();
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.clip();
-    ctx.fillStyle = photoWash;
-    ctx.fillRect(photoX, photoY, photoW, photoH);
-    ctx.filter = "brightness(1.04) contrast(1.03) saturate(1.02) drop-shadow(0 18px 24px rgba(22,24,20,0.18))";
     drawImageContainRounded(ctx, img, photoX, photoY, photoW, photoH, 38, 38);
     ctx.restore();
 
-    const light = ctx.createRadialGradient(
-      photoX + photoW * 0.42,
-      photoY + photoH * 0.34,
-      20,
-      photoX + photoW * 0.42,
-      photoY + photoH * 0.34,
-      photoW * 0.78
-    );
-    light.addColorStop(0, "rgba(255,255,255,0.18)");
-    light.addColorStop(0.55, "rgba(255,255,255,0.02)");
-    light.addColorStop(1, "rgba(25,28,32,0.13)");
-    ctx.fillStyle = light;
-    ctx.save();
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.clip();
-    ctx.fillRect(photoX, photoY, photoW, photoH);
-
-    const polish = ctx.createLinearGradient(photoX, photoY, photoX + photoW, photoY + photoH);
-    polish.addColorStop(0, "rgba(244,247,241,0.11)");
-    polish.addColorStop(0.48, "rgba(255,255,255,0)");
-    polish.addColorStop(1, "rgba(184,216,74,0.055)");
-    ctx.fillStyle = polish;
-    ctx.fillRect(photoX, photoY, photoW, photoH);
-    ctx.restore();
-
-    ctx.strokeStyle = "rgba(46,44,40,0.12)";
+    ctx.strokeStyle = "rgba(46,44,40,0.10)";
     ctx.lineWidth = 1.5;
     roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
     ctx.stroke();
