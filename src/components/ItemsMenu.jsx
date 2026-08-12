@@ -423,7 +423,38 @@ async function composeShareCard(item, sourceBlob) {
 
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
-    drawTransparentProduct(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    ctx.save();
+    ctx.filter = "brightness(1.04) contrast(1.04) saturate(1.02)";
+    drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    ctx.restore();
+
+    const photoW = CARD_SIZE - PANEL_W;
+    const light = ctx.createRadialGradient(
+      PANEL_W + photoW * 0.42,
+      CARD_SIZE * 0.34,
+      20,
+      PANEL_W + photoW * 0.42,
+      CARD_SIZE * 0.34,
+      photoW * 0.78
+    );
+    light.addColorStop(0, "rgba(255,255,255,0.18)");
+    light.addColorStop(0.55, "rgba(255,255,255,0.02)");
+    light.addColorStop(1, "rgba(25,28,32,0.13)");
+    ctx.fillStyle = light;
+    ctx.fillRect(PANEL_W, 0, photoW, CARD_SIZE);
+
+    const polish = ctx.createLinearGradient(PANEL_W, 0, CARD_SIZE, CARD_SIZE);
+    polish.addColorStop(0, "rgba(244,247,241,0.11)");
+    polish.addColorStop(0.48, "rgba(255,255,255,0)");
+    polish.addColorStop(1, "rgba(184,216,74,0.055)");
+    ctx.fillStyle = polish;
+    ctx.fillRect(PANEL_W, 0, photoW, CARD_SIZE);
+
+    const edgeShade = ctx.createLinearGradient(PANEL_W, 0, PANEL_W + 76, 0);
+    edgeShade.addColorStop(0, "rgba(46,44,40,0.12)");
+    edgeShade.addColorStop(1, "rgba(46,44,40,0)");
+    ctx.fillStyle = edgeShade;
+    ctx.fillRect(PANEL_W, 0, 76, CARD_SIZE);
 
     const PAD = 64;
     const contentW = PANEL_W - PAD * 2;
