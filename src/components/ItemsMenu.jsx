@@ -394,7 +394,10 @@ async function composeShareCard(item, sourceBlob) {
     ctx.textBaseline = "top";
 
     // -- measure every block first, so the scrim + text can be bottom-anchored --
-    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 700, HEAD_FONT, contentW, 3, 68, 40);
+    // Sized to reliably fit within the fixed scrim zone below (~44% of the
+    // canvas) so the product photo always stays majority visible, no matter
+    // how much text a given item has.
+    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 700, HEAD_FONT, contentW, 2, 60, 36);
     const nameLineH = Math.round(headline.size * 1.14);
     let blockH = headline.lines.length * nameLineH;
 
@@ -403,35 +406,36 @@ async function composeShareCard(item, sourceBlob) {
     let arLineH = 0;
     if (item.nameAr) {
       arabicName = formatArabicProductName(item.nameAr);
-      arabic = fitWrappedText(ctx, arabicName, 600, AR_FONT_FAMILY, contentW, 2, 38, 24);
+      arabic = fitWrappedText(ctx, arabicName, 600, AR_FONT_FAMILY, contentW, 1, 34, 22);
       arLineH = Math.round(arabic.size * 1.4);
-      blockH += 20 + arabic.lines.length * arLineH;
+      blockH += 18 + arabic.lines.length * arLineH;
     }
 
     let feature = null;
     let featureLineH = 0;
     let featureBoxH = 0;
     if (item.description) {
-      feature = fitWrappedText(ctx, item.description.toUpperCase(), 600, HEAD_FONT, contentW - 36, 2, 24, 17);
+      feature = fitWrappedText(ctx, item.description.toUpperCase(), 600, HEAD_FONT, contentW - 36, 1, 20, 16);
       featureLineH = Math.round(feature.size * 1.15);
-      featureBoxH = feature.lines.length * featureLineH + 28;
-      blockH += 26 + featureBoxH;
+      featureBoxH = feature.lines.length * featureLineH + 24;
+      blockH += 22 + featureBoxH;
     }
 
     const priceText = formatCardPrice(item.price);
-    const priceSize = fitFontSize(ctx, priceText, 700, HEAD_FONT, contentW, 84, 44);
+    const priceSize = fitFontSize(ctx, priceText, 700, HEAD_FONT, contentW, 68, 40);
     const priceLineH = Math.round(priceSize * 1.1);
-    blockH += 32 + priceLineH;
+    blockH += 28 + priceLineH;
 
     const footerText = "3D PRINTED IN UAE  •  DM @_alainprints";
-    const footerSize = fitFontSize(ctx, footerText, 500, HEAD_FONT, contentW, 16, 12);
-    blockH += 24 + footerSize;
+    const footerSize = fitFontSize(ctx, footerText, 500, HEAD_FONT, contentW, 15, 12);
+    blockH += 20 + footerSize;
 
-    // -- scrims: dark bottom wash for the text block, light top wash for the brand mark --
-    const scrimTop = Math.min(CARD_SIZE * 0.45, CARD_SIZE - blockH - PAD - 40);
+    // -- scrims: a fixed-height dark wash at the bottom (never grows with content,
+    // so the photo stays consistently visible), light wash at top for the brand mark --
+    const scrimTop = CARD_SIZE * 0.56;
     const scrim = ctx.createLinearGradient(0, scrimTop, 0, CARD_SIZE);
     scrim.addColorStop(0, "rgba(15,16,12,0)");
-    scrim.addColorStop(1, "rgba(15,16,12,0.82)");
+    scrim.addColorStop(1, "rgba(15,16,12,0.78)");
     ctx.fillStyle = scrim;
     ctx.fillRect(0, scrimTop, CARD_SIZE, CARD_SIZE - scrimTop);
 
