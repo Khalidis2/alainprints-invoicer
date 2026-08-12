@@ -122,7 +122,8 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       setShowForm(false);
       setEditing(null);
     } catch (e) {
-      showToast("Couldn't save item — check connection");
+      const missingColumn = /name_ar|image_url|schema cache|column/i.test(e.message || "");
+      showToast(missingColumn ? "Database update required — add name_ar and image_url columns" : `Couldn't save item — ${e.message || "check connection"}`);
     } finally {
       setSaving(false);
     }
