@@ -57,17 +57,17 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       if (item.imageUrl) {
         try {
           const res = await fetch(item.imageUrl);
-          const blob = await res.blob();
-          const ext = (blob.type.split("/")[1] || "jpg").split("+")[0];
-          const file = new File([blob], `${safeName}.${ext}`, { type: blob.type });
+          const sourceBlob = await res.blob();
+          const cardBlob = await composeShareCard(item, sourceBlob);
+          const file = new File([cardBlob], `${safeName}.jpg`, { type: "image/jpeg" });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: item.name, text: caption });
             return;
           }
-          const dlUrl = URL.createObjectURL(blob);
+          const dlUrl = URL.createObjectURL(cardBlob);
           const a = document.createElement("a");
           a.href = dlUrl;
-          a.download = `${safeName}.${ext}`;
+          a.download = `${safeName}.jpg`;
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -75,8 +75,8 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
           await navigator.clipboard.writeText(caption);
           showToast("Image downloaded & caption copied");
           return;
-        } catch (fetchErr) {
-          // couldn't fetch the image — fall through to a link/text share
+        } catch (composeErr) {
+          // couldn't fetch/compose the image — fall through to a link/text share
         }
       }
       if (navigator.share) {
@@ -276,6 +276,99 @@ async function translateToArabic(text) {
   const translated = data[0].map((chunk) => chunk[0]).join("").trim();
   if (!translated) throw new Error("empty translation");
   return translated;
+}
+
+// Draws the item photo onto a canvas with the name + price burned into a
+// gradient band at the bottom, so the branding survives even when apps
+// (like Instagram's share sheet) drop the accompanying share text.
+async function composeShareCard(item, sourceBlob) {
+  const objectUrl = URL.createObjectURL(sourceBlob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("image failed to load"));
+      el.src = objectUrl;
+    });
+
+    const MAX_DIM = 1400;
+    const scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const pad = Math.round(w * 0.055);
+    const nameFont = `700 ${Math.round(w * 0.05)}px -apple-system, system-ui, sans-serif`;
+    const priceFont = `800 ${Math.round(w * 0.066)}px -apple-system, system-ui, sans-serif`;
+    const tagFont = `700 ${Math.round(w * 0.026)}px -apple-system, system-ui, sans-serif`;
+
+    ctx.font = nameFont;
+    const nameLines = wrapText(ctx, item.name, w - pad * 2, 2);
+    const nameLineH = Math.round(w * 0.058);
+    const priceLineH = Math.round(w * 0.085);
+
+    const bandH = Math.round(pad * 1.6 + nameLines.length * nameLineH + priceLineH);
+    const gradient = ctx.createLinearGradient(0, h - bandH, 0, h);
+    gradient.addColorStop(0, "rgba(10,14,20,0)");
+    gradient.addColorStop(1, "rgba(10,14,20,0.85)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, h - bandH, w, bandH);
+
+    ctx.textBaseline = "alphabetic";
+    let y = h - pad * 0.9 - priceLineH;
+    for (let i = nameLines.length - 1; i >= 0; i--) {
+      ctx.font = nameFont;
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillText(nameLines[i], pad, y);
+      y -= nameLineH;
+    }
+
+    ctx.font = priceFont;
+    ctx.fillStyle = "#FFA85C";
+    ctx.fillText(AED(item.price), pad, h - pad * 0.9);
+
+    ctx.font = tagFont;
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.textBaseline = "top";
+    ctx.fillText("alainprints", pad, pad * 0.55);
+
+    return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function wrapText(ctx, text, maxWidth, maxLines) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = "";
+  let consumed = 0;
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (current && ctx.measureText(test).width > maxWidth) {
+      lines.push(current);
+      current = word;
+      if (lines.length === maxLines) break;
+    } else {
+      current = test;
+    }
+    consumed++;
+  }
+  if (lines.length < maxLines && current) lines.push(current);
+
+  if (consumed < words.length && lines.length) {
+    let last = lines[lines.length - 1];
+    while (ctx.measureText(`${last}…`).width > maxWidth && last.length > 1) {
+      last = last.slice(0, -1).trim();
+    }
+    lines[lines.length - 1] = `${last}…`;
+  }
+  return lines.length ? lines : [""];
 }
 
 const s = {
