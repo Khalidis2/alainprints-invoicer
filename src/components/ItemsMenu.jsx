@@ -54,38 +54,29 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     const safeName = item.name.replace(/[^\w-]+/g, "_") || "item";
     setSharingId(item.id);
     try {
-      let cardItem = item;
-      if (!item.nameAr?.trim()) {
-        try {
-          cardItem = { ...item, nameAr: await translateToArabic(item.name) };
-        } catch (translationError) {
-          showToast("Couldn't translate the Arabic name — try sharing again");
-          return;
-        }
-      }
       if (item.imageUrl) {
         try {
           const res = await fetch(item.imageUrl);
-          const sourceBlob = await res.blob();
-          const cardBlob = await composeShareCard(cardItem, sourceBlob);
-          const file = new File([cardBlob], `${safeName}.jpg`, { type: "image/jpeg" });
+          const blob = await res.blob();
+          const ext = (blob.type.split("/")[1] || "jpg").split("+")[0];
+          const file = new File([blob], `${safeName}.${ext}`, { type: blob.type });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: item.name, text: caption });
             return;
           }
-          const dlUrl = URL.createObjectURL(cardBlob);
+          const dlUrl = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = dlUrl;
-          a.download = `${safeName}.jpg`;
+          a.download = `${safeName}.${ext}`;
           document.body.appendChild(a);
           a.click();
           a.remove();
           URL.revokeObjectURL(dlUrl);
           await navigator.clipboard.writeText(caption);
-          showToast("Share image downloaded & caption copied");
+          showToast("Image downloaded & caption copied");
           return;
-        } catch (composeErr) {
-          // couldn't fetch/compose the image — fall through to a link/text share
+        } catch (fetchErr) {
+          // couldn't fetch the image — fall through to a link/text share
         }
       }
       if (navigator.share) {
@@ -285,199 +276,6 @@ async function translateToArabic(text) {
   const translated = data[0].map((chunk) => chunk[0]).join("").trim();
   if (!translated) throw new Error("empty translation");
   return translated;
-}
-
-const CARD_SIZE = 1080;
-const HEAD_FONT = "'Sora', system-ui, sans-serif";
-const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
-const INK = "#2E2C28";
-const ACCENT = "#B8D84A";
-
-async function ensureShareFontLoaded() {
-  if (!document.fonts) return;
-  try {
-    await Promise.all([
-      document.fonts.load(`400 1em ${HEAD_FONT}`),
-      document.fonts.load(`500 1em ${HEAD_FONT}`),
-      document.fonts.load(`600 1em ${HEAD_FONT}`),
-      document.fonts.load(`600 1em ${AR_FONT_FAMILY}`),
-    ]);
-  } catch (err) {
-    // font failed to load — canvas will fall back to the system font
-  }
-}
-
-function fitFontSize(ctx, text, weight, family, maxWidth, maxSize, minSize) {
-  let size = maxSize;
-  while (size > minSize) {
-    ctx.font = `${weight} ${size}px ${family}`;
-    if (ctx.measureText(text).width <= maxWidth) break;
-    size -= 2;
-  }
-  return size;
-}
-
-function fitWrappedText(ctx, text, weight, family, maxWidth, maxLines, maxSize, minSize) {
-  for (let size = maxSize; size >= minSize; size -= 2) {
-    ctx.font = `${weight} ${size}px ${family}`;
-    const lines = wrapText(ctx, text, maxWidth);
-    if (lines.length <= maxLines) return { size, lines };
-  }
-  ctx.font = `${weight} ${minSize}px ${family}`;
-  return { size: minSize, lines: wrapText(ctx, text, maxWidth).slice(0, maxLines) };
-}
-
-function formatArabicProductName(text) {
-  return text
-    .replace(/\s+x\s*(\d+)\s*$/i, " x$1")
-    .replace(/\s+x(\d+)\s*$/i, (_, count) => ` \u2066x${count}\u2069`)
-    .trim();
-}
-
-function formatCardPrice(value) {
-  const amount = Number(value || 0);
-  return `AED ${amount.toLocaleString("en-AE", {
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function drawImageContain(ctx, img, x, y, w, h, bg) {
-  ctx.fillStyle = bg;
-  ctx.fillRect(x, y, w, h);
-  const scale = Math.min(w / img.naturalWidth, h / img.naturalHeight);
-  const drawW = img.naturalWidth * scale;
-  const drawH = img.naturalHeight * scale;
-  const drawX = x + (w - drawW) / 2;
-  const drawY = y + (h - drawH) / 2;
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
-}
-
-const PANEL_W = 340;
-const PANEL_BG = "#FAF8F4";
-
-async function composeShareCard(item, sourceBlob) {
-  const objectUrl = URL.createObjectURL(sourceBlob);
-  try {
-    const [img] = await Promise.all([
-      new Promise((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error("image failed to load"));
-        el.src = objectUrl;
-      }),
-      ensureShareFontLoaded(),
-    ]);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = CARD_SIZE;
-    canvas.height = CARD_SIZE;
-    const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-
-    // Photo fills the right ~68% of the square, full height, shown in full
-    // (contain-fit, never cropped) — no overlay, never darkened. Text lives
-    // entirely in the solid panel on the left instead.
-    drawImageContain(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE, PANEL_BG);
-    ctx.fillStyle = PANEL_BG;
-    ctx.fillRect(0, 0, PANEL_W, CARD_SIZE);
-
-    const PAD = 44;
-    const contentW = PANEL_W - PAD * 2;
-    ctx.textBaseline = "top";
-
-    ctx.font = `700 20px ${HEAD_FONT}`;
-    ctx.fillStyle = INK;
-    if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
-    ctx.fillText("ALAINPRINTS", PAD, 44);
-    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
-
-    let y = 96;
-    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 800, HEAD_FONT, contentW, 6, 44, 26);
-    const nameLineH = Math.round(headline.size * 1.1);
-    ctx.font = `800 ${headline.size}px ${HEAD_FONT}`;
-    ctx.fillStyle = INK;
-    for (const line of headline.lines) {
-      ctx.fillText(line, PAD, y);
-      y += nameLineH;
-    }
-
-    if (item.nameAr) {
-      y += 16;
-      const arabicName = formatArabicProductName(item.nameAr);
-      const arabic = fitWrappedText(ctx, arabicName, 700, AR_FONT_FAMILY, contentW, 2, 28, 18);
-      const arLineH = Math.round(arabic.size * 1.4);
-      ctx.font = `700 ${arabic.size}px ${AR_FONT_FAMILY}`;
-      ctx.fillStyle = INK;
-      ctx.textAlign = "right";
-      ctx.direction = "rtl";
-      for (const line of arabic.lines) {
-        ctx.fillText(line, PAD + contentW, y);
-        y += arLineH;
-      }
-      ctx.direction = "inherit";
-      ctx.textAlign = "left";
-    }
-
-    if (item.description) {
-      y += 18;
-      const feature = fitWrappedText(ctx, item.description.toUpperCase(), 600, HEAD_FONT, contentW - 24, 3, 17, 13);
-      const featureLineH = Math.round(feature.size * 1.2);
-      const boxH = feature.lines.length * featureLineH + 18;
-      ctx.fillStyle = ACCENT;
-      ctx.fillRect(PAD, y, contentW, boxH);
-      ctx.font = `600 ${feature.size}px ${HEAD_FONT}`;
-      ctx.fillStyle = INK;
-      let featureY = y + 9;
-      for (const line of feature.lines) {
-        ctx.fillText(line, PAD + 12, featureY);
-        featureY += featureLineH;
-      }
-      y += boxH;
-    }
-
-    y += 24;
-    ctx.fillStyle = INK;
-    ctx.fillRect(PAD, y, 84, 3);
-    y += 24;
-    const priceText = formatCardPrice(item.price);
-    const priceSize = fitFontSize(ctx, priceText, 800, HEAD_FONT, contentW, 50, 28);
-    ctx.font = `800 ${priceSize}px ${HEAD_FONT}`;
-    ctx.fillStyle = ACCENT;
-    ctx.fillText(priceText, PAD, y);
-
-    const footerLine1 = "3D PRINTED IN UAE";
-    const footerLine2 = "DM @_alainprints";
-    const footerSize = fitFontSize(ctx, footerLine1, 500, HEAD_FONT, contentW, 13, 11);
-    ctx.font = `500 ${footerSize}px ${HEAD_FONT}`;
-    ctx.fillStyle = "#8A8578";
-    ctx.fillText(footerLine1, PAD, CARD_SIZE - 60);
-    ctx.fillText(footerLine2, PAD, CARD_SIZE - 40);
-
-    return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.94));
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-function wrapText(ctx, text, maxWidth) {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  const lines = [];
-  let current = "";
-  let consumed = 0;
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word;
-    if (current && ctx.measureText(test).width > maxWidth) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = test;
-    }
-    consumed++;
-  }
-  if (current) lines.push(current);
-  return lines.length ? lines : [""];
 }
 
 const s = {
