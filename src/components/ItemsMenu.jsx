@@ -357,6 +357,30 @@ function drawImageCover(ctx, img, x, y, w, h) {
   ctx.restore();
 }
 
+function roundedRectPath(ctx, x, y, w, h, radius) {
+  const r = Math.min(radius, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawImageCoverRounded(ctx, img, x, y, w, h, radius) {
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+  const drawW = img.naturalWidth * scale;
+  const drawH = img.naturalHeight * scale;
+  const offsetX = x - (drawW - w) / 2;
+  const offsetY = y - (drawH - h) / 2;
+  ctx.save();
+  roundedRectPath(ctx, x, y, w, h, radius);
+  ctx.clip();
+  ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+  ctx.restore();
+}
+
 function drawTransparentProduct(ctx, img, x, y, w, h) {
   const scan = document.createElement("canvas");
   scan.width = img.naturalWidth;
@@ -423,38 +447,71 @@ async function composeShareCard(item, sourceBlob) {
 
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
+
+    const ambient = ctx.createRadialGradient(840, 240, 12, 840, 240, 520);
+    ambient.addColorStop(0, "rgba(184,216,74,0.25)");
+    ambient.addColorStop(0.52, "rgba(184,216,74,0.07)");
+    ambient.addColorStop(1, "rgba(184,216,74,0)");
+    ctx.fillStyle = ambient;
+    ctx.fillRect(PANEL_W - 40, 0, CARD_SIZE - PANEL_W + 40, CARD_SIZE);
+
     ctx.save();
-    ctx.filter = "brightness(1.04) contrast(1.04) saturate(1.02)";
-    drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    ctx.globalAlpha = 0.035;
+    ctx.fillStyle = INK;
+    ctx.font = `500 210px ${HEAD_FONT}`;
+    ctx.translate(1015, 1030);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("ALAINPRINTS", 0, 0);
     ctx.restore();
 
-    const photoW = CARD_SIZE - PANEL_W;
+    const photoX = PANEL_W + 20;
+    const photoY = 42;
+    const photoW = CARD_SIZE - photoX - 26;
+    const photoH = CARD_SIZE - 84;
+
+    ctx.save();
+    ctx.shadowColor = "rgba(30,30,26,0.22)";
+    ctx.shadowBlur = 34;
+    ctx.shadowOffsetY = 16;
+    ctx.fillStyle = "rgba(255,255,255,0.94)";
+    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 30);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.filter = "brightness(1.04) contrast(1.04) saturate(1.02)";
+    drawImageCoverRounded(ctx, img, photoX, photoY, photoW, photoH, 30);
+    ctx.restore();
+
     const light = ctx.createRadialGradient(
-      PANEL_W + photoW * 0.42,
-      CARD_SIZE * 0.34,
+      photoX + photoW * 0.42,
+      photoY + photoH * 0.34,
       20,
-      PANEL_W + photoW * 0.42,
-      CARD_SIZE * 0.34,
+      photoX + photoW * 0.42,
+      photoY + photoH * 0.34,
       photoW * 0.78
     );
     light.addColorStop(0, "rgba(255,255,255,0.18)");
     light.addColorStop(0.55, "rgba(255,255,255,0.02)");
     light.addColorStop(1, "rgba(25,28,32,0.13)");
     ctx.fillStyle = light;
-    ctx.fillRect(PANEL_W, 0, photoW, CARD_SIZE);
+    ctx.save();
+    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 30);
+    ctx.clip();
+    ctx.fillRect(photoX, photoY, photoW, photoH);
 
-    const polish = ctx.createLinearGradient(PANEL_W, 0, CARD_SIZE, CARD_SIZE);
+    const polish = ctx.createLinearGradient(photoX, photoY, photoX + photoW, photoY + photoH);
     polish.addColorStop(0, "rgba(244,247,241,0.11)");
     polish.addColorStop(0.48, "rgba(255,255,255,0)");
     polish.addColorStop(1, "rgba(184,216,74,0.055)");
     ctx.fillStyle = polish;
-    ctx.fillRect(PANEL_W, 0, photoW, CARD_SIZE);
+    ctx.fillRect(photoX, photoY, photoW, photoH);
+    ctx.restore();
 
-    const edgeShade = ctx.createLinearGradient(PANEL_W, 0, PANEL_W + 76, 0);
-    edgeShade.addColorStop(0, "rgba(46,44,40,0.12)");
-    edgeShade.addColorStop(1, "rgba(46,44,40,0)");
-    ctx.fillStyle = edgeShade;
-    ctx.fillRect(PANEL_W, 0, 76, CARD_SIZE);
+    ctx.strokeStyle = "rgba(46,44,40,0.20)";
+    ctx.lineWidth = 2;
+    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 30);
+    ctx.stroke();
 
     const PAD = 64;
     const contentW = PANEL_W - PAD * 2;
