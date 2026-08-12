@@ -350,13 +350,47 @@ function drawImageCover(ctx, img, x, y, w, h) {
 }
 
 function drawTransparentProduct(ctx, img, x, y, w, h) {
-  const padding = 42;
-  const scale = Math.min((w - padding * 2) / img.naturalWidth, (h - padding * 2) / img.naturalHeight);
-  const drawW = img.naturalWidth * scale;
-  const drawH = img.naturalHeight * scale;
-  const drawX = x + (w - drawW) / 2;
+  const scan = document.createElement("canvas");
+  scan.width = img.naturalWidth;
+  scan.height = img.naturalHeight;
+  const scanCtx = scan.getContext("2d", { willReadFrequently: true });
+  scanCtx.drawImage(img, 0, 0);
+  const pixels = scanCtx.getImageData(0, 0, scan.width, scan.height).data;
+  let minX = scan.width;
+  let minY = scan.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let py = 0; py < scan.height; py++) {
+    for (let px = 0; px < scan.width; px++) {
+      if (pixels[(py * scan.width + px) * 4 + 3] > 12) {
+        minX = Math.min(minX, px);
+        minY = Math.min(minY, py);
+        maxX = Math.max(maxX, px);
+        maxY = Math.max(maxY, py);
+      }
+    }
+  }
+
+  const hasTransparencyBounds = maxX >= minX && maxY >= minY;
+  const sourceX = hasTransparencyBounds ? minX : 0;
+  const sourceY = hasTransparencyBounds ? minY : 0;
+  const sourceW = hasTransparencyBounds ? maxX - minX + 1 : img.naturalWidth;
+  const sourceH = hasTransparencyBounds ? maxY - minY + 1 : img.naturalHeight;
+  const paddingX = 8;
+  const paddingY = 24;
+  const scale = Math.min((w - paddingX * 2) / sourceW, (h - paddingY * 2) / sourceH);
+  const drawW = sourceW * scale;
+  const drawH = sourceH * scale;
+  const drawX = x + w - drawW + 18;
   const drawY = y + (h - drawH) / 2;
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.drawImage(img, sourceX, sourceY, sourceW, sourceH, drawX, drawY, drawW, drawH);
+  ctx.restore();
 }
 
 async function composeShareCard(item, sourceBlob) {
