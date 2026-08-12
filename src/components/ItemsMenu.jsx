@@ -50,7 +50,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     await translateName();
   };
   const shareItem = async (item) => {
-    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @alainprints to order`;
+    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @_alainprints to order`;
     const safeName = item.name.replace(/[^\w-]+/g, "_") || "item";
     setSharingId(item.id);
     try {
@@ -523,7 +523,7 @@ async function composeShareCard(item, sourceBlob) {
     ctx.fillStyle = INK;
     ctx.fillText(priceText, PAD, y);
 
-    const footerText = "3D PRINTED IN UAE  •  DM @alainprints";
+    const footerText = "3D PRINTED IN UAE  •  DM @_alainprints";
     const footerSize = fitFontSize(ctx, footerText, 400, HEAD_FONT, contentW, 18, 14);
     ctx.font = `400 ${footerSize}px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
