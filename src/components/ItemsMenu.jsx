@@ -469,70 +469,30 @@ async function composeShareCard(item, sourceBlob) {
     ctx.fillStyle = ambient;
     ctx.fillRect(PANEL_W - 40, 0, CARD_SIZE - PANEL_W + 40, CARD_SIZE);
 
-    const photoX = PANEL_W + 24;
-    const photoY = 54;
-    const photoW = CARD_SIZE - photoX - 34;
-    const photoH = CARD_SIZE - 108;
+    const photoX = PANEL_W - 8;
+    const photoY = 70;
+    const photoW = CARD_SIZE - photoX + 22;
+    const photoH = CARD_SIZE - 128;
+
+    const halo = ctx.createRadialGradient(790, 470, 40, 790, 470, 420);
+    halo.addColorStop(0, "rgba(184,216,74,0.30)");
+    halo.addColorStop(0.48, "rgba(184,216,74,0.11)");
+    halo.addColorStop(1, "rgba(184,216,74,0)");
+    ctx.fillStyle = halo;
+    ctx.fillRect(photoX, photoY, photoW, photoH);
 
     ctx.save();
-    ctx.shadowColor = "rgba(30,30,26,0.22)";
-    ctx.shadowBlur = 42;
-    ctx.shadowOffsetY = 18;
-    ctx.fillStyle = "rgba(255,255,255,0.94)";
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
+    ctx.translate(820, 860);
+    ctx.rotate(-0.12);
+    ctx.fillStyle = "rgba(184,216,74,0.18)";
+    roundedRectPath(ctx, -250, -250, 500, 500, 82);
     ctx.fill();
     ctx.restore();
 
     ctx.save();
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.clip();
-    ctx.filter = "blur(28px) brightness(0.82) saturate(0.85)";
-    ctx.globalAlpha = 0.52;
-    drawImageCover(ctx, img, photoX - 32, photoY - 32, photoW + 64, photoH + 64);
+    ctx.filter = "brightness(1.04) contrast(1.04) saturate(1.02) drop-shadow(0 26px 30px rgba(22,24,20,0.24))";
+    drawTransparentProduct(ctx, img, photoX, photoY, photoW, photoH);
     ctx.restore();
-
-    const photoWash = ctx.createLinearGradient(photoX, photoY, photoX + photoW, photoY + photoH);
-    photoWash.addColorStop(0, "rgba(248,249,245,0.72)");
-    photoWash.addColorStop(0.55, "rgba(245,246,242,0.35)");
-    photoWash.addColorStop(1, "rgba(184,216,74,0.20)");
-    ctx.save();
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.clip();
-    ctx.fillStyle = photoWash;
-    ctx.fillRect(photoX, photoY, photoW, photoH);
-    ctx.filter = "brightness(1.04) contrast(1.03) saturate(1.02) drop-shadow(0 18px 24px rgba(22,24,20,0.18))";
-    drawImageContainRounded(ctx, img, photoX, photoY, photoW, photoH, 38, 38);
-    ctx.restore();
-
-    const light = ctx.createRadialGradient(
-      photoX + photoW * 0.42,
-      photoY + photoH * 0.34,
-      20,
-      photoX + photoW * 0.42,
-      photoY + photoH * 0.34,
-      photoW * 0.78
-    );
-    light.addColorStop(0, "rgba(255,255,255,0.18)");
-    light.addColorStop(0.55, "rgba(255,255,255,0.02)");
-    light.addColorStop(1, "rgba(25,28,32,0.13)");
-    ctx.fillStyle = light;
-    ctx.save();
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.clip();
-    ctx.fillRect(photoX, photoY, photoW, photoH);
-
-    const polish = ctx.createLinearGradient(photoX, photoY, photoX + photoW, photoY + photoH);
-    polish.addColorStop(0, "rgba(244,247,241,0.11)");
-    polish.addColorStop(0.48, "rgba(255,255,255,0)");
-    polish.addColorStop(1, "rgba(184,216,74,0.055)");
-    ctx.fillStyle = polish;
-    ctx.fillRect(photoX, photoY, photoW, photoH);
-    ctx.restore();
-
-    ctx.strokeStyle = "rgba(46,44,40,0.12)";
-    ctx.lineWidth = 1.5;
-    roundedRectPath(ctx, photoX, photoY, photoW, photoH, 38);
-    ctx.stroke();
 
     const PAD = 64;
     const contentW = PANEL_W - PAD * 2;
