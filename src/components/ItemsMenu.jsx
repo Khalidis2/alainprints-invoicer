@@ -289,7 +289,7 @@ async function translateToArabic(text) {
 
 const CARD_SIZE = 1080;
 const PANEL_W = 500;
-const HEAD_FONT = "'Bebas Neue', 'Arial Narrow', sans-serif";
+const HEAD_FONT = "'Oswald', 'Arial Narrow', sans-serif";
 const AR_FONT_FAMILY = "'Cairo', -apple-system, system-ui, sans-serif";
 const INK = "#2E2C28";
 const PANEL_BG = "#FAF8F4";
@@ -300,6 +300,7 @@ async function ensureShareFontLoaded() {
   try {
     await Promise.all([
       document.fonts.load(`400 1em ${HEAD_FONT}`),
+      document.fonts.load(`500 1em ${HEAD_FONT}`),
       document.fonts.load(`700 1em ${AR_FONT_FAMILY}`),
     ]);
   } catch (err) {
@@ -430,8 +431,8 @@ async function composeShareCard(item, sourceBlob) {
 
     let y = 154;
 
-    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 400, HEAD_FONT, contentW, 5, 62, 38);
-    const nameLineH = Math.round(headline.size * 0.94);
+    const headline = fitWrappedText(ctx, item.name.toUpperCase(), 400, HEAD_FONT, contentW, 5, 66, 38);
+    const nameLineH = Math.round(headline.size * 1.04);
     ctx.font = `400 ${headline.size}px ${HEAD_FONT}`;
     ctx.fillStyle = INK;
     for (const line of headline.lines) {
@@ -442,9 +443,9 @@ async function composeShareCard(item, sourceBlob) {
     // Arabic name, right-aligned within the panel, full, wraps as needed
     if (item.nameAr) {
       y += 24;
-      const arabic = fitWrappedText(ctx, item.nameAr, 700, AR_FONT_FAMILY, contentW, 3, 38, 28);
-      const arLineH = Math.round(arabic.size * 1.3);
-      ctx.font = `700 ${arabic.size}px ${AR_FONT_FAMILY}`;
+      const arabic = fitWrappedText(ctx, item.nameAr, 600, AR_FONT_FAMILY, contentW, 2, 34, 22);
+      const arLineH = Math.round(arabic.size * 1.42);
+      ctx.font = `600 ${arabic.size}px ${AR_FONT_FAMILY}`;
       ctx.fillStyle = INK;
       ctx.textAlign = "right";
       ctx.direction = "rtl";
