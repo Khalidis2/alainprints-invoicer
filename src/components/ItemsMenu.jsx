@@ -342,28 +342,15 @@ function formatCardPrice(value) {
   })}`;
 }
 
-function roundedRectPath(ctx, x, y, w, h, radius) {
-  const r = Math.min(radius, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-function drawImageCoverRounded(ctx, img, x, y, w, h, radius) {
-  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+function drawImageContain(ctx, img, x, y, w, h, bg) {
+  ctx.fillStyle = bg;
+  ctx.fillRect(x, y, w, h);
+  const scale = Math.min(w / img.naturalWidth, h / img.naturalHeight);
   const drawW = img.naturalWidth * scale;
   const drawH = img.naturalHeight * scale;
-  const offsetX = x - (drawW - w) / 2;
-  const offsetY = y - (drawH - h) / 2;
-  ctx.save();
-  roundedRectPath(ctx, x, y, w, h, radius);
-  ctx.clip();
-  ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
-  ctx.restore();
+  const drawX = x + (w - drawW) / 2;
+  const drawY = y + (h - drawH) / 2;
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
 }
 
 const PANEL_W = 340;
@@ -389,10 +376,10 @@ async function composeShareCard(item, sourceBlob) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    // Photo fills the right ~68% of the square, full height, no overlay —
-    // it's never darkened or obscured. Text lives entirely in the solid
-    // panel on the left instead.
-    drawImageCoverRounded(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE, 0);
+    // Photo fills the right ~68% of the square, full height, shown in full
+    // (contain-fit, never cropped) — no overlay, never darkened. Text lives
+    // entirely in the solid panel on the left instead.
+    drawImageContain(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE, PANEL_BG);
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, PANEL_W, CARD_SIZE);
 
