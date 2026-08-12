@@ -423,7 +423,10 @@ async function composeShareCard(item, sourceBlob) {
 
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
-    drawTransparentProduct(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    ctx.save();
+    ctx.filter = "brightness(1.04) contrast(1.04) saturate(1.02)";
+    drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    ctx.restore();
 
     const PAD = 64;
     const contentW = PANEL_W - PAD * 2;
