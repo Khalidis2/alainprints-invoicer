@@ -45,6 +45,10 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
       setTranslating(false);
     }
   };
+  const translateNameOnBlur = async () => {
+    if (!editing.name.trim() || editing.nameAr?.trim() || translating) return;
+    await translateName();
+  };
   const shareItem = async (item) => {
     const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @alainprints to order`;
     const safeName = item.name.replace(/[^\w-]+/g, "_") || "item";
@@ -202,6 +206,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               style={s.input}
               value={editing.name}
               onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              onBlur={translateNameOnBlur}
               placeholder="e.g. Keychain — UAE Plate Style"
             />
 
@@ -247,12 +252,12 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               placeholder="0.00"
             />
 
-            <label style={s.label}>Description</label>
-            <textarea
-              style={{ ...s.input, minHeight: 70, resize: "vertical" }}
+            <label style={s.label}>Feature</label>
+            <input
+              style={s.input}
               value={editing.description}
               onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-              placeholder="Short description shown to customers"
+              placeholder="e.g. Holds 2 controllers"
             />
 
             <div style={s.modalActions}>
@@ -343,6 +348,16 @@ function drawImageCover(ctx, img, x, y, w, h) {
   ctx.restore();
 }
 
+function drawTransparentProduct(ctx, img, x, y, w, h) {
+  const padding = 42;
+  const scale = Math.min((w - padding * 2) / img.naturalWidth, (h - padding * 2) / img.naturalHeight);
+  const drawW = img.naturalWidth * scale;
+  const drawH = img.naturalHeight * scale;
+  const drawX = x + (w - drawW) / 2;
+  const drawY = y + (h - drawH) / 2;
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+}
+
 async function composeShareCard(item, sourceBlob) {
   const objectUrl = URL.createObjectURL(sourceBlob);
   try {
@@ -365,7 +380,7 @@ async function composeShareCard(item, sourceBlob) {
 
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, 0, CARD_SIZE, CARD_SIZE);
-    drawImageCover(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
+    drawTransparentProduct(ctx, img, PANEL_W, 0, CARD_SIZE - PANEL_W, CARD_SIZE);
 
     const PAD = 64;
     const contentW = PANEL_W - PAD * 2;
