@@ -300,10 +300,13 @@ async function composeShareCard(item, sourceBlob) {
     canvas.height = h;
     const ctx = canvas.getContext("2d");
 
-    // cover-fit: crop the photo to fill the 9:16 frame with no letterboxing
-    const coverScale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-    const drawW = img.naturalWidth * coverScale;
-    const drawH = img.naturalHeight * coverScale;
+    // contain-fit: show the whole photo, nothing cropped — any letterbox
+    // space is filled with a solid backdrop instead of cutting the photo.
+    ctx.fillStyle = "#12161C";
+    ctx.fillRect(0, 0, w, h);
+    const containScale = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+    const drawW = img.naturalWidth * containScale;
+    const drawH = img.naturalHeight * containScale;
     ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
 
     const pad = Math.round(w * 0.055);
