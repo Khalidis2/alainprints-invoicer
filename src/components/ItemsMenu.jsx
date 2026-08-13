@@ -278,9 +278,10 @@ async function translateToArabic(text) {
   return translated;
 }
 
-// Draws the item photo onto a canvas with the name + price burned into a
-// gradient band at the bottom, so the branding survives even when apps
-// (like Instagram's share sheet) drop the accompanying share text.
+// Draws the item photo onto a fixed 1080x1920 (9:16) canvas — Instagram
+// Story's native size — with the name + price burned into a gradient band
+// at the bottom, so the branding survives even when apps (like Instagram's
+// share sheet) drop the accompanying share text.
 async function composeShareCard(item, sourceBlob) {
   const objectUrl = URL.createObjectURL(sourceBlob);
   try {
@@ -291,16 +292,19 @@ async function composeShareCard(item, sourceBlob) {
       el.src = objectUrl;
     });
 
-    const MAX_DIM = 1400;
-    const scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.max(1, Math.round(img.naturalWidth * scale));
-    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const w = 1080;
+    const h = 1920;
 
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, w, h);
+
+    // cover-fit: crop the photo to fill the 9:16 frame with no letterboxing
+    const coverScale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+    const drawW = img.naturalWidth * coverScale;
+    const drawH = img.naturalHeight * coverScale;
+    ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
 
     const pad = Math.round(w * 0.055);
     const nameFont = `700 ${Math.round(w * 0.05)}px -apple-system, system-ui, sans-serif`;
