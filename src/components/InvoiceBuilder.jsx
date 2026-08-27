@@ -6,6 +6,8 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
   const [customer, setCustomer] = useState({ name: "", phone: "" });
   const [lines, setLines] = useState([]);
   const [notes, setNotes] = useState("");
+  const [customInvoiceNo, setCustomInvoiceNo] = useState(String(invoiceNo));
+  const [discountInput, setDiscountInput] = useState("");
   const [finalized, setFinalized] = useState(null);
   const [generating, setGenerating] = useState(false);
 
@@ -20,17 +22,23 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
     setLines((prev) => prev.map((l) => (l.itemId === itemId ? { ...l, qty: Math.max(1, Number(qty) || 1) } : l)));
   const removeLine = (itemId) => setLines((prev) => prev.filter((l) => l.itemId !== itemId));
 
-  const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+  const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
+  const discount = Math.min(Math.max(0, Number(discountInput) || 0), subtotal);
+  const total = subtotal - discount;
+  const parsedInvoiceNo = Number(customInvoiceNo);
+  const invoiceNumberIsValid = Number.isInteger(parsedInvoiceNo) && parsedInvoiceNo > 0;
 
   const generate = async () => {
-    if (lines.length === 0) return;
+    if (lines.length === 0 || !invoiceNumberIsValid) return;
     setGenerating(true);
     try {
       const saved = await onGenerate({
+        number: parsedInvoiceNo,
         date: today(),
         customer,
         lines,
         notes,
+        discount,
         total,
       });
       setFinalized(saved);
@@ -47,6 +55,8 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
     setCustomer({ name: "", phone: "" });
     setLines([]);
     setNotes("");
+    setDiscountInput("");
+    setCustomInvoiceNo(String(invoiceNo));
   };
 
   if (finalized) {
@@ -78,7 +88,11 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
       </div>
 
       <div style={s.panel}>
-        <div style={s.panelTitle}>Invoice #{invoiceNo} · {today()}</div>
+        <div style={s.panelTitle}>Invoice #{customInvoiceNo || "—"} · {today()}</div>
+
+        <label style={s.label}>Invoice number</label>
+        <input type="number" min="1" step="1" style={s.input} value={customInvoiceNo} onChange={(e) => setCustomInvoiceNo(e.target.value)} />
+        {!invoiceNumberIsValid && customInvoiceNo !== "" && <div style={s.error}>Enter a positive whole number.</div>}
 
         <label style={s.label}>Customer name</label>
         <input style={s.input} value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Customer name" />
@@ -105,15 +119,20 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
           </div>
         )}
 
+        <label style={s.label}>Discount (AED)</label>
+        <input type="number" min="0" max={subtotal} step="0.01" style={s.input} value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} placeholder="0.00" />
+
         <label style={s.label}>Notes (optional)</label>
         <textarea style={{ ...s.input, minHeight: 50 }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. pickup Thursday, custom color request" />
 
+        <div style={s.summaryRow}><span>Subtotal</span><span>{AED(subtotal)}</span></div>
+        {discount > 0 && <div style={s.summaryRow}><span>Discount</span><span>− {AED(discount)}</span></div>}
         <div style={s.totalRow}>
           <span>Total</span>
           <span style={s.totalAmt}>{AED(total)}</span>
         </div>
 
-        <button style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || generating} onClick={generate}>
+        <button style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || generating} onClick={generate}>
           {generating ? "Saving…" : "Generate invoice"}
         </button>
       </div>
@@ -142,8 +161,10 @@ const s = {
   qtyInput: { width: 44, padding: "6px 4px", textAlign: "center", borderRadius: 6, border: "1.5px solid #DCD5C6" },
   lineTotal: { width: 70, textAlign: "right", fontSize: 13, fontWeight: 700, color: "#1B2A3D" },
   removeBtn: { background: "none", border: "none", color: "#B3451D", fontSize: 18, cursor: "pointer", lineHeight: 1 },
-  totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 14, borderTop: "2px solid #1B2A3D", fontWeight: 700, fontSize: 14, color: "#1B2A3D" },
+  summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 13, color: "#6B6355" },
+  totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 14, borderTop: "2px solid #1B2A3D", fontWeight: 700, fontSize: 14, color: "#1B2A3D" },
   totalAmt: { fontSize: 20, fontWeight: 800, color: "#E8792D" },
   primaryBtn: { width: "100%", marginTop: 16, background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
   empty: { padding: "30px 16px", textAlign: "center", color: "#8A7F6D", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff" },
+  error: { marginTop: 4, color: "#B3451D", fontSize: 11.5 },
 };

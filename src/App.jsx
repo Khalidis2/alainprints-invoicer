@@ -79,8 +79,9 @@ export default function App() {
 
   // --- invoice actions ---
   const handleGenerateInvoice = async (draft) => {
-    const saved = await insertInvoice({ ...draft, number: invoiceNo });
-    const next = invoiceNo + 1;
+    const number = Number(draft.number);
+    const saved = await insertInvoice({ ...draft, number });
+    const next = Math.max(invoiceNo + 1, number + 1);
     await persistInvoiceNo(next);
     setInvoiceNo(next);
     refreshInvoices();

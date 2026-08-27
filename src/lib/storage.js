@@ -84,17 +84,25 @@ export async function deleteInvoiceRow(id) {
 }
 
 function dbToInvoice(row) {
+  const storedLines = row.lines ?? [];
+  const discountMeta = storedLines.find((line) => line.itemId === "__invoice_discount__");
+  const discount = Math.max(0, Number(discountMeta?.amount) || 0);
+  const total = Number(row.total);
   return {
     id: row.id,
     number: row.number,
     date: row.date,
     customer: { name: row.customer_name ?? "", phone: row.customer_phone ?? "" },
     notes: row.notes ?? "",
-    total: Number(row.total),
-    lines: row.lines ?? [],
+    subtotal: total + discount,
+    discount,
+    total,
+    lines: storedLines.filter((line) => line.itemId !== "__invoice_discount__"),
   };
 }
 function invoiceToDb(invoice) {
+  const discount = Math.max(0, Number(invoice.discount) || 0);
+  const lines = discount > 0 ? [...invoice.lines, { itemId: "__invoice_discount__", amount: discount }] : invoice.lines;
   return {
     number: invoice.number,
     date: invoice.date,
@@ -102,7 +110,7 @@ function invoiceToDb(invoice) {
     customer_phone: invoice.customer.phone,
     notes: invoice.notes ?? "",
     total: invoice.total,
-    lines: invoice.lines,
+    lines,
   };
 }
 

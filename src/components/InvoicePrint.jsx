@@ -53,6 +53,10 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
           </tbody>
         </table>
 
+        <div style={s.summary}>
+          <div style={s.summaryRow}><span>Subtotal</span><span>{AED(invoice.subtotal ?? invoice.total + (invoice.discount || 0))}</span></div>
+          {(invoice.discount || 0) > 0 && <div style={s.summaryRow}><span>Discount</span><span>− {AED(invoice.discount)}</span></div>}
+        </div>
         <div style={s.totalRow}>
           <span>Total due</span>
           <span style={s.totalAmt}>{AED(invoice.total)}</span>
@@ -99,7 +103,9 @@ const s = {
   table: { width: "100%", borderCollapse: "collapse" },
   th: { textAlign: "left", fontSize: 10.5, color: "#8A7F6D", borderBottom: "1.5px solid #E4DFD3", padding: "0 0 8px" },
   td: { padding: "9px 0", borderBottom: "1px solid #F1EDE3", fontSize: 13.5, color: "#1B2A3D" },
-  totalRow: { display: "flex", justifyContent: "space-between", marginTop: 16, paddingTop: 12, borderTop: "2px solid #1B2A3D", fontWeight: 800, fontSize: 15, color: "#1B2A3D" },
+  summary: { marginTop: 14, display: "flex", flexDirection: "column", gap: 6 },
+  summaryRow: { display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#6B6355" },
+  totalRow: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 12, borderTop: "2px solid #1B2A3D", fontWeight: 800, fontSize: 15, color: "#1B2A3D" },
   totalAmt: { color: "#E8792D", fontSize: 19 },
   footer: { marginTop: 30, textAlign: "center", fontSize: 11.5, color: "#8A7F6D" },
   heart: { width: 13, height: 13, marginLeft: 6, verticalAlign: -1 },
