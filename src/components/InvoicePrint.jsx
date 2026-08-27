@@ -21,6 +21,8 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
           <div style={{ textAlign: "right" }}>
             <div style={s.invNo}>INVOICE #{invoice.number}</div>
             <div style={s.date}>{invoice.date}</div>
+            <div style={s.status}>{invoice.status || "Unpaid"}</div>
+            {invoice.dueDate && <div style={s.date}>Due {invoice.dueDate}</div>}
           </div>
         </div>
 
@@ -96,6 +98,7 @@ const s = {
   brandSub: { fontSize: 11.5, color: "#8A7F6D" },
   invNo: { fontWeight: 700, fontSize: 13, color: "#E8792D" },
   date: { fontSize: 11.5, color: "#8A7F6D", marginTop: 2 },
+  status: { display: "inline-block", marginTop: 5, padding: "3px 8px", borderRadius: 10, background: "#E4E9EF", color: "#1B2A3D", fontSize: 10.5, fontWeight: 700 },
   divider: { borderTop: "2px solid #1B2A3D", margin: "20px 0" },
   label: { fontSize: 10.5, color: "#8A7F6D", letterSpacing: 0.6, marginBottom: 3 },
   customerName: { fontWeight: 700, fontSize: 15, color: "#1B2A3D" },

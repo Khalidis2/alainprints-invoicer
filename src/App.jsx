@@ -6,6 +6,7 @@ import {
   deleteItemRow,
   fetchInvoices,
   insertInvoice,
+  updateInvoiceRow,
   deleteInvoiceRow,
   fetchInvoiceNo,
   persistInvoiceNo,
@@ -20,6 +21,7 @@ export default function App() {
   const [items, setItems] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [invoiceNo, setInvoiceNo] = useState(1000);
+  const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -87,9 +89,25 @@ export default function App() {
     refreshInvoices();
     return saved;
   };
+  const handleUpdateInvoice = async (draft) => {
+    const saved = await updateInvoiceRow(draft);
+    const next = Math.max(invoiceNo, Number(draft.number) + 1);
+    await persistInvoiceNo(next);
+    setInvoiceNo(next);
+    refreshInvoices();
+    return saved;
+  };
   const handleDeleteInvoice = async (id) => {
     await deleteInvoiceRow(id);
     refreshInvoices();
+  };
+  const handleEditInvoice = (invoice) => {
+    setEditingInvoice(invoice);
+    setTab("invoice");
+  };
+  const finishEditing = () => {
+    setEditingInvoice(null);
+    setTab("history");
   };
 
   const tabs = [
@@ -134,7 +152,10 @@ export default function App() {
           {tabs.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                setTab(t.id);
+                if (t.id !== "invoice") setEditingInvoice(null);
+              }}
               style={{ ...s.tabBtn, ...(tab === t.id ? s.tabBtnActive : {}) }}
             >
               {t.label}
@@ -154,10 +175,19 @@ export default function App() {
           />
         )}
         {tab === "invoice" && (
-          <InvoiceBuilder items={items} invoiceNo={invoiceNo} onGenerate={handleGenerateInvoice} showToast={showToast} />
+          <InvoiceBuilder
+            key={editingInvoice?.id ?? `new-${invoiceNo}`}
+            items={items}
+            invoiceNo={invoiceNo}
+            initialInvoice={editingInvoice}
+            onSave={editingInvoice ? handleUpdateInvoice : handleGenerateInvoice}
+            onFinished={editingInvoice ? finishEditing : null}
+            onCancel={editingInvoice ? finishEditing : null}
+            showToast={showToast}
+          />
         )}
         {tab === "history" && (
-          <InvoiceHistory invoices={invoices} onDelete={handleDeleteInvoice} showToast={showToast} />
+          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onDelete={handleDeleteInvoice} showToast={showToast} />
         )}
       </div>
 

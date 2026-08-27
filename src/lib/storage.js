@@ -73,9 +73,37 @@ export async function fetchInvoices() {
 }
 
 export async function insertInvoice(invoice) {
-  const { data, error } = await supabase.from("invoices").insert(invoiceToDb(invoice)).select().single();
-  if (error) throw error;
-  return dbToInvoice(data);
+  const payload = invoiceToDb(invoice);
+  const { data, error } = await supabase.rpc("save_invoice", { p_id: null, ...rpcPayload(payload) });
+  if (!error) return dbToInvoice(Array.isArray(data) ? data[0] : data);
+  if (error.code !== "42883") throw error;
+
+  const fallback = await supabase.from("invoices").insert(payload).select().single();
+  if (fallback.error) throw fallback.error;
+  return dbToInvoice(fallback.data);
+}
+
+export async function updateInvoiceRow(invoice) {
+  const payload = invoiceToDb(invoice);
+  const { data, error } = await supabase.rpc("save_invoice", { p_id: invoice.id, ...rpcPayload(payload) });
+  if (!error) return dbToInvoice(Array.isArray(data) ? data[0] : data);
+  if (error.code !== "42883") throw error;
+
+  const fallback = await supabase.from("invoices").update(payload).eq("id", invoice.id).select().single();
+  if (fallback.error) throw fallback.error;
+  return dbToInvoice(fallback.data);
+}
+
+function rpcPayload(payload) {
+  return {
+    p_number: payload.number,
+    p_date: payload.date,
+    p_customer_name: payload.customer_name,
+    p_customer_phone: payload.customer_phone,
+    p_notes: payload.notes,
+    p_total: payload.total,
+    p_lines: payload.lines,
+  };
 }
 
 export async function deleteInvoiceRow(id) {
@@ -85,8 +113,9 @@ export async function deleteInvoiceRow(id) {
 
 function dbToInvoice(row) {
   const storedLines = row.lines ?? [];
+  const invoiceMeta = storedLines.find((line) => line.itemId === "__invoice_meta__");
   const discountMeta = storedLines.find((line) => line.itemId === "__invoice_discount__");
-  const discount = Math.max(0, Number(discountMeta?.amount) || 0);
+  const discount = Math.max(0, Number(invoiceMeta?.discount ?? discountMeta?.amount) || 0);
   const total = Number(row.total);
   return {
     id: row.id,
@@ -94,15 +123,20 @@ function dbToInvoice(row) {
     date: row.date,
     customer: { name: row.customer_name ?? "", phone: row.customer_phone ?? "" },
     notes: row.notes ?? "",
+    dueDate: invoiceMeta?.dueDate ?? "",
+    status: invoiceMeta?.status ?? "Unpaid",
     subtotal: total + discount,
     discount,
     total,
-    lines: storedLines.filter((line) => line.itemId !== "__invoice_discount__"),
+    lines: storedLines.filter((line) => !["__invoice_discount__", "__invoice_meta__"].includes(line.itemId)),
   };
 }
 function invoiceToDb(invoice) {
   const discount = Math.max(0, Number(invoice.discount) || 0);
-  const lines = discount > 0 ? [...invoice.lines, { itemId: "__invoice_discount__", amount: discount }] : invoice.lines;
+  const lines = [
+    ...invoice.lines,
+    { itemId: "__invoice_meta__", discount, dueDate: invoice.dueDate ?? "", status: invoice.status ?? "Unpaid" },
+  ];
   return {
     number: invoice.number,
     date: invoice.date,

@@ -2,12 +2,16 @@ import { useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 
-export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast }) {
-  const [customer, setCustomer] = useState({ name: "", phone: "" });
-  const [lines, setLines] = useState([]);
-  const [notes, setNotes] = useState("");
-  const [customInvoiceNo, setCustomInvoiceNo] = useState(String(invoiceNo));
-  const [discountInput, setDiscountInput] = useState("");
+export default function InvoiceBuilder({ items, invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
+  const editing = Boolean(initialInvoice);
+  const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "" });
+  const [lines, setLines] = useState(initialInvoice?.lines ?? []);
+  const [notes, setNotes] = useState(initialInvoice?.notes ?? "");
+  const [customInvoiceNo, setCustomInvoiceNo] = useState(String(initialInvoice?.number ?? invoiceNo));
+  const [invoiceDate, setInvoiceDate] = useState(initialInvoice?.date ?? today());
+  const [dueDate, setDueDate] = useState(initialInvoice?.dueDate ?? "");
+  const [status, setStatus] = useState(initialInvoice?.status ?? "Unpaid");
+  const [discountInput, setDiscountInput] = useState(initialInvoice?.discount ? String(initialInvoice.discount) : "");
   const [finalized, setFinalized] = useState(null);
   const [generating, setGenerating] = useState(false);
 
@@ -20,6 +24,14 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
   };
   const setQty = (itemId, qty) =>
     setLines((prev) => prev.map((l) => (l.itemId === itemId ? { ...l, qty: Math.max(1, Number(qty) || 1) } : l)));
+  const setLine = (itemId, field, value) =>
+    setLines((prev) =>
+      prev.map((line) =>
+        line.itemId === itemId
+          ? { ...line, [field]: field === "price" ? Math.max(0, Number(value) || 0) : value }
+          : line
+      )
+    );
   const removeLine = (itemId) => setLines((prev) => prev.filter((l) => l.itemId !== itemId));
 
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
@@ -32,9 +44,12 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
     if (lines.length === 0 || !invoiceNumberIsValid) return;
     setGenerating(true);
     try {
-      const saved = await onGenerate({
+      const saved = await onSave({
+        id: initialInvoice?.id,
         number: parsedInvoiceNo,
-        date: today(),
+        date: invoiceDate,
+        dueDate,
+        status,
         customer,
         lines,
         notes,
@@ -42,9 +57,9 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
         total,
       });
       setFinalized(saved);
-      showToast("Invoice saved");
+      showToast(editing ? "Invoice updated" : "Invoice saved");
     } catch (e) {
-      showToast("Couldn't save invoice — check connection");
+      showToast(e.code === "23505" ? `Invoice #${parsedInvoiceNo} already exists` : "Couldn't save invoice — check connection");
     } finally {
       setGenerating(false);
     }
@@ -57,17 +72,26 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
     setNotes("");
     setDiscountInput("");
     setCustomInvoiceNo(String(invoiceNo));
+    setInvoiceDate(today());
+    setDueDate("");
+    setStatus("Unpaid");
   };
 
   if (finalized) {
-    return <InvoicePrint invoice={finalized} onBack={startOver} backLabel="New invoice" />;
+    return (
+      <InvoicePrint
+        invoice={finalized}
+        onBack={editing ? onFinished : startOver}
+        backLabel={editing ? "Back to history" : "New invoice"}
+      />
+    );
   }
 
   return (
     <div style={s.layout}>
       <div>
-        <h2 style={s.h2}>New invoice</h2>
-        <div style={s.sub}>Invoice #{invoiceNo} · {today()} — tap items to add them.</div>
+        <h2 style={s.h2}>{editing ? `Edit invoice #${initialInvoice.number}` : "New invoice"}</h2>
+        <div style={s.sub}>Invoice #{customInvoiceNo || "—"} · {invoiceDate} — tap items to add them.</div>
 
         <div style={s.pickGrid}>
           {items.map((item) => {
@@ -88,11 +112,30 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
       </div>
 
       <div style={s.panel}>
-        <div style={s.panelTitle}>Invoice #{customInvoiceNo || "—"} · {today()}</div>
+        <div style={s.panelTitle}>Invoice #{customInvoiceNo || "—"} · {invoiceDate}</div>
 
         <label style={s.label}>Invoice number</label>
         <input type="number" min="1" step="1" style={s.input} value={customInvoiceNo} onChange={(e) => setCustomInvoiceNo(e.target.value)} />
         {!invoiceNumberIsValid && customInvoiceNo !== "" && <div style={s.error}>Enter a positive whole number.</div>}
+
+        <div style={s.fieldGrid}>
+          <div>
+            <label style={s.label}>Invoice date</label>
+            <input type="date" style={s.input} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+          </div>
+          <div>
+            <label style={s.label}>Due date (optional)</label>
+            <input type="date" min={invoiceDate} style={s.input} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+        </div>
+
+        <label style={s.label}>Status</label>
+        <select style={s.input} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option>Draft</option>
+          <option>Unpaid</option>
+          <option>Paid</option>
+          <option>Cancelled</option>
+        </select>
 
         <label style={s.label}>Customer name</label>
         <input style={s.input} value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Customer name" />
@@ -108,8 +151,21 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
             {lines.map((l) => (
               <div key={l.itemId} style={s.lineRow}>
                 <div style={{ flex: 1 }}>
-                  <div style={s.lineName}>{l.name}</div>
-                  <div style={s.lineUnit}>{AED(l.price)} each</div>
+                  <input
+                    aria-label="Item name"
+                    style={s.lineNameInput}
+                    value={l.name}
+                    onChange={(e) => setLine(l.itemId, "name", e.target.value)}
+                  />
+                  <input
+                    aria-label="Unit price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    style={s.priceInput}
+                    value={l.price}
+                    onChange={(e) => setLine(l.itemId, "price", e.target.value)}
+                  />
                 </div>
                 <input type="number" min="1" value={l.qty} onChange={(e) => setQty(l.itemId, e.target.value)} style={s.qtyInput} />
                 <div style={s.lineTotal}>{AED(l.price * l.qty)}</div>
@@ -132,9 +188,12 @@ export default function InvoiceBuilder({ items, invoiceNo, onGenerate, showToast
           <span style={s.totalAmt}>{AED(total)}</span>
         </div>
 
-        <button style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || generating} onClick={generate}>
-          {generating ? "Saving…" : "Generate invoice"}
-        </button>
+        <div style={s.actionRow}>
+          {editing && <button style={s.secondaryBtn} disabled={generating} onClick={onCancel}>Cancel</button>}
+          <button style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || generating} onClick={generate}>
+            {generating ? "Saving…" : editing ? "Update invoice" : "Generate invoice"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -156,15 +215,18 @@ const s = {
   input: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, border: "1.5px solid #DCD5C6", fontSize: 14, background: "#fff", color: "#1B2A3D" },
   hr: { borderTop: "1.5px dashed #E4DFD3", margin: "14px 0" },
   lineRow: { display: "flex", alignItems: "center", gap: 8 },
-  lineName: { fontSize: 13, fontWeight: 700, color: "#1B2A3D" },
-  lineUnit: { fontSize: 11, color: "#8A7F6D" },
+  lineNameInput: { width: "100%", border: "none", borderBottom: "1px solid #E4DFD3", fontSize: 13, fontWeight: 700, color: "#1B2A3D", padding: "3px 0" },
+  priceInput: { width: 90, border: "none", fontSize: 11, color: "#8A7F6D", padding: "3px 0" },
   qtyInput: { width: 44, padding: "6px 4px", textAlign: "center", borderRadius: 6, border: "1.5px solid #DCD5C6" },
   lineTotal: { width: 70, textAlign: "right", fontSize: 13, fontWeight: 700, color: "#1B2A3D" },
   removeBtn: { background: "none", border: "none", color: "#B3451D", fontSize: 18, cursor: "pointer", lineHeight: 1 },
   summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 13, color: "#6B6355" },
   totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 14, borderTop: "2px solid #1B2A3D", fontWeight: 700, fontSize: 14, color: "#1B2A3D" },
   totalAmt: { fontSize: 20, fontWeight: 800, color: "#E8792D" },
-  primaryBtn: { width: "100%", marginTop: 16, background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
+  fieldGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
+  actionRow: { display: "flex", gap: 8, marginTop: 16 },
+  primaryBtn: { flex: 1, background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
+  secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
   empty: { padding: "30px 16px", textAlign: "center", color: "#8A7F6D", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff" },
   error: { marginTop: 4, color: "#B3451D", fontSize: 11.5 },
 };
