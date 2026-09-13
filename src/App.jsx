@@ -15,6 +15,7 @@ import {
 import ItemsMenu from "./components/ItemsMenu";
 import InvoiceBuilder from "./components/InvoiceBuilder";
 import InvoiceHistory from "./components/InvoiceHistory";
+import PrintCalculator from "./components/PrintCalculator";
 
 export default function App() {
   const [tab, setTab] = useState("items");
@@ -112,6 +113,7 @@ export default function App() {
 
   const tabs = [
     { id: "items", label: "Items menu" },
+    { id: "calculator", label: "Slice & price" },
     { id: "invoice", label: "New invoice" },
     { id: "history", label: "History" },
   ];
@@ -172,6 +174,15 @@ export default function App() {
             onUpdate={handleUpdateItem}
             onDelete={handleDeleteItem}
             showToast={showToast}
+          />
+        )}
+        {tab === "calculator" && (
+          <PrintCalculator
+            onAdd={handleAddItem}
+            onAdded={() => {
+              showToast("Calculated item added");
+              setTab("items");
+            }}
           />
         )}
         {tab === "invoice" && (
