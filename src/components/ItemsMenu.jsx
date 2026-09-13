@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AED, CATEGORIES, CAT_STYLE } from "../lib/helpers";
 import { uploadItemImage } from "../lib/storage";
 
-export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast, initialDraft, onInitialDraftHandled }) {
+export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast }) {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState("All");
@@ -10,14 +10,6 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast,
   const [uploading, setUploading] = useState(false);
   const [sharingId, setSharingId] = useState(null);
   const [translating, setTranslating] = useState(false);
-
-  useEffect(() => {
-    if (!initialDraft) return;
-    setEditing(initialDraft);
-    setShowForm(true);
-    onInitialDraftHandled?.();
-    showToast("Calculated item is ready — review and save");
-  }, [initialDraft, onInitialDraftHandled, showToast]);
 
   const startNew = () => {
     setEditing({ id: null, name: "", nameAr: "", category: "3D Print", price: "", description: "", imageUrl: null });

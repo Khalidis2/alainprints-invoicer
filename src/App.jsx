@@ -16,17 +16,6 @@ import ItemsMenu from "./components/ItemsMenu";
 import InvoiceBuilder from "./components/InvoiceBuilder";
 import InvoiceHistory from "./components/InvoiceHistory";
 
-function readCalculatorImport() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("source") !== "printtools3d") return null;
-  const name = (params.get("name") || "").trim().slice(0, 120);
-  const price = Number(params.get("price"));
-  const description = (params.get("description") || "").trim().slice(0, 240);
-  if (!name || !Number.isFinite(price) || price <= 0 || price > 100000) return null;
-  window.history.replaceState({}, "", window.location.pathname);
-  return { id: null, name, nameAr: "", category: "3D Print", price, description, imageUrl: null };
-}
-
 export default function App() {
   const [tab, setTab] = useState("items");
   const [items, setItems] = useState([]);
@@ -36,7 +25,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [toast, setToast] = useState(null);
-  const [calculatorItem, setCalculatorItem] = useState(() => readCalculatorImport());
 
   const showToast = (msg) => {
     setToast(msg);
@@ -184,8 +172,6 @@ export default function App() {
             onUpdate={handleUpdateItem}
             onDelete={handleDeleteItem}
             showToast={showToast}
-            initialDraft={calculatorItem}
-            onInitialDraftHandled={() => setCalculatorItem(null)}
           />
         )}
         {tab === "invoice" && (
