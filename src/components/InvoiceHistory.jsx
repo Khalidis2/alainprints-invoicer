@@ -19,6 +19,7 @@ const STATUS_BG = {
 export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, showToast }) {
   const [open, setOpen] = useState(null);
   const [autoPrint, setAutoPrint] = useState(false);
+  const [autoShare, setAutoShare] = useState(false);
   const [workingId, setWorkingId] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -45,9 +46,11 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
       <InvoicePrint
         invoice={open}
         autoPrint={autoPrint}
+        autoShare={autoShare}
         onBack={() => {
           setOpen(null);
           setAutoPrint(false);
+          setAutoShare(false);
         }}
         backLabel="Back to history"
       />
@@ -155,7 +158,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
 
             return (
               <div key={invoice.id} className="history-row" style={s.row}>
-                <button className="history-main" style={s.rowMain} onClick={() => { setAutoPrint(false); setOpen(invoice); }}>
+                <button className="history-main" style={s.rowMain} onClick={() => { setAutoPrint(false); setAutoShare(false); setOpen(invoice); }}>
                   <span style={s.no}>INV-{invoice.number}</span>
                   <span style={s.name}>{invoice.customer.name || "Walk-in"}</span>
                   <span style={s.date}>{invoice.date}</span>
@@ -173,8 +176,8 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
                 </select>
 
                 <div className="history-actions" style={s.actionGroup}>
-                  <button style={s.shareBtn} disabled={busy} onClick={() => shareInvoice(invoice)}>Share</button>
-                  <button style={s.printBtn} disabled={busy} onClick={() => { setAutoPrint(true); setOpen(invoice); }}>Print</button>
+                  <button style={s.shareBtn} disabled={busy} onClick={() => { setAutoPrint(false); setAutoShare(true); setOpen(invoice); }}>Share PDF</button>
+                  <button style={s.printBtn} disabled={busy} onClick={() => { setAutoShare(false); setAutoPrint(true); setOpen(invoice); }}>Print</button>
                   {editable && <button style={s.editBtn} disabled={busy} onClick={() => onEdit(invoice)}>Edit</button>}
                   {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete</button>}
                   {locked && <span style={s.locked}>Locked</span>}

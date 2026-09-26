@@ -1,4 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import { AED } from "../lib/helpers";
 
 const statusColor = {
@@ -8,12 +10,85 @@ const statusColor = {
   Cancelled: "#B91C1C",
 };
 
-export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = false }) {
+export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = false, autoShare = false }) {
+  const [sharing, setSharing] = useState(false);
   useEffect(() => {
     if (!autoPrint) return undefined;
     const timer = window.setTimeout(() => window.print(), 250);
     return () => window.clearTimeout(timer);
   }, [autoPrint]);
+  const createPdfFile = async () => {
+    const source = document.querySelector(".invoice-sheet");
+    if (!source) throw new Error("Invoice is not ready");
+
+    const clone = source.cloneNode(true);
+    clone.classList.add("pdf-exporting");
+    document.body.appendChild(clone);
+
+    try {
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const imageHeight = (canvas.height * pageWidth) / canvas.width;
+      const image = canvas.toDataURL("image/jpeg", 0.95);
+
+      let offset = 0;
+      let page = 0;
+      while (offset < imageHeight) {
+        if (page > 0) pdf.addPage();
+        pdf.addImage(image, "JPEG", 0, -offset, pageWidth, imageHeight, undefined, "FAST");
+        offset += pageHeight;
+        page += 1;
+      }
+
+      return new File(
+        [pdf.output("blob")],
+        `Alainprints_INV-${invoice.number}.pdf`,
+        { type: "application/pdf" },
+      );
+    } finally {
+      clone.remove();
+    }
+  };
+
+  const sharePdf = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const file = await createPdfFile();
+      if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+        await navigator.share({
+          title: `Invoice INV-${invoice.number}`,
+          text: `Alainprints invoice INV-${invoice.number}`,
+          files: [file],
+        });
+      } else {
+        const url = URL.createObjectURL(file);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = file.name;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError") window.alert("Couldn't create the invoice PDF. Please use Print / Save PDF.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!autoShare) return undefined;
+    const timer = window.setTimeout(() => sharePdf(), 350);
+    return () => window.clearTimeout(timer);
+  }, [autoShare]);
+
   const subtotal = invoice.subtotal ?? invoice.total + (invoice.discount || 0);
   const status = invoice.status || "Unpaid";
   const accent = statusColor[status] || "#1F2937";
@@ -22,7 +97,10 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
     <div>
       <div className="no-print invoice-toolbar" style={s.bar}>
         <button style={s.secondaryBtn} onClick={onBack}>← {backLabel}</button>
-        <button style={s.primaryBtn} onClick={() => window.print()}>Print / Save PDF</button>
+        <div style={s.toolbarButtons}>
+          <button style={s.shareBtn} disabled={sharing} onClick={sharePdf}>{sharing ? "Creating PDF…" : "Share PDF"}</button>
+          <button style={s.primaryBtn} onClick={() => window.print()}>Print / Save PDF</button>
+        </div>
       </div>
 
       <article className="invoice-sheet" style={s.sheet}>
@@ -106,6 +184,8 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
 
 const s = {
   bar: { display: "flex", justifyContent: "space-between", margin: "0 auto 16px", maxWidth: 794 },
+  toolbarButtons: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" },
+  shareBtn: { background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   primaryBtn: { background: "#16324f", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   secondaryBtn: { background: "#fff", color: "#16324f", border: "1px solid #CBD5E1", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   sheet: { width: "210mm", minHeight: "297mm", margin: "0 auto", background: "#fff", color: "#1F2937", boxShadow: "0 4px 24px rgba(15,23,42,0.12)", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" },

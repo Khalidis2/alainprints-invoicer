@@ -197,3 +197,52 @@ button, input, textarea, select { font-family: inherit; }
     padding: 8px 10px !important;
   }
 }
+
+
+/* Fixed A4 rendering surface used only while generating a shareable PDF. */
+.invoice-sheet.pdf-exporting {
+  position: fixed !important;
+  left: -10000px !important;
+  top: 0 !important;
+  z-index: -1 !important;
+  width: 794px !important;
+  min-height: 1123px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.invoice-sheet.pdf-exporting .invoice-hero {
+  min-height: 150px !important;
+  padding: 35px 42px !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+}
+.invoice-sheet.pdf-exporting .invoice-meta {
+  width: auto !important;
+  text-align: right !important;
+}
+.invoice-sheet.pdf-exporting .invoice-info {
+  grid-template-columns: 1.25fr .9fr !important;
+  gap: 46px !important;
+  padding: 42px 42px 38px !important;
+}
+.invoice-sheet.pdf-exporting .invoice-table {
+  width: calc(100% - 84px) !important;
+  margin: 0 42px !important;
+  font-size: inherit !important;
+  table-layout: auto !important;
+}
+.invoice-sheet.pdf-exporting .invoice-table th { padding: 14px 12px !important; }
+.invoice-sheet.pdf-exporting .invoice-table td { padding: 16px 12px !important; }
+.invoice-sheet.pdf-exporting .invoice-table th:first-child,
+.invoice-sheet.pdf-exporting .invoice-table td:first-child { display: table-cell !important; }
+.invoice-sheet.pdf-exporting .invoice-summary { padding: 38px 42px 0 !important; justify-content: flex-end !important; }
+.invoice-sheet.pdf-exporting .invoice-summary-box { width: 300px !important; }
+.invoice-sheet.pdf-exporting .invoice-notes { margin: 42px 42px 0 !important; }
+.invoice-sheet.pdf-exporting .invoice-footer {
+  margin: auto 42px 0 !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+}
