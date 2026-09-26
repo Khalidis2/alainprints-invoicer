@@ -65,6 +65,7 @@ export default function PrintCalculator({ onAdd, onAdded }) {
   const [name, setName] = useState("");
   const [grams, setGrams] = useState(0);
   const [hours, setHours] = useState(0);
+  const [quantity, setQuantity] = useState(1);
   const [spoolPrice, setSpoolPrice] = useState(75);
   const [margin, setMargin] = useState(40);
   const [reading, setReading] = useState(false);
@@ -77,10 +78,10 @@ export default function PrintCalculator({ onAdd, onAdded }) {
     const material = grams * spoolPrice / 1000;
     const electricity = hours * (printer.watts / 1000) * 0.3;
     const cost = material + electricity + FIXED_OVERHEAD;
-    const calculated = cost / (1 - margin / 100);
-    const price = Math.max(calculated, MINIMUM_PRICE);
-    return { material, electricity, cost, price, profit: price - cost };
-  }, [grams, hours, spoolPrice, margin, printerKey]);
+    const costPerPiece = cost / quantity;
+    const price = Math.max(costPerPiece / (1 - margin / 100), MINIMUM_PRICE);
+    return { material, electricity, cost, costPerPiece, price, totalPrice: price * quantity, profit: price - costPerPiece };
+  }, [grams, hours, quantity, spoolPrice, margin, printerKey]);
 
   const pickFile = async (file) => {
     if (!file) return;
@@ -109,7 +110,7 @@ export default function PrintCalculator({ onAdd, onAdded }) {
         nameAr: "",
         category: "3D Print",
         price: Math.round(result.price * 100) / 100,
-        description: `${grams.toFixed(1)} g filament · ${durationText(hours)}`,
+        description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g filament · ${durationText(hours)}`,
         imageUrl: null,
       });
       onAdded();
@@ -139,14 +140,15 @@ export default function PrintCalculator({ onAdd, onAdded }) {
         <Field label="Item name" value={name} onChange={setName} />
         <Field label="Filament (g)" type="number" value={grams} onChange={(v) => setGrams(Number(v))} />
         <Field label="Print time (hours)" type="number" value={hours} onChange={(v) => setHours(Number(v))} />
+        <Field label="Quantity made" type="number" value={quantity} onChange={(v) => setQuantity(Math.max(1, Number(v) || 1))} />
         <Field label="Spool price (AED)" type="number" value={spoolPrice} onChange={(v) => setSpoolPrice(Number(v))} />
         <Field label="Profit margin (%)" type="number" value={margin} onChange={(v) => setMargin(Number(v))} />
       </div>
 
       <div style={s.result}>
-        <span>Suggested selling price</span>
+        <span>Suggested selling price per piece</span>
         <strong>{result ? AED(result.price) : "—"}</strong>
-        {result && <small>Cost {AED(result.cost)} · Profit {AED(result.profit)}</small>}
+        {result && <small>Cost per piece {AED(result.costPerPiece)} · Profit per piece {AED(result.profit)} · Batch total {AED(result.totalPrice)}</small>}
       </div>
 
       <button style={{ ...s.button, opacity: !result || !name.trim() || saving ? 0.55 : 1 }} disabled={!result || !name.trim() || saving} onClick={save}>
