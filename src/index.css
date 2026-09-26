@@ -252,3 +252,12 @@ button, input, textarea, select { font-family: inherit; }
   .customer-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .customer-modal { width: calc(100vw - 20px) !important; max-height: calc(100dvh - 20px); overflow-y: auto; }
 }
+
+
+@media screen and (max-width: 720px) {
+  .payment-summary {
+    grid-column: 1 / -1;
+    padding-top: 8px;
+    border-top: 1px dashed #DCD5C6;
+  }
+}

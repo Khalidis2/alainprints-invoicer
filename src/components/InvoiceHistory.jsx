@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AED } from "../lib/helpers";
+import { AED, today } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 
 const STATUSES = ["Draft", "Unpaid", "Paid", "Cancelled"];
@@ -63,7 +63,12 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
     if (nextStatus === "Cancelled" && !window.confirm(`Cancel invoice INV-${invoice.number}? It will remain permanently in history.`)) return;
     setWorkingId(invoice.id);
     try {
-      await onUpdate({ ...invoice, status: nextStatus });
+      await onUpdate({
+        ...invoice,
+        status: nextStatus,
+        paidDate: nextStatus === "Paid" ? (invoice.paidDate || today()) : invoice.paidDate,
+        paymentMethod: nextStatus === "Paid" ? (invoice.paymentMethod || "") : invoice.paymentMethod,
+      });
       showToast(`Invoice INV-${invoice.number} marked ${nextStatus}`);
     } catch {
       showToast("Couldn't update status - check connection");
@@ -176,12 +181,18 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
                 </select>
 
                 <div className="history-actions" style={s.actionGroup}>
+                  {status === "Unpaid" && <button style={s.paidBtn} disabled={busy} onClick={() => updateStatus(invoice, "Paid")}>Mark paid</button>}
                   <button style={s.shareBtn} disabled={busy} onClick={() => { setAutoPrint(false); setAutoShare(true); setOpen(invoice); }}>Share PDF</button>
                   <button style={s.printBtn} disabled={busy} onClick={() => { setAutoShare(false); setAutoPrint(true); setOpen(invoice); }}>Print</button>
                   {editable && <button style={s.editBtn} disabled={busy} onClick={() => onEdit(invoice)}>Edit</button>}
                   {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete</button>}
                   {locked && <span style={s.locked}>Locked</span>}
                 </div>
+                {status === "Paid" && (
+                  <div className="payment-summary" style={s.paymentSummary}>
+                    Paid {invoice.paidDate || "date not recorded"}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}{invoice.paymentReference ? ` · Ref: ${invoice.paymentReference}` : ""}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -221,6 +232,8 @@ const s = {
   total: { fontWeight: 800, textAlign: "right", color: "#1B2A3D" },
   statusSelect: { width: 112, border: "1px solid #DCD5C6", borderRadius: 8, padding: "7px 8px", fontWeight: 800, fontSize: 11.5, cursor: "pointer" },
   actionGroup: { display: "flex", alignItems: "center", gap: 8 },
+  paidBtn: { background: "#047857", border: "none", borderRadius: 7, color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
+  paymentSummary: { width: "100%", color: "#047857", fontSize: 11.5, fontWeight: 700 },
   shareBtn: { background: "#16324F", border: "none", borderRadius: 7, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
   printBtn: { background: "#fff", border: "1px solid #16324F", borderRadius: 7, color: "#16324F", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
   editBtn: { background: "none", border: "none", color: "#2E7D8C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 },

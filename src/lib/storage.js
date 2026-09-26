@@ -186,6 +186,9 @@ function dbToInvoice(row) {
     notes: row.notes ?? "",
     dueDate: invoiceMeta?.dueDate ?? "",
     status: invoiceMeta?.status ?? "Unpaid",
+    paymentMethod: invoiceMeta?.paymentMethod ?? "",
+    paidDate: invoiceMeta?.paidDate ?? "",
+    paymentReference: invoiceMeta?.paymentReference ?? "",
     subtotal: total + discount,
     discount,
     total,
@@ -196,7 +199,15 @@ function invoiceToDb(invoice) {
   const discount = Math.max(0, Number(invoice.discount) || 0);
   const lines = [
     ...invoice.lines,
-    { itemId: "__invoice_meta__", discount, dueDate: invoice.dueDate ?? "", status: invoice.status ?? "Unpaid" },
+    {
+      itemId: "__invoice_meta__",
+      discount,
+      dueDate: invoice.dueDate ?? "",
+      status: invoice.status ?? "Unpaid",
+      paymentMethod: invoice.paymentMethod ?? "",
+      paidDate: invoice.paidDate ?? "",
+      paymentReference: invoice.paymentReference ?? "",
+    },
   ];
   return {
     number: invoice.number,

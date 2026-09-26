@@ -12,6 +12,7 @@ const statusColor = {
 
 export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = false, autoShare = false }) {
   const [sharing, setSharing] = useState(false);
+  const [receiptMode, setReceiptMode] = useState(false);
   useEffect(() => {
     if (!autoPrint) return undefined;
     const timer = window.setTimeout(() => window.print(), 250);
@@ -98,6 +99,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
       <div className="no-print invoice-toolbar" style={s.bar}>
         <button style={s.secondaryBtn} onClick={onBack}>← {backLabel}</button>
         <div style={s.toolbarButtons}>
+          {status === "Paid" && <button style={s.receiptBtn} onClick={() => setReceiptMode((value) => !value)}>{receiptMode ? "Invoice view" : "Receipt view"}</button>}
           <button style={s.shareBtn} disabled={sharing} onClick={sharePdf}>{sharing ? "Creating PDF…" : "Share PDF"}</button>
           <button style={s.primaryBtn} onClick={() => window.print()}>Print / Save PDF</button>
         </div>
@@ -111,7 +113,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
             <div style={s.legal}>Abu Dhabi, U.A.E. | Trade Licence No.: CN-6362373</div>
           </div>
           <div className="invoice-meta" style={s.invoiceMeta}>
-            <div style={s.documentTitle}>INVOICE</div>
+            <div style={s.documentTitle}>{receiptMode ? "RECEIPT" : "INVOICE"}</div>
             <div style={s.metaLine}>Invoice No.: <strong>INV-{invoice.number}</strong></div>
             <div style={s.metaLine}>Date: <strong>{invoice.date}</strong></div>
           </div>
@@ -131,6 +133,13 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
             <div style={s.detailRow}><span>Payment Status</span><strong style={{ color: accent }}>{status.toUpperCase()}</strong></div>
             {invoice.dueDate && <div style={s.detailRow}><span>Payment Terms</span><strong>Due {invoice.dueDate}</strong></div>}
             <div style={s.detailRow}><span>VAT Status</span><strong>Not VAT registered</strong></div>
+            {status === "Paid" && (
+              <>
+                <div style={s.detailRow}><span>Paid Date</span><strong>{invoice.paidDate || "Not recorded"}</strong></div>
+                <div style={s.detailRow}><span>Payment Method</span><strong>{invoice.paymentMethod || "Not recorded"}</strong></div>
+                {invoice.paymentReference && <div style={s.detailRow}><span>Reference</span><strong>{invoice.paymentReference}</strong></div>}
+              </>
+            )}
           </div>
         </section>
 
@@ -185,6 +194,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
 const s = {
   bar: { display: "flex", justifyContent: "space-between", margin: "0 auto 16px", maxWidth: 794 },
   toolbarButtons: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" },
+  receiptBtn: { background: "#fff", color: "#047857", border: "1px solid #047857", borderRadius: 8, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" },
   shareBtn: { background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   primaryBtn: { background: "#16324f", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   secondaryBtn: { background: "#fff", color: "#16324f", border: "1px solid #CBD5E1", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },

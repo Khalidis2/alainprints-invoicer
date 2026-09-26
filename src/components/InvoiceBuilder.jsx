@@ -11,6 +11,9 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
   const [invoiceDate, setInvoiceDate] = useState(initialInvoice?.date ?? today());
   const [dueDate, setDueDate] = useState(initialInvoice?.dueDate ?? "");
   const [status, setStatus] = useState(initialInvoice?.status ?? "Unpaid");
+  const [paymentMethod, setPaymentMethod] = useState(initialInvoice?.paymentMethod ?? "");
+  const [paidDate, setPaidDate] = useState(initialInvoice?.paidDate ?? "");
+  const [paymentReference, setPaymentReference] = useState(initialInvoice?.paymentReference ?? "");
   const [discountInput, setDiscountInput] = useState(initialInvoice?.discount ? String(initialInvoice.discount) : "");
   const [finalized, setFinalized] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -50,6 +53,9 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
         date: invoiceDate,
         dueDate,
         status,
+        paymentMethod: status === "Paid" ? paymentMethod : "",
+        paidDate: status === "Paid" ? (paidDate || today()) : "",
+        paymentReference: status === "Paid" ? paymentReference : "",
         customer,
         lines,
         notes,
@@ -75,6 +81,9 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
     setInvoiceDate(today());
     setDueDate("");
     setStatus("Unpaid");
+    setPaymentMethod("");
+    setPaidDate("");
+    setPaymentReference("");
   };
 
   if (finalized) {
@@ -130,7 +139,15 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
         </div>
 
         <label style={s.label}>Status</label>
-        <select style={s.input} value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select
+          style={s.input}
+          value={status}
+          onChange={(e) => {
+            const next = e.target.value;
+            setStatus(next);
+            if (next === "Paid" && !paidDate) setPaidDate(today());
+          }}
+        >
           <option>Draft</option>
           <option>Unpaid</option>
           <option>Paid</option>
@@ -153,6 +170,29 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
             </option>
           ))}
         </select>
+
+        {status === "Paid" && (
+          <div className="two-column-fields" style={s.fieldGrid}>
+            <div>
+              <label style={s.label}>Payment method</label>
+              <select style={s.input} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                <option value="">Not recorded</option>
+                <option>Cash</option>
+                <option>Card</option>
+                <option>Bank Transfer</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label style={s.label}>Paid date</label>
+              <input type="date" style={s.input} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={s.label}>Payment reference (optional)</label>
+              <input style={s.input} value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Transfer or card reference" />
+            </div>
+          </div>
+        )}
 
         <label style={s.label}>Customer name</label>
         <input style={s.input} value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Customer name" />
