@@ -64,6 +64,67 @@ export async function uploadItemImage(file) {
   return data.publicUrl;
 }
 
+
+
+// ---------- customers ----------
+
+function customerKey(customer) {
+  const phone = String(customer.phone || "").replace(/\D/g, "");
+  if (phone) return `phone:${phone}`;
+  return `name:${String(customer.name || "").trim().toLocaleLowerCase()}`;
+}
+
+function dbToCustomer(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone ?? "",
+    notes: row.notes ?? "",
+    key: row.customer_key,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function fetchCustomers() {
+  const { data, error } = await supabase.from("customers").select("*").order("name", { ascending: true });
+  if (error?.code === "42P01") return [];
+  if (error) throw error;
+  return data.map(dbToCustomer);
+}
+
+export async function upsertCustomer(customer) {
+  const name = String(customer.name || "").trim();
+  if (!name) return null;
+  const payload = {
+    customer_key: customerKey(customer),
+    name,
+    phone: String(customer.phone || "").trim(),
+    notes: String(customer.notes || "").trim(),
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from("customers")
+    .upsert(payload, { onConflict: "customer_key" })
+    .select()
+    .single();
+  if (error) throw error;
+  return dbToCustomer(data);
+}
+
+export async function updateCustomerRow(customer) {
+  const payload = {
+    customer_key: customerKey(customer),
+    name: String(customer.name || "").trim(),
+    phone: String(customer.phone || "").trim(),
+    notes: String(customer.notes || "").trim(),
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase.from("customers").update(payload).eq("id", customer.id).select().single();
+  if (error) throw error;
+  return dbToCustomer(data);
+}
+
 // ---------- invoices ----------
 
 export async function fetchInvoices() {
@@ -166,11 +227,12 @@ export async function persistInvoiceNo(n) {
 
 // ---------- realtime ----------
 
-export function subscribeToChanges({ onItems, onInvoices }) {
+export function subscribeToChanges({ onItems, onInvoices, onCustomers }) {
   const channel = supabase
     .channel("alainprints-sync")
     .on("postgres_changes", { event: "*", schema: "public", table: "items" }, onItems)
     .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, onInvoices)
+    .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, onCustomers)
     .subscribe();
 
   return () => supabase.removeChannel(channel);

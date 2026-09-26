@@ -12,11 +12,15 @@ import {
   fetchInvoiceNo,
   persistInvoiceNo,
   subscribeToChanges,
+  fetchCustomers,
+  upsertCustomer,
+  updateCustomerRow,
 } from "./lib/storage";
 import ItemsMenu from "./components/ItemsMenu";
 import InvoiceBuilder from "./components/InvoiceBuilder";
 import InvoiceHistory from "./components/InvoiceHistory";
 import PrintCalculator from "./components/PrintCalculator";
+import Customers from "./components/Customers";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -95,6 +99,7 @@ function Invoicer({ userEmail, onSignOut }) {
   const [tab, setTab] = useState("items");
   const [items, setItems] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [invoiceNo, setInvoiceNo] = useState(1000);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -112,16 +117,20 @@ function Invoicer({ userEmail, onSignOut }) {
   const refreshInvoices = useCallback(() => {
     fetchInvoices().then(setInvoices).catch((e) => setLoadError(e.message));
   }, []);
+  const refreshCustomers = useCallback(() => {
+    fetchCustomers().then(setCustomers).catch((e) => showToast(e.message));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [i, inv, n] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo()]);
+        const [i, inv, n, savedCustomers] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers()]);
         if (cancelled) return;
         setItems(i);
         setInvoices(inv);
         setInvoiceNo(n);
+        setCustomers(savedCustomers);
       } catch (e) {
         if (!cancelled) setLoadError(e.message);
       } finally {
@@ -132,13 +141,14 @@ function Invoicer({ userEmail, onSignOut }) {
     const unsubscribe = subscribeToChanges({
       onItems: () => refreshItems(),
       onInvoices: () => refreshInvoices(),
+      onCustomers: () => refreshCustomers(),
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, [refreshItems, refreshInvoices]);
+  }, [refreshItems, refreshInvoices, refreshCustomers]);
 
   // --- item actions ---
   const handleAddItem = async (item) => {
@@ -158,6 +168,12 @@ function Invoicer({ userEmail, onSignOut }) {
   const handleGenerateInvoice = async (draft) => {
     const number = Number(draft.number);
     const saved = await insertInvoice({ ...draft, number });
+    try {
+      await upsertCustomer(draft.customer);
+      refreshCustomers();
+    } catch (error) {
+      if (error.code !== "42P01") showToast("Invoice saved, but customer couldn't be updated");
+    }
     const next = Math.max(invoiceNo + 1, number + 1);
     await persistInvoiceNo(next);
     setInvoiceNo(next);
@@ -166,6 +182,12 @@ function Invoicer({ userEmail, onSignOut }) {
   };
   const handleUpdateInvoice = async (draft) => {
     const saved = await updateInvoiceRow(draft);
+    try {
+      await upsertCustomer(draft.customer);
+      refreshCustomers();
+    } catch (error) {
+      if (error.code !== "42P01") showToast("Invoice updated, but customer couldn't be updated");
+    }
     const next = Math.max(invoiceNo, Number(draft.number) + 1);
     await persistInvoiceNo(next);
     setInvoiceNo(next);
@@ -189,10 +211,16 @@ function Invoicer({ userEmail, onSignOut }) {
     setTab("history");
   };
 
+  const handleUpdateCustomer = async (customer) => {
+    await updateCustomerRow(customer);
+    refreshCustomers();
+  };
+
   const tabs = [
     { id: "items", label: "Items menu" },
     { id: "calculator", label: "Slice & price" },
     { id: "invoice", label: "New invoice" },
+    { id: "customers", label: "Customers" },
     { id: "history", label: "History" },
   ];
 
@@ -271,11 +299,20 @@ function Invoicer({ userEmail, onSignOut }) {
           <InvoiceBuilder
             key={editingInvoice?.id ?? `new-${invoiceNo}`}
             items={items}
+            customers={customers}
             invoiceNo={invoiceNo}
             initialInvoice={editingInvoice}
             onSave={editingInvoice ? handleUpdateInvoice : handleGenerateInvoice}
             onFinished={editingInvoice ? finishEditing : null}
             onCancel={editingInvoice ? finishEditing : null}
+            showToast={showToast}
+          />
+        )}
+        {tab === "customers" && (
+          <Customers
+            customers={customers}
+            invoices={invoices}
+            onUpdate={handleUpdateCustomer}
             showToast={showToast}
           />
         )}

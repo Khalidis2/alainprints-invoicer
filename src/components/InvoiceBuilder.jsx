@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 
-export default function InvoiceBuilder({ items, invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
+export default function InvoiceBuilder({ items, customers = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
   const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "" });
   const [lines, setLines] = useState(initialInvoice?.lines ?? []);
@@ -135,6 +135,23 @@ export default function InvoiceBuilder({ items, invoiceNo, initialInvoice, onSav
           <option>Unpaid</option>
           <option>Paid</option>
           <option>Cancelled</option>
+        </select>
+
+        <label style={s.label}>Saved customer</label>
+        <select
+          style={s.input}
+          value=""
+          onChange={(e) => {
+            const saved = customers.find((entry) => entry.id === e.target.value);
+            if (saved) setCustomer({ name: saved.name, phone: saved.phone });
+          }}
+        >
+          <option value="">Select a returning customer…</option>
+          {customers.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}{entry.phone ? ` · ${entry.phone}` : ""}
+            </option>
+          ))}
         </select>
 
         <label style={s.label}>Customer name</label>

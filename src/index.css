@@ -246,3 +246,9 @@ button, input, textarea, select { font-family: inherit; }
   flex-direction: row !important;
   justify-content: space-between !important;
 }
+
+
+@media screen and (max-width: 720px) {
+  .customer-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .customer-modal { width: calc(100vw - 20px) !important; max-height: calc(100dvh - 20px); overflow-y: auto; }
+}
