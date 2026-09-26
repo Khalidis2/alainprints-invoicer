@@ -198,6 +198,24 @@ function dbToFilament(row) {
   };
 }
 
+// ---------- store orders ----------
+
+export async function fetchStoreOrders() {
+  const { data, error } = await supabase
+    .from("store_orders")
+    .select("*, store_order_items(*)")
+    .order("created_at", { ascending: false });
+  if (error?.code === "42P01") return [];
+  if (error) throw error;
+  return data;
+}
+
+export async function setStoreOrderStatus(id, status) {
+  const { data, error } = await supabase.rpc("set_store_order_status", { p_order_id: id, p_status: status });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
 // ---------- invoices ----------
 
 export async function fetchInvoices() {
@@ -311,13 +329,14 @@ export async function persistInvoiceNo(n) {
 
 // ---------- realtime ----------
 
-export function subscribeToChanges({ onItems, onInvoices, onCustomers, onFilaments }) {
+export function subscribeToChanges({ onItems, onInvoices, onCustomers, onFilaments, onStoreOrders }) {
   const channel = supabase
     .channel("alainprints-sync")
     .on("postgres_changes", { event: "*", schema: "public", table: "items" }, onItems)
     .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, onInvoices)
     .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, onCustomers)
     .on("postgres_changes", { event: "*", schema: "public", table: "filaments" }, onFilaments)
+    .on("postgres_changes", { event: "*", schema: "public", table: "store_orders" }, onStoreOrders)
     .subscribe();
 
   return () => supabase.removeChannel(channel);

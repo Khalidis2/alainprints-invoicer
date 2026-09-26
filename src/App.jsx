@@ -18,6 +18,8 @@ import {
   fetchFilaments,
   updateFilamentRow,
   receiveFilamentRow,
+  fetchStoreOrders,
+  setStoreOrderStatus,
 } from "./lib/storage";
 import ItemsMenu from "./components/ItemsMenu";
 import InvoiceBuilder from "./components/InvoiceBuilder";
@@ -25,6 +27,7 @@ import InvoiceHistory from "./components/InvoiceHistory";
 import PrintCalculator from "./components/PrintCalculator";
 import Customers from "./components/Customers";
 import FilamentInventory from "./components/FilamentInventory";
+import StoreOrders from "./components/StoreOrders";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -105,6 +108,7 @@ function Invoicer({ userEmail, onSignOut }) {
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [filaments, setFilaments] = useState([]);
+  const [storeOrders, setStoreOrders] = useState([]);
   const [invoiceNo, setInvoiceNo] = useState(1000);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -128,18 +132,22 @@ function Invoicer({ userEmail, onSignOut }) {
   const refreshFilaments = useCallback(() => {
     fetchFilaments().then(setFilaments).catch((e) => showToast(e.message));
   }, []);
+  const refreshStoreOrders = useCallback(() => {
+    fetchStoreOrders().then(setStoreOrders).catch((e) => showToast(e.message));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [i, inv, n, savedCustomers, savedFilaments] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers(), fetchFilaments()]);
+        const [i, inv, n, savedCustomers, savedFilaments, savedStoreOrders] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers(), fetchFilaments(), fetchStoreOrders()]);
         if (cancelled) return;
         setItems(i);
         setInvoices(inv);
         setInvoiceNo(n);
         setCustomers(savedCustomers);
         setFilaments(savedFilaments);
+        setStoreOrders(savedStoreOrders);
       } catch (e) {
         if (!cancelled) setLoadError(e.message);
       } finally {
@@ -152,13 +160,14 @@ function Invoicer({ userEmail, onSignOut }) {
       onInvoices: () => refreshInvoices(),
       onCustomers: () => refreshCustomers(),
       onFilaments: () => refreshFilaments(),
+      onStoreOrders: () => refreshStoreOrders(),
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, [refreshItems, refreshInvoices, refreshCustomers, refreshFilaments]);
+  }, [refreshItems, refreshInvoices, refreshCustomers, refreshFilaments, refreshStoreOrders]);
 
   // --- item actions ---
   const handleAddItem = async (item) => {
@@ -234,11 +243,16 @@ function Invoicer({ userEmail, onSignOut }) {
     await receiveFilamentRow(filament);
     refreshFilaments();
   };
+  const handleStoreOrderStatus = async (id, status) => {
+    await setStoreOrderStatus(id, status);
+    await Promise.all([refreshStoreOrders(), refreshFilaments()]);
+  };
 
   const tabs = [
     { id: "items", label: "Items menu" },
     { id: "calculator", label: "Slice & price" },
     { id: "filament", label: "Filament" },
+    { id: "store-orders", label: `Store orders${storeOrders.filter((order) => order.status === "pending").length ? ` (${storeOrders.filter((order) => order.status === "pending").length})` : ""}` },
     { id: "invoice", label: "New invoice" },
     { id: "customers", label: "Customers" },
     { id: "history", label: "History" },
@@ -323,6 +337,9 @@ function Invoicer({ userEmail, onSignOut }) {
             onReceive={handleReceiveFilament}
             showToast={showToast}
           />
+        )}
+        {tab === "store-orders" && (
+          <StoreOrders orders={storeOrders} onStatus={handleStoreOrderStatus} showToast={showToast} />
         )}
         {tab === "invoice" && (
           <InvoiceBuilder

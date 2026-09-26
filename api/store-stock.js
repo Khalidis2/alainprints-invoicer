@@ -12,6 +12,12 @@ export default async function handler(request, response) {
   }
 
   try {
+    await fetch(`${supabaseUrl}/rest/v1/rpc/expire_store_orders`, {
+      method: "POST",
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
+      body: "{}",
+    }).catch(() => null);
+
     const result = await fetch(`${supabaseUrl}/rest/v1/rpc/public_store_stock`, {
       method: "POST",
       headers: {

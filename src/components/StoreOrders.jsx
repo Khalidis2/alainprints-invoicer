@@ -1,0 +1,93 @@
+import { useMemo, useState } from "react";
+import { AED } from "../lib/helpers";
+
+export default function StoreOrders({ orders, onStatus, showToast }) {
+  const [filter, setFilter] = useState("pending");
+  const [busyId, setBusyId] = useState(null);
+  const visible = useMemo(() => orders.filter((order) => filter === "all" || order.status === filter), [filter, orders]);
+  const pending = orders.filter((order) => order.status === "pending").length;
+
+  const changeStatus = async (order, status) => {
+    if (!window.confirm(`${status === "confirmed" ? "Confirm" : "Cancel"} ${order.reference}?`)) return;
+    setBusyId(order.id);
+    try {
+      await onStatus(order.id, status);
+      showToast(status === "confirmed" ? "Order confirmed and stock deducted" : "Order cancelled and stock restored");
+    } catch (error) {
+      showToast(error.message || "Couldn't update order");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <section>
+      <div style={s.heading}>
+        <div><h2 style={s.title}>Store orders</h2><p style={s.sub}>{pending} pending reservation{pending === 1 ? "" : "s"}</p></div>
+        <div style={s.filters}>
+          {["pending", "confirmed", "cancelled", "expired", "all"].map((status) => (
+            <button key={status} style={{ ...s.filter, ...(filter === status ? s.filterActive : {}) }} onClick={() => setFilter(status)}>{status}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={s.grid}>
+        {visible.map((order) => (
+          <article key={order.id} style={s.card}>
+            <div style={s.cardHead}>
+              <div><strong style={s.reference}>{order.reference}</strong><span style={s.date}>{new Date(order.created_at).toLocaleString("en-AE")}</span></div>
+              <span style={{ ...s.status, ...(s[order.status] || {}) }}>{order.status}</span>
+            </div>
+            <div style={s.customer}><strong>{order.customer_name}</strong><span>{order.mobile}</span><span>{order.emirate}</span><span>{order.address}</span></div>
+            <ul style={s.items}>
+              {(order.store_order_items || []).map((item) => (
+                <li key={item.id} style={s.item}><span>{item.material} · {item.color}</span><strong>{item.quantity} × {AED(Number(item.unit_price))}</strong></li>
+              ))}
+            </ul>
+            <div style={s.total}><span>Total</span><strong>{AED(Number(order.total))}</strong></div>
+            {order.notes && <p style={s.notes}>{order.notes}</p>}
+            {order.status === "pending" && (
+              <>
+                <p style={s.expiry}>Reserved until {new Date(order.expires_at).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit" })}</p>
+                <div style={s.actions}>
+                  <button style={s.cancel} disabled={busyId === order.id} onClick={() => changeStatus(order, "cancelled")}>Cancel & restore</button>
+                  <button style={s.confirm} disabled={busyId === order.id} onClick={() => changeStatus(order, "confirmed")}>Confirm order</button>
+                </div>
+              </>
+            )}
+          </article>
+        ))}
+      </div>
+      {visible.length === 0 && <div style={s.empty}>No {filter === "all" ? "" : filter} store orders.</div>}
+    </section>
+  );
+}
+
+const s = {
+  heading: { display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-end", marginBottom: 18 },
+  title: { margin: 0, fontSize: 24 },
+  sub: { margin: "5px 0 0", color: "#8A7F6D", fontSize: 12 },
+  filters: { display: "flex", flexWrap: "wrap", gap: 6 },
+  filter: { padding: "8px 11px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#6B6355", fontWeight: 700, textTransform: "capitalize", cursor: "pointer" },
+  filterActive: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 12 },
+  card: { padding: 16, border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff" },
+  cardHead: { display: "flex", justifyContent: "space-between", gap: 12 },
+  reference: { display: "block", color: "#16324F" },
+  date: { display: "block", marginTop: 4, color: "#8A7F6D", fontSize: 10.5 },
+  status: { alignSelf: "start", padding: "4px 8px", borderRadius: 20, fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
+  pending: { background: "#FFF7ED", color: "#C2410C" },
+  confirmed: { background: "#ECFDF5", color: "#047857" },
+  cancelled: { background: "#FEF2F2", color: "#B91C1C" },
+  expired: { background: "#F3F4F6", color: "#6B7280" },
+  customer: { display: "grid", gap: 3, marginTop: 14, color: "#6B6355", fontSize: 12 },
+  items: { margin: "14px 0 0", padding: 0, listStyle: "none", borderTop: "1px solid #EFEAE0" },
+  item: { display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderBottom: "1px solid #EFEAE0", fontSize: 12 },
+  total: { display: "flex", justifyContent: "space-between", marginTop: 12, color: "#16324F", fontSize: 16 },
+  notes: { color: "#8A7F6D", fontSize: 11.5 },
+  expiry: { color: "#B45309", fontSize: 11.5 },
+  actions: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 },
+  cancel: { padding: 9, border: "1px solid #DC2626", borderRadius: 8, background: "#fff", color: "#B91C1C", fontWeight: 800, cursor: "pointer" },
+  confirm: { padding: 9, border: 0, borderRadius: 8, background: "#047857", color: "#fff", fontWeight: 800, cursor: "pointer" },
+  empty: { padding: 30, textAlign: "center", color: "#8A7F6D" },
+};
