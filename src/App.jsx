@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "./lib/supabaseClient";
 import {
   fetchItems,
   insertItem,
@@ -18,6 +19,79 @@ import InvoiceHistory from "./components/InvoiceHistory";
 import PrintCalculator from "./components/PrintCalculator";
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (mounted) {
+        setSession(data.session);
+        setCheckingAuth(false);
+      }
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setCheckingAuth(false);
+    });
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  if (checkingAuth) return <div style={authStyles.center}>Checking secure session...</div>;
+  if (!session) return <Login />;
+
+  return <Invoicer userEmail={session.user.email} onSignOut={() => supabase.auth.signOut()} />;
+}
+
+function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const signIn = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (authError) setError("Incorrect email or password.");
+    setBusy(false);
+  };
+
+  return (
+    <main style={authStyles.page}>
+      <form style={authStyles.card} onSubmit={signIn}>
+        <div style={authStyles.brand}>ALAINPRINTS</div>
+        <h1 style={authStyles.title}>Invoice maker</h1>
+        <p style={authStyles.sub}>Sign in to access invoices and customer records.</p>
+        <label style={authStyles.label}>Email</label>
+        <input style={authStyles.input} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        <label style={authStyles.label}>Password</label>
+        <input style={authStyles.input} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        {error && <div style={authStyles.error}>{error}</div>}
+        <button style={authStyles.button} disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
+      </form>
+    </main>
+  );
+}
+
+const authStyles = {
+  page: { minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "#FAF8F4" },
+  center: { minHeight: "100vh", display: "grid", placeItems: "center", color: "#8A7F6D" },
+  card: { width: "100%", maxWidth: 390, background: "#fff", border: "1px solid #E4DFD3", borderRadius: 16, padding: 28, boxShadow: "0 10px 35px rgba(27,42,61,.08)" },
+  brand: { color: "#16324F", fontWeight: 900, letterSpacing: 4, fontSize: 18 },
+  title: { margin: "18px 0 4px", color: "#1B2A3D", fontSize: 24 },
+  sub: { margin: "0 0 22px", color: "#8A7F6D", fontSize: 13 },
+  label: { display: "block", margin: "13px 0 5px", color: "#6B6355", fontWeight: 700, fontSize: 12 },
+  input: { width: "100%", padding: "11px 12px", border: "1px solid #DCD5C6", borderRadius: 8, fontSize: 15 },
+  error: { marginTop: 12, color: "#B3451D", fontSize: 12 },
+  button: { width: "100%", marginTop: 18, padding: 12, border: 0, borderRadius: 8, background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
+};
+
+function Invoicer({ userEmail, onSignOut }) {
   const [tab, setTab] = useState("items");
   const [items, setItems] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -150,6 +224,10 @@ export default function App() {
             <div style={s.brandSub}>Item catalog & invoice maker · synced</div>
           </div>
         </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -50, marginBottom: 20 }}>
+          <span style={{ fontSize: 11, color: "#8A7F6D", marginRight: 10 }}>{userEmail}</span>
+          <button style={s.signOutBtn} onClick={onSignOut}>Sign out</button>
+        </div>
         <div style={s.tabRow}>
           {tabs.map((t) => (
             <button
@@ -235,5 +313,6 @@ const s = {
   tabBtn: { fontWeight: 700, fontSize: 13.5, padding: "9px 16px", background: "transparent", border: "none", borderBottom: "2px solid transparent", marginBottom: -2, cursor: "pointer", color: "#8A7F6D" },
   tabBtnActive: { color: "#E8792D", borderBottom: "2px solid #E8792D" },
   body: { maxWidth: 980, margin: "0 auto" },
+  signOutBtn: { background: "#fff", color: "#1B2A3D", border: "1px solid #DCD5C6", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" },
   toast: { position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#1B2A3D", color: "#fff", padding: "10px 18px", borderRadius: 30, fontSize: 13, fontWeight: 600, boxShadow: "0 6px 20px rgba(0,0,0,0.2)" },
 };
