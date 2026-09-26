@@ -2,10 +2,18 @@ import { useMemo, useState } from "react";
 import { strFromU8, unzipSync } from "fflate";
 import { AED } from "../lib/helpers";
 
-const PRINTERS = { bambuA1: { label: "Bambu Lab A1", watts: 120 }, snapmakerU1: { label: "Snapmaker U1", watts: 180 } };
+const PRINTERS = {
+  bambuA1: { label: "Bambu Lab A1", watts: 120 },
+  snapmakerU1: { label: "Snapmaker U1", watts: 180 },
+};
 
-const FIXED_OVERHEAD = 3;
-const MINIMUM_PRICE = 8;
+const PRICE_LEVELS = {
+  budget: { label: "Budget", multiplier: 1.6 },
+  recommended: { label: "Recommended", multiplier: 2.2 },
+  premium: { label: "Premium", multiplier: 3 },
+};
+
+const MINIMUM_PRICE_PER_PIECE = 8;
 
 function durationText(hours) {
   const minutes = Math.round(hours * 60);
@@ -20,7 +28,12 @@ function parseDuration(value) {
   if (hours) seconds += Number(hours[1]) * 3600;
   if (minutes) seconds += Number(minutes[1]) * 60;
   if (secs) seconds += Number(secs[1]);
-  return seconds || (Number(value) || 0);
+  return seconds || Number(value) || 0;
+}
+
+function sumNumbers(value) {
+  const values = String(value).match(/\d+(?:\.\d+)?/g) || [];
+  return values.reduce((sum, number) => sum + Number(number), 0);
 }
 
 function parseGcode(text) {
@@ -30,34 +43,56 @@ function parseGcode(text) {
     /;TIME:\s*([\d.]+)/i,
   ];
   const weightPatterns = [
-    /;\s*total filament weight \[g\]\s*:\s*([\d.]+)/i,
-    /;\s*filament used \[g\]\s*=\s*([\d.]+)/i,
-    /;\s*filament used\s*:\s*([\d.]+)\s*g/i,
+    /;\s*total filament weight \[g\]\s*:\s*([^\r\n]+)/i,
+    /;\s*filament used \[g\]\s*=\s*([^\r\n]+)/i,
+    /;\s*filament used\s*:\s*([^\r\n]+)/i,
   ];
+
   let seconds = 0;
   let grams = 0;
+
   for (const pattern of timePatterns) {
     const match = text.match(pattern);
-    if (match) { seconds = parseDuration(match[1]); break; }
+    if (match) {
+      seconds = parseDuration(match[1]);
+      break;
+    }
   }
+
   for (const pattern of weightPatterns) {
     const match = text.match(pattern);
-    if (match) { grams = Number(match[1]); break; }
+    if (match) {
+      grams = sumNumbers(match[1]);
+      break;
+    }
   }
+
   return { hours: seconds / 3600, grams };
 }
 
 async function readSlicedFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (file.name.toLowerCase().endsWith(".3mf")) {
-    const archive = unzipSync(bytes);
-    const entries = Object.entries(archive)
-      .filter(([name]) => /\.gcode$/i.test(name))
-      .sort((a, b) => b[1].length - a[1].length);
-    if (!entries.length) throw new Error("This 3MF does not contain sliced G-code. Export a sliced Bambu or Orca 3MF.");
-    return parseGcode(strFromU8(entries[0][1]));
+
+  if (!file.name.toLowerCase().endsWith(".3mf")) {
+    const parsed = parseGcode(new TextDecoder().decode(bytes));
+    return { ...parsed, plates: 1 };
   }
-  return parseGcode(new TextDecoder().decode(bytes));
+
+  const archive = unzipSync(bytes);
+  const allGcode = Object.entries(archive).filter(([name]) => /\.gcode$/i.test(name));
+  if (!allGcode.length) throw new Error("This 3MF does not contain sliced G-code. Export a sliced Bambu or Orca 3MF.");
+
+  const plateFiles = allGcode.filter(([name]) => /(?:^|\/)plate_?\d+\.gcode$/i.test(name));
+  const entries = plateFiles.length ? plateFiles : allGcode;
+  const totals = entries.reduce(
+    (sum, [, data]) => {
+      const parsed = parseGcode(strFromU8(data));
+      return { grams: sum.grams + parsed.grams, hours: sum.hours + parsed.hours };
+    },
+    { grams: 0, hours: 0 },
+  );
+
+  return { ...totals, plates: entries.length };
 }
 
 export default function PrintCalculator({ onAdd, onAdded }) {
@@ -67,21 +102,31 @@ export default function PrintCalculator({ onAdd, onAdded }) {
   const [hours, setHours] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [spoolPrice, setSpoolPrice] = useState(75);
-  const [margin, setMargin] = useState(40);
+  const [laborOther, setLaborOther] = useState(5);
+  const [packaging, setPackaging] = useState(0);
+  const [shipping, setShipping] = useState(0);
+  const [priceLevel, setPriceLevel] = useState("recommended");
+  const [plates, setPlates] = useState(1);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const result = useMemo(() => {
-    if (!(grams > 0) || !(hours > 0) || !(spoolPrice > 0) || margin >= 100) return null;
+    if (!(grams > 0) || !(hours > 0) || !(spoolPrice > 0) || !(quantity > 0)) return null;
     const printer = PRINTERS[printerKey];
     const material = grams * spoolPrice / 1000;
     const electricity = hours * (printer.watts / 1000) * 0.3;
-    const cost = material + electricity + FIXED_OVERHEAD;
-    const costPerPiece = cost / quantity;
-    const price = Math.max(costPerPiece / (1 - margin / 100), MINIMUM_PRICE);
-    return { material, electricity, cost, costPerPiece, price, totalPrice: price * quantity, profit: price - costPerPiece };
-  }, [grams, hours, quantity, spoolPrice, margin, printerKey]);
+    const baseCost = material + electricity + laborOther + packaging + shipping;
+    const prices = Object.fromEntries(
+      Object.entries(PRICE_LEVELS).map(([key, level]) => {
+        const batch = Math.max(baseCost * level.multiplier, MINIMUM_PRICE_PER_PIECE * quantity);
+        return [key, { batch, perPiece: batch / quantity }];
+      }),
+    );
+    return { material, electricity, baseCost, prices };
+  }, [grams, hours, quantity, spoolPrice, laborOther, packaging, shipping, printerKey]);
+
+  const selectedPrice = result?.prices[priceLevel];
 
   const pickFile = async (file) => {
     if (!file) return;
@@ -93,6 +138,7 @@ export default function PrintCalculator({ onAdd, onAdded }) {
       setName(file.name.replace(/(\.gcode)?\.3mf$|\.(bgcode|gcode|gco|gc|ngc|g)$/i, ""));
       setGrams(Math.round(parsed.grams * 100) / 100);
       setHours(Math.round(parsed.hours * 100) / 100);
+      setPlates(parsed.plates);
     } catch (e) {
       setError(e.message || "Could not read this file.");
     } finally {
@@ -101,7 +147,7 @@ export default function PrintCalculator({ onAdd, onAdded }) {
   };
 
   const save = async () => {
-    if (!result || !name.trim()) return;
+    if (!result || !selectedPrice || !name.trim()) return;
     setSaving(true);
     try {
       await onAdd({
@@ -109,8 +155,8 @@ export default function PrintCalculator({ onAdd, onAdded }) {
         name: name.trim(),
         nameAr: "",
         category: "3D Print",
-        price: Math.round(result.price * 100) / 100,
-        description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g filament · ${durationText(hours)}`,
+        price: Math.round(selectedPrice.perPiece * 100) / 100,
+        description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g total · ${durationText(hours)} · ${PRICE_LEVELS[priceLevel].label} price`,
         imageUrl: null,
       });
       onAdded();
@@ -124,9 +170,14 @@ export default function PrintCalculator({ onAdd, onAdded }) {
   return (
     <div className="calculator-card" style={s.card}>
       <h2 style={s.h2}>Slice & price</h2>
-      <p style={s.sub}>Upload a sliced G-code or Bambu/Orca 3MF. The file stays in this browser.</p>
+      <p style={s.sub}>Upload a sliced G-code or Bambu/Orca 3MF. All colors and build plates are included.</p>
 
-      <label style={s.field}><span>Printer</span><select style={s.input} value={printerKey} onChange={(e) => setPrinterKey(e.target.value)}>{Object.entries(PRINTERS).map(([key, printer]) => <option key={key} value={key}>{printer.label}</option>)}</select></label>
+      <label style={s.field}>
+        <span>Printer</span>
+        <select style={s.input} value={printerKey} onChange={(e) => setPrinterKey(e.target.value)}>
+          {Object.entries(PRINTERS).map(([key, printer]) => <option key={key} value={key}>{printer.label}</option>)}
+        </select>
+      </label>
 
       <label style={s.drop}>
         <strong>{reading ? "Reading file…" : "Choose sliced file"}</strong>
@@ -134,46 +185,73 @@ export default function PrintCalculator({ onAdd, onAdded }) {
         <input type="file" accept=".gcode,.bgcode,.gco,.g,.gc,.ngc,.3mf" disabled={reading} onChange={(e) => { const file = e.target.files?.[0]; pickFile(file); e.target.value = ""; }} />
       </label>
 
+      {plates > 1 && <div style={s.notice}>{plates} build plates detected. Filament and printing time were combined.</div>}
       {error && <div style={s.error}>{error}</div>}
 
       <div className="calculator-grid" style={s.grid}>
         <Field label="Item name" value={name} onChange={setName} />
-        <Field label="Filament (g)" type="number" value={grams} onChange={(v) => setGrams(Number(v))} />
-        <Field label="Print time (hours)" type="number" value={hours} onChange={(v) => setHours(Number(v))} />
-        <Field label="Quantity made" type="number" value={quantity} onChange={(v) => setQuantity(Math.max(1, Number(v) || 1))} />
-        <Field label="Spool price (AED)" type="number" value={spoolPrice} onChange={(v) => setSpoolPrice(Number(v))} />
-        <Field label="Profit margin (%)" type="number" value={margin} onChange={(v) => setMargin(Number(v))} />
+        <Field label="Total filament (g)" type="number" value={grams} onChange={(value) => setGrams(Number(value))} />
+        <Field label="Total print time (hours)" type="number" value={hours} onChange={(value) => setHours(Number(value))} />
+        <Field label="Quantity made" type="number" value={quantity} onChange={(value) => setQuantity(Math.max(1, Number(value) || 1))} />
+        <Field label="Spool price (AED / 1 kg)" type="number" value={spoolPrice} onChange={(value) => setSpoolPrice(Number(value))} />
+        <Field label="Labor and other costs (AED)" type="number" value={laborOther} onChange={(value) => setLaborOther(Math.max(0, Number(value) || 0))} />
+        <Field label="Packaging (AED)" type="number" value={packaging} onChange={(value) => setPackaging(Math.max(0, Number(value) || 0))} />
+        <Field label="Shipping paid by you (AED)" type="number" value={shipping} onChange={(value) => setShipping(Math.max(0, Number(value) || 0))} />
       </div>
 
-      <div style={s.result}>
-        <span>Suggested selling price per piece</span>
-        <strong>{result ? AED(result.price) : "—"}</strong>
-        {result && <small>Cost per piece {AED(result.costPerPiece)} · Profit per piece {AED(result.profit)} · Batch total {AED(result.totalPrice)}</small>}
-      </div>
+      {result && (
+        <>
+          <div style={s.cost}>
+            <span>Material <strong>{AED(result.material)}</strong></span>
+            <span>Electricity <strong>{AED(result.electricity)}</strong></span>
+            <span>Labor and other <strong>{AED(laborOther)}</strong></span>
+            <span>Packaging <strong>{AED(packaging)}</strong></span>
+            <span>Shipping <strong>{AED(shipping)}</strong></span>
+            <span style={s.costTotal}>Estimated cost <strong>{AED(result.baseCost)}</strong></span>
+          </div>
+
+          <div className="price-levels" style={s.levels}>
+            {Object.entries(PRICE_LEVELS).map(([key, level]) => (
+              <button key={key} style={{ ...s.level, ...(priceLevel === key ? s.levelActive : {}) }} onClick={() => setPriceLevel(key)}>
+                <span>{level.label}</span>
+                <strong>{AED(result.prices[key].perPiece)}</strong>
+                <small>per piece · batch {AED(result.prices[key].batch)}</small>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <button style={{ ...s.button, opacity: !result || !name.trim() || saving ? 0.55 : 1 }} disabled={!result || !name.trim() || saving} onClick={save}>
-        {saving ? "Adding…" : "Add to Items menu"}
+        {saving ? "Adding…" : `Add ${PRICE_LEVELS[priceLevel].label} price to Items menu`}
       </button>
     </div>
   );
 }
 
 function Field({ label, type = "text", value, onChange }) {
-  return <label style={s.field}><span>{label}</span><input style={s.input} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
+  return (
+    <label style={s.field}>
+      <span>{label}</span>
+      <input style={s.input} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
 }
 
 const s = {
   card: { maxWidth: 760, margin: "0 auto", padding: 24, background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 14 },
   h2: { margin: 0, fontSize: 24 },
   sub: { margin: "6px 0 22px", color: "#8A7F6D", fontSize: 13.5 },
-  modeGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10 },
-  mode: { display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 8px", padding: 12, border: "1.5px solid #DCD5C6", borderRadius: 9, cursor: "pointer" },
-  modeActive: { borderColor: "#E8792D", background: "#FFF5ED" },
   drop: { display: "grid", gap: 7, marginTop: 18, padding: 22, border: "1.5px dashed #DCD5C6", borderRadius: 10, textAlign: "center", cursor: "pointer" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12, marginTop: 18 },
   field: { display: "grid", gap: 5, color: "#6B6355", fontSize: 12, fontWeight: 700 },
   input: { width: "100%", boxSizing: "border-box", padding: "10px 11px", border: "1.5px solid #DCD5C6", borderRadius: 8, fontSize: 14 },
-  result: { display: "grid", gap: 6, marginTop: 20, padding: 20, borderRadius: 10, background: "#F1F6F5", textAlign: "center" },
-  button: { width: "100%", marginTop: 14, padding: 13, border: 0, borderRadius: 8, background: "#E8792D", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" },
+  notice: { marginTop: 12, padding: 10, color: "#166534", background: "#F0FDF4", borderRadius: 8, fontSize: 13, fontWeight: 700 },
   error: { marginTop: 12, padding: 10, color: "#B3451D", background: "#FFF1EC", borderRadius: 8, fontSize: 13 },
+  cost: { display: "grid", gap: 8, marginTop: 20, padding: 16, borderRadius: 10, background: "#F8FAFC", color: "#475569", fontSize: 12.5 },
+  costTotal: { display: "flex", justifyContent: "space-between", marginTop: 4, paddingTop: 10, borderTop: "1px solid #CBD5E1", color: "#16324F", fontSize: 15 },
+  levels: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 14 },
+  level: { display: "grid", gap: 5, padding: 14, border: "1.5px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#1B2A3D", cursor: "pointer", textAlign: "left" },
+  levelActive: { borderColor: "#E8792D", background: "#FFF5ED", boxShadow: "0 0 0 1px #E8792D" },
+  button: { width: "100%", marginTop: 14, padding: 13, border: 0, borderRadius: 8, background: "#E8792D", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" },
 };
