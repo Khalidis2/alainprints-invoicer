@@ -1,6 +1,4 @@
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -9,18 +7,16 @@ body {
   color: #1a1a1a;
 }
 
-button {
-  font-family: inherit;
-}
-
-input,
-textarea,
-select {
-  font-family: inherit;
-}
+button, input, textarea, select { font-family: inherit; }
 
 @media print {
-  .no-print {
-    display: none !important;
-  }
+  @page { size: A4; margin: 0; }
+
+  body { background: #fff; }
+
+  .no-print { display: none !important; }
+
+  body > div, body > div > div { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+
+  article { box-shadow: none !important; }
 }
