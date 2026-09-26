@@ -181,3 +181,19 @@ button, input, textarea, select { font-family: inherit; }
     justify-self: end;
   }
 }
+
+
+@media screen and (max-width: 720px) {
+  .history-actions {
+    grid-column: 2;
+    display: flex !important;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-top: 10px;
+  }
+  .history-actions > button,
+  .history-actions > span {
+    min-height: 42px;
+    padding: 8px 10px !important;
+  }
+}

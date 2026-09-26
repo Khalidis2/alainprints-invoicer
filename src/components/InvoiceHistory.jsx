@@ -72,6 +72,35 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
     }
   };
 
+  const shareInvoice = async (invoice) => {
+    const lines = (invoice.lines || [])
+      .map((line) => `${line.qty} × ${line.name} — ${AED(Number(line.price || 0) * Number(line.qty || 0))}`)
+      .join("\n");
+    const text = [
+      `ALAINPRINTS INVOICE INV-${invoice.number}`,
+      `Date: ${invoice.date}`,
+      `Customer: ${invoice.customer?.name || "Walk-in customer"}`,
+      "",
+      lines,
+      "",
+      `Total: ${AED(invoice.total)}`,
+      `Status: ${invoice.status || "Unpaid"}`,
+      "Trade Licence No.: CN-6362373",
+      "Not VAT registered",
+    ].join("\n");
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `Invoice INV-${invoice.number}`, text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      showToast("Invoice copied — paste it into WhatsApp or email");
+    } catch (error) {
+      if (error?.name !== "AbortError") showToast("Couldn't share this invoice");
+    }
+  };
+
   return (
     <div>
       <div style={s.headingRow}>
@@ -132,9 +161,12 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
                   {STATUSES.map((option) => <option key={option}>{option}</option>)}
                 </select>
 
-                {editable && <button style={s.editBtn} disabled={busy} onClick={() => onEdit(invoice)}>Edit</button>}
-                {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete draft</button>}
-                {locked && <span style={s.locked}>Locked</span>}
+                <div className="history-actions" style={s.actionGroup}>
+                  <button style={s.shareBtn} disabled={busy} onClick={() => shareInvoice(invoice)}>Share</button>
+                  {editable && <button style={s.editBtn} disabled={busy} onClick={() => onEdit(invoice)}>Edit</button>}
+                  {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete</button>}
+                  {locked && <span style={s.locked}>Locked</span>}
+                </div>
               </div>
             );
           })}
@@ -173,6 +205,8 @@ const s = {
   date: { color: "#8A7F6D", fontSize: 12 },
   total: { fontWeight: 800, textAlign: "right", color: "#1B2A3D" },
   statusSelect: { width: 112, border: "1px solid #DCD5C6", borderRadius: 8, padding: "7px 8px", fontWeight: 800, fontSize: 11.5, cursor: "pointer" },
+  actionGroup: { display: "flex", alignItems: "center", gap: 8 },
+  shareBtn: { background: "#16324F", border: "none", borderRadius: 7, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
   editBtn: { background: "none", border: "none", color: "#2E7D8C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 },
   deleteBtn: { background: "none", border: "none", color: "#B3451D", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: 0 },
   locked: { width: 46, color: "#8A7F6D", fontWeight: 700, fontSize: 11.5 },
