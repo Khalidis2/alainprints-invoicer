@@ -124,7 +124,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
 
   return (
     <div>
-      <div style={s.head}>
+      <div className="items-head" style={s.head}>
         <div>
           <h2 style={s.h2}>Items menu</h2>
           <div style={s.sub}>{items.length} item{items.length !== 1 ? "s" : ""} · prices in AED</div>
@@ -134,7 +134,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
         </button>
       </div>
 
-      <div style={s.filterRow}>
+      <div className="category-filters" style={s.filterRow}>
         {["All", ...CATEGORIES].map((c) => (
           <button
             key={c}
@@ -148,11 +148,11 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
 
       {filtered.length === 0 && <div style={s.empty}>No items in this category yet.</div>}
 
-      <div style={s.grid}>
+      <div className="items-grid" style={s.grid}>
         {filtered.map((item) => {
           const cs = CAT_STYLE[item.category] || CAT_STYLE.Custom;
           return (
-            <div key={item.id} style={s.card}>
+            <div key={item.id} className="item-card" style={s.card}>
               {item.imageUrl && <img src={item.imageUrl} alt={item.name} style={s.thumb} />}
               <div style={s.cardTop}>
                 <span style={{ ...s.badge, color: cs.fg, background: cs.bg }}>{item.category}</span>
@@ -183,7 +183,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
 
       {showForm && (
         <div style={s.overlay} onClick={() => setShowForm(false)}>
-          <div style={s.modal} onClick={(e) => e.stopPropagation()}>
+          <div className="item-modal" style={s.modal} onClick={(e) => e.stopPropagation()}>
             <div style={s.modalTitle}>{editing.id ? "Edit item" : "New item"}</div>
 
             <label style={s.label}>Photo</label>
@@ -252,7 +252,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               placeholder="e.g. Holds 2 controllers"
             />
 
-            <div style={s.modalActions}>
+            <div className="modal-actions" style={s.modalActions}>
               <button style={s.secondaryBtn} onClick={() => setShowForm(false)}>
                 Cancel
               </button>

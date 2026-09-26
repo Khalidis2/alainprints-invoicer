@@ -81,14 +81,14 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
         </div>
       </div>
 
-      <div style={s.summaryGrid}>
+      <div className="history-summary" style={s.summaryGrid}>
         <SummaryCard label="Total billed" value={AED(totals.billed)} accent="#16324F" />
         <SummaryCard label="Paid" value={AED(totals.paid)} accent="#047857" />
         <SummaryCard label="Outstanding" value={AED(totals.unpaid)} accent="#B45309" />
         <SummaryCard label="Active invoices" value={String(totals.count)} accent="#2E7D8C" />
       </div>
 
-      <div style={s.toolbar}>
+      <div className="history-toolbar" style={s.toolbar}>
         <input
           style={s.search}
           value={query}
@@ -114,8 +114,8 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
             const busy = workingId === invoice.id;
 
             return (
-              <div key={invoice.id} style={s.row}>
-                <button style={s.rowMain} onClick={() => setOpen(invoice)}>
+              <div key={invoice.id} className="history-row" style={s.row}>
+                <button className="history-main" style={s.rowMain} onClick={() => setOpen(invoice)}>
                   <span style={s.no}>INV-{invoice.number}</span>
                   <span style={s.name}>{invoice.customer.name || "Walk-in"}</span>
                   <span style={s.date}>{invoice.date}</span>

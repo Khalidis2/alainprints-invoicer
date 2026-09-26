@@ -14,26 +14,26 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
 
   return (
     <div>
-      <div className="no-print" style={s.bar}>
+      <div className="no-print invoice-toolbar" style={s.bar}>
         <button style={s.secondaryBtn} onClick={onBack}>← {backLabel}</button>
         <button style={s.primaryBtn} onClick={() => window.print()}>Print / Save PDF</button>
       </div>
 
       <article className="invoice-sheet" style={s.sheet}>
-        <header style={s.hero}>
+        <header className="invoice-hero" style={s.hero}>
           <div>
             <div style={s.brand}>ALAINPRINTS</div>
             <div style={s.brandSub}>3D FILAMENT HANDICRAFTS</div>
             <div style={s.legal}>Abu Dhabi, U.A.E. | Trade Licence No.: CN-6362373</div>
           </div>
-          <div style={s.invoiceMeta}>
+          <div className="invoice-meta" style={s.invoiceMeta}>
             <div style={s.documentTitle}>INVOICE</div>
             <div style={s.metaLine}>Invoice No.: <strong>INV-{invoice.number}</strong></div>
             <div style={s.metaLine}>Date: <strong>{invoice.date}</strong></div>
           </div>
         </header>
 
-        <section style={s.infoGrid}>
+        <section className="invoice-info" style={s.infoGrid}>
           <div>
             <div style={s.sectionTitle}>BILL TO</div>
             <div style={s.rule} />
@@ -74,7 +74,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
         </table>
 
         <section className="invoice-summary" style={s.summaryWrap}>
-          <div style={s.summary}>
+          <div className="invoice-summary-box" style={s.summary}>
             <div style={s.summaryRow}><span>Subtotal</span><span>{AED(subtotal)}</span></div>
             {(invoice.discount || 0) > 0 && <div style={s.summaryRow}><span>Discount</span><span>- {AED(invoice.discount)}</span></div>}
             <div style={s.summaryRow}><span>VAT</span><span>Not charged</span></div>

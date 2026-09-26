@@ -88,12 +88,12 @@ export default function InvoiceBuilder({ items, invoiceNo, initialInvoice, onSav
   }
 
   return (
-    <div style={s.layout}>
+    <div className="invoice-builder" style={s.layout}>
       <div>
         <h2 style={s.h2}>{editing ? `Edit invoice #${initialInvoice.number}` : "New invoice"}</h2>
         <div style={s.sub}>Invoice #{customInvoiceNo || "—"} · {invoiceDate} — tap items to add them.</div>
 
-        <div style={s.pickGrid}>
+        <div className="item-picker-grid" style={s.pickGrid}>
           {items.map((item) => {
             const cs = CAT_STYLE[item.category] || CAT_STYLE.Custom;
             return (
@@ -111,14 +111,14 @@ export default function InvoiceBuilder({ items, invoiceNo, initialInvoice, onSav
         </div>
       </div>
 
-      <div style={s.panel}>
+      <div className="invoice-panel" style={s.panel}>
         <div style={s.panelTitle}>Invoice #{customInvoiceNo || "—"} · {invoiceDate}</div>
 
         <label style={s.label}>Invoice number</label>
         <input type="number" min="1" step="1" style={s.input} value={customInvoiceNo} onChange={(e) => setCustomInvoiceNo(e.target.value)} />
         {!invoiceNumberIsValid && customInvoiceNo !== "" && <div style={s.error}>Enter a positive whole number.</div>}
 
-        <div style={s.fieldGrid}>
+        <div className="two-column-fields" style={s.fieldGrid}>
           <div>
             <label style={s.label}>Invoice date</label>
             <input type="date" style={s.input} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
@@ -149,7 +149,7 @@ export default function InvoiceBuilder({ items, invoiceNo, initialInvoice, onSav
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {lines.map((l) => (
-              <div key={l.itemId} style={s.lineRow}>
+              <div key={l.itemId} className="invoice-line-editor" style={s.lineRow}>
                 <div style={{ flex: 1 }}>
                   <input
                     aria-label="Item name"
@@ -188,7 +188,7 @@ export default function InvoiceBuilder({ items, invoiceNo, initialInvoice, onSav
           <span style={s.totalAmt}>{AED(total)}</span>
         </div>
 
-        <div style={s.actionRow}>
+        <div className="invoice-actions" style={s.actionRow}>
           {editing && <button style={s.secondaryBtn} disabled={generating} onClick={onCancel}>Cancel</button>}
           <button style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || generating} onClick={generate}>
             {generating ? "Saving…" : editing ? "Update invoice" : "Generate invoice"}

@@ -122,7 +122,7 @@ export default function PrintCalculator({ onAdd, onAdded }) {
   };
 
   return (
-    <div style={s.card}>
+    <div className="calculator-card" style={s.card}>
       <h2 style={s.h2}>Slice & price</h2>
       <p style={s.sub}>Upload a sliced G-code or Bambu/Orca 3MF. The file stays in this browser.</p>
 
@@ -136,7 +136,7 @@ export default function PrintCalculator({ onAdd, onAdded }) {
 
       {error && <div style={s.error}>{error}</div>}
 
-      <div style={s.grid}>
+      <div className="calculator-grid" style={s.grid}>
         <Field label="Item name" value={name} onChange={setName} />
         <Field label="Filament (g)" type="number" value={grams} onChange={(v) => setGrams(Number(v))} />
         <Field label="Print time (hours)" type="number" value={hours} onChange={(v) => setHours(Number(v))} />

@@ -219,9 +219,9 @@ function Invoicer({ userEmail, onSignOut }) {
   }
 
   return (
-    <div style={s.app}>
-      <div className="no-print" style={s.header}>
-        <div style={s.brandRow}>
+    <div className="app-shell" style={s.app}>
+      <div className="no-print app-header" style={s.header}>
+        <div className="brand-row" style={s.brandRow}>
           <Spool />
           <div>
             <div style={s.brandName}>alainprints</div>
@@ -232,7 +232,7 @@ function Invoicer({ userEmail, onSignOut }) {
           <span style={{ fontSize: 11, color: "#8A7F6D", marginRight: 10 }}>{userEmail}</span>
           <button style={s.signOutBtn} onClick={onSignOut}>Sign out</button>
         </div>
-        <div style={s.tabRow}>
+        <div className="app-tabs" style={s.tabRow}>
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -248,7 +248,7 @@ function Invoicer({ userEmail, onSignOut }) {
         </div>
       </div>
 
-      <div style={s.body}>
+      <div className="app-body" style={s.body}>
         {tab === "items" && (
           <ItemsMenu
             items={items}
