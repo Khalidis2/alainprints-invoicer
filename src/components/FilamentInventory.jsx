@@ -1,0 +1,171 @@
+import { useMemo, useState } from "react";
+import { AED } from "../lib/helpers";
+
+export default function FilamentInventory({ filaments, onUpdate, onReceive, showToast }) {
+  const [status, setStatus] = useState("available");
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const rows = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return filaments.filter((entry) => {
+      const matchesStatus = entry.stockStatus === status;
+      const text = `${entry.sku} ${entry.brand} ${entry.material} ${entry.color}`.toLocaleLowerCase();
+      return matchesStatus && (!needle || text.includes(needle));
+    });
+  }, [filaments, query, status]);
+
+  const totals = useMemo(() => ({
+    availableSpools: filaments.filter((entry) => entry.stockStatus === "available").reduce((sum, entry) => sum + entry.remainingG / entry.spoolWeightG, 0),
+    incomingSpools: filaments.filter((entry) => entry.stockStatus === "incoming").reduce((sum, entry) => sum + entry.quantitySpools, 0),
+    availableKg: filaments.filter((entry) => entry.stockStatus === "available").reduce((sum, entry) => sum + entry.remainingG, 0) / 1000,
+  }), [filaments]);
+
+  const save = async () => {
+    if (!editing?.material.trim() || !editing?.color.trim()) return;
+    setBusy(true);
+    try {
+      await onUpdate(editing);
+      setEditing(null);
+      showToast("Filament updated");
+    } catch {
+      showToast("Couldn't update filament");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const receive = async (entry) => {
+    if (!window.confirm(`Mark ${entry.quantitySpools} × ${entry.material} ${entry.color} as received?`)) return;
+    setBusy(true);
+    try {
+      await onReceive(entry);
+      showToast("Filament moved to available stock");
+    } catch {
+      showToast("Couldn't receive filament");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <h2 style={s.title}>Filament inventory</h2>
+      <div className="filament-summary" style={s.summary}>
+        <Summary label="Available" value={`${totals.availableSpools.toFixed(1)} spools`} />
+        <Summary label="Available weight" value={`${totals.availableKg.toFixed(1)} kg`} />
+        <Summary label="Incoming" value={`${totals.incomingSpools} spools`} />
+      </div>
+
+      <div className="filament-toolbar" style={s.toolbar}>
+        <div style={s.tabs}>
+          <button style={{ ...s.tab, ...(status === "available" ? s.tabActive : {}) }} onClick={() => setStatus("available")}>Available</button>
+          <button style={{ ...s.tab, ...(status === "incoming" ? s.tabActive : {}) }} onClick={() => setStatus("incoming")}>Incoming</button>
+        </div>
+        <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search material, colour or SKU" />
+      </div>
+
+      <div className="filament-grid" style={s.grid}>
+        {rows.map((entry) => {
+          const low = entry.stockStatus === "available" && entry.remainingG < entry.spoolWeightG;
+          return (
+            <article key={entry.id} style={{ ...s.card, ...(low ? s.lowCard : {}) }}>
+              <div style={s.cardHead}>
+                <div>
+                  <div style={s.material}>{entry.material}</div>
+                  <div style={s.color}>{entry.color}</div>
+                </div>
+                <span style={entry.stockStatus === "available" ? s.available : s.incoming}>{entry.stockStatus}</span>
+              </div>
+              <div style={s.meta}>{entry.brand}{entry.sku ? ` · ${entry.sku}` : ""}</div>
+              {entry.stockStatus === "available" ? (
+                <div style={s.stock}>{(entry.remainingG / 1000).toFixed(2)} kg remaining</div>
+              ) : (
+                <div style={s.stock}>{entry.quantitySpools} × 1 kg ordered</div>
+              )}
+              <div style={s.price}>Sell {AED(entry.sellingPrice)} · Cost {entry.purchaseCost > 0 ? AED(entry.purchaseCost) : "not set"}</div>
+              <div style={s.actions}>
+                <button style={s.edit} onClick={() => setEditing({ ...entry })}>Edit</button>
+                {entry.stockStatus === "incoming" && <button style={s.receive} disabled={busy} onClick={() => receive(entry)}>Mark received</button>}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {rows.length === 0 && <div style={s.empty}>No filament matches this view.</div>}
+
+      {editing && (
+        <div style={s.overlay} onClick={() => !busy && setEditing(null)}>
+          <div className="filament-modal" style={s.modal} onClick={(event) => event.stopPropagation()}>
+            <h3 style={s.modalTitle}>Edit filament</h3>
+            <div className="two-column-fields" style={s.formGrid}>
+              <Field label="Brand" value={editing.brand} onChange={(value) => setEditing({ ...editing, brand: value })} />
+              <Field label="SKU" value={editing.sku} onChange={(value) => setEditing({ ...editing, sku: value })} />
+              <Field label="Material" value={editing.material} onChange={(value) => setEditing({ ...editing, material: value })} />
+              <Field label="Colour" value={editing.color} onChange={(value) => setEditing({ ...editing, color: value })} />
+              <Field label="Spools" type="number" value={editing.quantitySpools} onChange={(value) => setEditing({ ...editing, quantitySpools: Number(value) })} />
+              <Field label="Remaining grams" type="number" value={editing.remainingG} onChange={(value) => setEditing({ ...editing, remainingG: Number(value) })} />
+              <Field label="Cost per spool" type="number" value={editing.purchaseCost} onChange={(value) => setEditing({ ...editing, purchaseCost: Number(value) })} />
+              <Field label="Selling price" type="number" value={editing.sellingPrice} onChange={(value) => setEditing({ ...editing, sellingPrice: Number(value) })} />
+              <Field label="Location" value={editing.location} onChange={(value) => setEditing({ ...editing, location: value })} />
+              <Field label="Expected date" type="date" value={editing.expectedDate} onChange={(value) => setEditing({ ...editing, expectedDate: value })} />
+            </div>
+            <label style={s.label}>Notes</label>
+            <textarea style={{ ...s.input, minHeight: 70 }} value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} />
+            <div className="modal-actions" style={s.modalActions}>
+              <button style={s.cancel} disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
+              <button style={s.save} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Summary({ label, value }) {
+  return <div style={s.summaryCard}><span style={s.summaryLabel}>{label}</span><strong style={s.summaryValue}>{value}</strong></div>;
+}
+
+function Field({ label, value, onChange, type = "text" }) {
+  return <label style={s.label}>{label}<input style={s.input} type={type} value={value ?? ""} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+const s = {
+  title: { margin: 0, fontSize: 24 },
+  summary: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, margin: "18px 0" },
+  summaryCard: { display: "grid", gap: 5, padding: 14, border: "1px solid #E4DFD3", borderRadius: 10, background: "#fff" },
+  summaryLabel: { color: "#8A7F6D", fontSize: 11, fontWeight: 700, textTransform: "uppercase" },
+  summaryValue: { color: "#16324F", fontSize: 19 },
+  toolbar: { display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14 },
+  tabs: { display: "flex", gap: 6 },
+  tab: { padding: "9px 13px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#6B6355", fontWeight: 700, cursor: "pointer" },
+  tabActive: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
+  search: { flex: 1, maxWidth: 380, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 8 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 },
+  card: { padding: 14, border: "1px solid #E4DFD3", borderRadius: 11, background: "#fff" },
+  lowCard: { borderColor: "#F59E0B", background: "#FFFBEB" },
+  cardHead: { display: "flex", justifyContent: "space-between", gap: 10 },
+  material: { fontWeight: 800, fontSize: 14 },
+  color: { marginTop: 3, fontSize: 16, color: "#16324F" },
+  meta: { marginTop: 10, color: "#8A7F6D", fontSize: 11.5 },
+  stock: { marginTop: 12, fontWeight: 850, color: "#16324F" },
+  price: { marginTop: 5, color: "#6B6355", fontSize: 11.5 },
+  available: { alignSelf: "start", padding: "4px 7px", borderRadius: 20, background: "#ECFDF5", color: "#047857", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
+  incoming: { alignSelf: "start", padding: "4px 7px", borderRadius: 20, background: "#EFF6FF", color: "#1D4ED8", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
+  actions: { display: "flex", justifyContent: "flex-end", gap: 7, marginTop: 12 },
+  edit: { padding: "7px 10px", border: "1px solid #DCD5C6", borderRadius: 7, background: "#fff", color: "#2E7D8C", fontWeight: 700, cursor: "pointer" },
+  receive: { padding: "7px 10px", border: "none", borderRadius: 7, background: "#047857", color: "#fff", fontWeight: 800, cursor: "pointer" },
+  empty: { padding: 30, textAlign: "center", color: "#8A7F6D" },
+  overlay: { position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center", padding: 10, background: "rgba(15,23,42,.52)" },
+  modal: { width: "100%", maxWidth: 620, maxHeight: "calc(100dvh - 20px)", overflowY: "auto", padding: 22, borderRadius: 14, background: "#fff" },
+  modalTitle: { margin: "0 0 14px" },
+  formGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
+  label: { display: "grid", gap: 5, marginTop: 8, color: "#6B6355", fontSize: 11.5, fontWeight: 700 },
+  input: { width: "100%", padding: "9px 10px", border: "1px solid #DCD5C6", borderRadius: 8 },
+  modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 },
+  cancel: { padding: "9px 14px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", fontWeight: 700 },
+  save: { padding: "9px 14px", border: "none", borderRadius: 8, background: "#16324F", color: "#fff", fontWeight: 800 },
+};

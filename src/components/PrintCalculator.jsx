@@ -95,9 +95,10 @@ async function readSlicedFile(file) {
   return { ...totals, plates: entries.length };
 }
 
-export default function PrintCalculator({ onAdd, onAdded }) {
+export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
   const [printerKey, setPrinterKey] = useState("bambuA1");
   const [name, setName] = useState("");
+  const [filamentId, setFilamentId] = useState("");
   const [grams, setGrams] = useState(0);
   const [hours, setHours] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -127,6 +128,8 @@ export default function PrintCalculator({ onAdd, onAdded }) {
   }, [grams, hours, quantity, spoolPrice, laborOther, packaging, shipping, printerKey]);
 
   const selectedPrice = result?.prices[priceLevel];
+  const availableFilaments = filaments.filter((entry) => entry.stockStatus === "available" && entry.remainingG > 0);
+  const selectedFilament = availableFilaments.find((entry) => entry.id === filamentId);
 
   const pickFile = async (file) => {
     if (!file) return;
@@ -158,6 +161,8 @@ export default function PrintCalculator({ onAdd, onAdded }) {
         price: Math.round(selectedPrice.perPiece * 100) / 100,
         description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g total · ${durationText(hours)} · ${PRICE_LEVELS[priceLevel].label} price`,
         imageUrl: null,
+        filamentId: filamentId || null,
+        gramsPerUnit: grams / quantity,
       });
       onAdded();
     } catch {
@@ -171,6 +176,31 @@ export default function PrintCalculator({ onAdd, onAdded }) {
     <div className="calculator-card" style={s.card}>
       <h2 style={s.h2}>Slice & price</h2>
       <p style={s.sub}>Upload a sliced G-code or Bambu/Orca 3MF. All colors and build plates are included.</p>
+
+      <label style={s.field}>
+        <span>Filament stock</span>
+        <select
+          style={s.input}
+          value={filamentId}
+          onChange={(e) => {
+            const nextId = e.target.value;
+            setFilamentId(nextId);
+            const stock = availableFilaments.find((entry) => entry.id === nextId);
+            if (stock?.purchaseCost > 0) setSpoolPrice(stock.purchaseCost);
+          }}
+        >
+          <option value="">No stock deduction</option>
+          {availableFilaments.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.material} · {entry.color} · {(entry.remainingG / 1000).toFixed(2)} kg left
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {selectedFilament && selectedFilament.purchaseCost <= 0 && (
+        <div style={s.error}>Add this filament’s purchase cost in the Filament tab before using it for pricing.</div>
+      )}
 
       <label style={s.field}>
         <span>Printer</span>

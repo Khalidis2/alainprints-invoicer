@@ -15,12 +15,16 @@ import {
   fetchCustomers,
   upsertCustomer,
   updateCustomerRow,
+  fetchFilaments,
+  updateFilamentRow,
+  receiveFilamentRow,
 } from "./lib/storage";
 import ItemsMenu from "./components/ItemsMenu";
 import InvoiceBuilder from "./components/InvoiceBuilder";
 import InvoiceHistory from "./components/InvoiceHistory";
 import PrintCalculator from "./components/PrintCalculator";
 import Customers from "./components/Customers";
+import FilamentInventory from "./components/FilamentInventory";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -100,6 +104,7 @@ function Invoicer({ userEmail, onSignOut }) {
   const [items, setItems] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [filaments, setFilaments] = useState([]);
   const [invoiceNo, setInvoiceNo] = useState(1000);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -120,17 +125,21 @@ function Invoicer({ userEmail, onSignOut }) {
   const refreshCustomers = useCallback(() => {
     fetchCustomers().then(setCustomers).catch((e) => showToast(e.message));
   }, []);
+  const refreshFilaments = useCallback(() => {
+    fetchFilaments().then(setFilaments).catch((e) => showToast(e.message));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [i, inv, n, savedCustomers] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers()]);
+        const [i, inv, n, savedCustomers, savedFilaments] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers(), fetchFilaments()]);
         if (cancelled) return;
         setItems(i);
         setInvoices(inv);
         setInvoiceNo(n);
         setCustomers(savedCustomers);
+        setFilaments(savedFilaments);
       } catch (e) {
         if (!cancelled) setLoadError(e.message);
       } finally {
@@ -142,13 +151,14 @@ function Invoicer({ userEmail, onSignOut }) {
       onItems: () => refreshItems(),
       onInvoices: () => refreshInvoices(),
       onCustomers: () => refreshCustomers(),
+      onFilaments: () => refreshFilaments(),
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, [refreshItems, refreshInvoices, refreshCustomers]);
+  }, [refreshItems, refreshInvoices, refreshCustomers, refreshFilaments]);
 
   // --- item actions ---
   const handleAddItem = async (item) => {
@@ -216,9 +226,19 @@ function Invoicer({ userEmail, onSignOut }) {
     refreshCustomers();
   };
 
+  const handleUpdateFilament = async (filament) => {
+    await updateFilamentRow(filament);
+    refreshFilaments();
+  };
+  const handleReceiveFilament = async (filament) => {
+    await receiveFilamentRow(filament);
+    refreshFilaments();
+  };
+
   const tabs = [
     { id: "items", label: "Items menu" },
     { id: "calculator", label: "Slice & price" },
+    { id: "filament", label: "Filament" },
     { id: "invoice", label: "New invoice" },
     { id: "customers", label: "Customers" },
     { id: "history", label: "History" },
@@ -288,11 +308,20 @@ function Invoicer({ userEmail, onSignOut }) {
         )}
         {tab === "calculator" && (
           <PrintCalculator
+            filaments={filaments}
             onAdd={handleAddItem}
             onAdded={() => {
               showToast("Calculated item added");
               setTab("items");
             }}
+          />
+        )}
+        {tab === "filament" && (
+          <FilamentInventory
+            filaments={filaments}
+            onUpdate={handleUpdateFilament}
+            onReceive={handleReceiveFilament}
+            showToast={showToast}
           />
         )}
         {tab === "invoice" && (

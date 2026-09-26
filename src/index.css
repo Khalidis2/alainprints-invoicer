@@ -261,3 +261,12 @@ button, input, textarea, select { font-family: inherit; }
     border-top: 1px dashed #DCD5C6;
   }
 }
+
+
+@media screen and (max-width: 720px) {
+  .filament-summary { grid-template-columns: minmax(0, 1fr) !important; }
+  .filament-toolbar { flex-direction: column !important; }
+  .filament-toolbar input { max-width: none !important; width: 100%; }
+  .filament-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .filament-modal { width: calc(100vw - 20px) !important; }
+}

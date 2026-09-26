@@ -22,7 +22,7 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
     setLines((prev) => {
       const existing = prev.find((l) => l.itemId === item.id);
       if (existing) return prev.map((l) => (l.itemId === item.id ? { ...l, qty: l.qty + 1 } : l));
-      return [...prev, { itemId: item.id, name: item.name, price: item.price, qty: 1 }];
+      return [...prev, { itemId: item.id, name: item.name, price: item.price, qty: 1, filamentId: item.filamentId || null, gramsPerUnit: Number(item.gramsPerUnit || 0) }];
     });
   };
   const setQty = (itemId, qty) =>

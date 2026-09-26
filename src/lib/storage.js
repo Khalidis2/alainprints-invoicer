@@ -37,6 +37,8 @@ function dbToItem(row) {
     price: Number(row.price),
     description: row.description ?? "",
     imageUrl: row.image_url ?? null,
+    filamentId: row.filament_id ?? null,
+    gramsPerUnit: Number(row.grams_per_unit || 0),
   };
 }
 function itemToDb(item) {
@@ -47,6 +49,8 @@ function itemToDb(item) {
     price: item.price,
     description: item.description ?? "",
     image_url: item.imageUrl ?? null,
+    filament_id: item.filamentId ?? null,
+    grams_per_unit: Number(item.gramsPerUnit || 0),
   };
 }
 
@@ -123,6 +127,75 @@ export async function updateCustomerRow(customer) {
   const { data, error } = await supabase.from("customers").update(payload).eq("id", customer.id).select().single();
   if (error) throw error;
   return dbToCustomer(data);
+}
+
+
+
+// ---------- filament inventory ----------
+
+export async function fetchFilaments() {
+  const { data, error } = await supabase
+    .from("filaments")
+    .select("*")
+    .order("stock_status", { ascending: true })
+    .order("material", { ascending: true })
+    .order("color", { ascending: true });
+  if (error?.code === "42P01") return [];
+  if (error) throw error;
+  return data.map(dbToFilament);
+}
+
+export async function updateFilamentRow(filament) {
+  const payload = {
+    sku: filament.sku || null,
+    brand: filament.brand,
+    material: filament.material,
+    color: filament.color,
+    spool_weight_g: Number(filament.spoolWeightG || 1000),
+    quantity_spools: Number(filament.quantitySpools || 0),
+    remaining_g: Number(filament.remainingG || 0),
+    purchase_cost_per_spool: Number(filament.purchaseCost || 0),
+    selling_price: Number(filament.sellingPrice || 0),
+    stock_status: filament.stockStatus,
+    location: filament.location || "",
+    expected_date: filament.expectedDate || null,
+    notes: filament.notes || "",
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase.from("filaments").update(payload).eq("id", filament.id).select().single();
+  if (error) throw error;
+  return dbToFilament(data);
+}
+
+export async function receiveFilamentRow(filament) {
+  const totalGrams = Number(filament.quantitySpools || 0) * Number(filament.spoolWeightG || 1000);
+  const { data, error } = await supabase
+    .from("filaments")
+    .update({ stock_status: "available", remaining_g: totalGrams, updated_at: new Date().toISOString() })
+    .eq("id", filament.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return dbToFilament(data);
+}
+
+function dbToFilament(row) {
+  return {
+    id: row.id,
+    sku: row.sku ?? "",
+    brand: row.brand,
+    material: row.material,
+    color: row.color,
+    spoolWeightG: Number(row.spool_weight_g),
+    quantitySpools: Number(row.quantity_spools),
+    remainingG: Number(row.remaining_g),
+    purchaseCost: Number(row.purchase_cost_per_spool),
+    sellingPrice: Number(row.selling_price),
+    stockStatus: row.stock_status,
+    location: row.location ?? "",
+    expectedDate: row.expected_date ?? "",
+    notes: row.notes ?? "",
+  };
 }
 
 // ---------- invoices ----------
@@ -238,12 +311,13 @@ export async function persistInvoiceNo(n) {
 
 // ---------- realtime ----------
 
-export function subscribeToChanges({ onItems, onInvoices, onCustomers }) {
+export function subscribeToChanges({ onItems, onInvoices, onCustomers, onFilaments }) {
   const channel = supabase
     .channel("alainprints-sync")
     .on("postgres_changes", { event: "*", schema: "public", table: "items" }, onItems)
     .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, onInvoices)
     .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, onCustomers)
+    .on("postgres_changes", { event: "*", schema: "public", table: "filaments" }, onFilaments)
     .subscribe();
 
   return () => supabase.removeChannel(channel);
