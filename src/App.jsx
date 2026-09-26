@@ -177,6 +177,10 @@ function Invoicer({ userEmail, onSignOut }) {
     refreshInvoices();
   };
   const handleEditInvoice = (invoice) => {
+    if (!["Draft", "Unpaid"].includes(invoice.status || "Unpaid")) {
+      showToast("Paid and cancelled invoices are locked");
+      return;
+    }
     setEditingInvoice(invoice);
     setTab("invoice");
   };
@@ -276,7 +280,7 @@ function Invoicer({ userEmail, onSignOut }) {
           />
         )}
         {tab === "history" && (
-          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onDelete={handleDeleteInvoice} showToast={showToast} />
+          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} showToast={showToast} />
         )}
       </div>
 
