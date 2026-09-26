@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AED } from "../lib/helpers";
 
 const statusColor = {
@@ -7,7 +8,12 @@ const statusColor = {
   Cancelled: "#B91C1C",
 };
 
-export default function InvoicePrint({ invoice, onBack, backLabel }) {
+export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = false }) {
+  useEffect(() => {
+    if (!autoPrint) return undefined;
+    const timer = window.setTimeout(() => window.print(), 250);
+    return () => window.clearTimeout(timer);
+  }, [autoPrint]);
   const subtotal = invoice.subtotal ?? invoice.total + (invoice.discount || 0);
   const status = invoice.status || "Unpaid";
   const accent = statusColor[status] || "#1F2937";

@@ -18,6 +18,7 @@ const STATUS_BG = {
 
 export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, showToast }) {
   const [open, setOpen] = useState(null);
+  const [autoPrint, setAutoPrint] = useState(false);
   const [workingId, setWorkingId] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -40,7 +41,17 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
   }, [invoices, query, statusFilter]);
 
   if (open) {
-    return <InvoicePrint invoice={open} onBack={() => setOpen(null)} backLabel="Back to history" />;
+    return (
+      <InvoicePrint
+        invoice={open}
+        autoPrint={autoPrint}
+        onBack={() => {
+          setOpen(null);
+          setAutoPrint(false);
+        }}
+        backLabel="Back to history"
+      />
+    );
   }
 
   const updateStatus = async (invoice, nextStatus) => {
@@ -144,7 +155,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
 
             return (
               <div key={invoice.id} className="history-row" style={s.row}>
-                <button className="history-main" style={s.rowMain} onClick={() => setOpen(invoice)}>
+                <button className="history-main" style={s.rowMain} onClick={() => { setAutoPrint(false); setOpen(invoice); }}>
                   <span style={s.no}>INV-{invoice.number}</span>
                   <span style={s.name}>{invoice.customer.name || "Walk-in"}</span>
                   <span style={s.date}>{invoice.date}</span>
@@ -163,6 +174,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
 
                 <div className="history-actions" style={s.actionGroup}>
                   <button style={s.shareBtn} disabled={busy} onClick={() => shareInvoice(invoice)}>Share</button>
+                  <button style={s.printBtn} disabled={busy} onClick={() => { setAutoPrint(true); setOpen(invoice); }}>Print</button>
                   {editable && <button style={s.editBtn} disabled={busy} onClick={() => onEdit(invoice)}>Edit</button>}
                   {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete</button>}
                   {locked && <span style={s.locked}>Locked</span>}
@@ -207,6 +219,7 @@ const s = {
   statusSelect: { width: 112, border: "1px solid #DCD5C6", borderRadius: 8, padding: "7px 8px", fontWeight: 800, fontSize: 11.5, cursor: "pointer" },
   actionGroup: { display: "flex", alignItems: "center", gap: 8 },
   shareBtn: { background: "#16324F", border: "none", borderRadius: 7, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
+  printBtn: { background: "#fff", border: "1px solid #16324F", borderRadius: 7, color: "#16324F", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
   editBtn: { background: "none", border: "none", color: "#2E7D8C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 },
   deleteBtn: { background: "none", border: "none", color: "#B3451D", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: 0 },
   locked: { width: 46, color: "#8A7F6D", fontWeight: 700, fontSize: 11.5 },
