@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { strFromU8, unzipSync } from "fflate";
 import { AED } from "../lib/helpers";
 
+const PRINTERS = { bambuA1: { label: "Bambu Lab A1", watts: 120 }, snapmakerU1: { label: "Snapmaker U1", watts: 180 } };
+
 const MODES = {
   product: { label: "Product / batch", overhead: 0.4, minimum: 3 },
   personalized: { label: "Personalized item", overhead: 3, minimum: 8 },
@@ -63,6 +65,7 @@ async function readSlicedFile(file) {
 
 export default function PrintCalculator({ onAdd, onAdded }) {
   const [mode, setMode] = useState("product");
+  const [printerKey, setPrinterKey] = useState("bambuA1");
   const [name, setName] = useState("");
   const [grams, setGrams] = useState(0);
   const [hours, setHours] = useState(0);
@@ -74,13 +77,14 @@ export default function PrintCalculator({ onAdd, onAdded }) {
 
   const result = useMemo(() => {
     if (!(grams > 0) || !(hours > 0) || !(spoolPrice > 0) || margin >= 100) return null;
+    const printer = PRINTERS[printerKey];
     const material = grams * spoolPrice / 1000;
-    const electricity = hours * 0.11 * 0.3;
+    const electricity = hours * (printer.watts / 1000) * 0.3;
     const cost = material + electricity + MODES[mode].overhead;
     const calculated = cost / (1 - margin / 100);
     const price = Math.max(calculated, MODES[mode].minimum);
     return { material, electricity, cost, price, profit: price - cost };
-  }, [grams, hours, spoolPrice, margin, mode]);
+  }, [grams, hours, spoolPrice, margin, mode, printerKey]);
 
   const pickFile = async (file) => {
     if (!file) return;
@@ -134,6 +138,8 @@ export default function PrintCalculator({ onAdd, onAdded }) {
           </label>
         ))}
       </div>
+
+      <label style={s.field}><span>Printer</span><select style={s.input} value={printerKey} onChange={(e) => setPrinterKey(e.target.value)}>{Object.entries(PRINTERS).map(([key, printer]) => <option key={key} value={key}>{printer.label}</option>)}</select></label>
 
       <label style={s.drop}>
         <strong>{reading ? "Reading file…" : "Choose sliced file"}</strong>
