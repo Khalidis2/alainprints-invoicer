@@ -19,7 +19,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
         <button style={s.primaryBtn} onClick={() => window.print()}>Print / Save PDF</button>
       </div>
 
-      <article style={s.sheet}>
+      <article className="invoice-sheet" style={s.sheet}>
         <header style={s.hero}>
           <div>
             <div style={s.brand}>ALAINPRINTS</div>
@@ -50,7 +50,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
           </div>
         </section>
 
-        <table style={s.table}>
+        <table className="invoice-table" style={s.table}>
           <thead>
             <tr>
               <th style={{ ...s.th, width: 48 }}>#</th>
@@ -62,7 +62,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
           </thead>
           <tbody>
             {invoice.lines.map((line, index) => (
-              <tr key={line.itemId || index}>
+              <tr className="invoice-line" key={line.itemId || index}>
                 <td style={{ ...s.td, textAlign: "center" }}>{index + 1}</td>
                 <td style={{ ...s.td, fontWeight: 700 }}>{line.name}</td>
                 <td style={{ ...s.td, textAlign: "center" }}>{line.qty}</td>
@@ -73,7 +73,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
           </tbody>
         </table>
 
-        <section style={s.summaryWrap}>
+        <section className="invoice-summary" style={s.summaryWrap}>
           <div style={s.summary}>
             <div style={s.summaryRow}><span>Subtotal</span><span>{AED(subtotal)}</span></div>
             {(invoice.discount || 0) > 0 && <div style={s.summaryRow}><span>Discount</span><span>- {AED(invoice.discount)}</span></div>}
@@ -83,13 +83,13 @@ export default function InvoicePrint({ invoice, onBack, backLabel }) {
         </section>
 
         {invoice.notes && (
-          <section style={s.notes}>
+          <section className="invoice-notes" style={s.notes}>
             <div style={s.notesTitle}>NOTE</div>
             <div>{invoice.notes}</div>
           </section>
         )}
 
-        <footer style={s.footer}>
+        <footer className="invoice-footer" style={s.footer}>
           <span>3D FILAMENT HANDICRAFTS | Abu Dhabi, U.A.E. | Trade Licence No.: CN-6362373</span>
           <span>Alainprints</span>
         </footer>
