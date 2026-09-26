@@ -4,11 +4,8 @@ import { AED } from "../lib/helpers";
 
 const PRINTERS = { bambuA1: { label: "Bambu Lab A1", watts: 120 }, snapmakerU1: { label: "Snapmaker U1", watts: 180 } };
 
-const MODES = {
-  product: { label: "Product / batch", overhead: 0.4, minimum: 3 },
-  personalized: { label: "Personalized item", overhead: 3, minimum: 8 },
-  custom: { label: "Custom one-off", overhead: 5, minimum: 15 },
-};
+const FIXED_OVERHEAD = 3;
+const MINIMUM_PRICE = 8;
 
 function durationText(hours) {
   const minutes = Math.round(hours * 60);
@@ -64,7 +61,6 @@ async function readSlicedFile(file) {
 }
 
 export default function PrintCalculator({ onAdd, onAdded }) {
-  const [mode, setMode] = useState("product");
   const [printerKey, setPrinterKey] = useState("bambuA1");
   const [name, setName] = useState("");
   const [grams, setGrams] = useState(0);
@@ -80,11 +76,11 @@ export default function PrintCalculator({ onAdd, onAdded }) {
     const printer = PRINTERS[printerKey];
     const material = grams * spoolPrice / 1000;
     const electricity = hours * (printer.watts / 1000) * 0.3;
-    const cost = material + electricity + MODES[mode].overhead;
+    const cost = material + electricity + FIXED_OVERHEAD;
     const calculated = cost / (1 - margin / 100);
-    const price = Math.max(calculated, MODES[mode].minimum);
+    const price = Math.max(calculated, MINIMUM_PRICE);
     return { material, electricity, cost, price, profit: price - cost };
-  }, [grams, hours, spoolPrice, margin, mode, printerKey]);
+  }, [grams, hours, spoolPrice, margin, printerKey]);
 
   const pickFile = async (file) => {
     if (!file) return;
@@ -113,7 +109,7 @@ export default function PrintCalculator({ onAdd, onAdded }) {
         nameAr: "",
         category: "3D Print",
         price: Math.round(result.price * 100) / 100,
-        description: `${grams.toFixed(1)} g filament · ${durationText(hours)} · ${MODES[mode].label}`,
+        description: `${grams.toFixed(1)} g filament · ${durationText(hours)}`,
         imageUrl: null,
       });
       onAdded();
@@ -128,16 +124,6 @@ export default function PrintCalculator({ onAdd, onAdded }) {
     <div style={s.card}>
       <h2 style={s.h2}>Slice & price</h2>
       <p style={s.sub}>Upload a sliced G-code or Bambu/Orca 3MF. The file stays in this browser.</p>
-
-      <div style={s.modeGrid}>
-        {Object.entries(MODES).map(([key, value]) => (
-          <label key={key} style={{ ...s.mode, ...(mode === key ? s.modeActive : {}) }}>
-            <input type="radio" name="price-mode" checked={mode === key} onChange={() => setMode(key)} />
-            <strong>{value.label}</strong>
-            <small>AED {value.minimum} minimum</small>
-          </label>
-        ))}
-      </div>
 
       <label style={s.field}><span>Printer</span><select style={s.input} value={printerKey} onChange={(e) => setPrinterKey(e.target.value)}>{Object.entries(PRINTERS).map(([key, printer]) => <option key={key} value={key}>{printer.label}</option>)}</select></label>
 
