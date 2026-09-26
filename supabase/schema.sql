@@ -41,11 +41,11 @@ alter table items enable row level security;
 alter table invoices enable row level security;
 alter table settings enable row level security;
 
-create policy "anon full access" on items for all
+create policy "authenticated access" on items for all to authenticated
   using (true) with check (true);
-create policy "anon full access" on invoices for all
+create policy "authenticated access" on invoices for all to authenticated
   using (true) with check (true);
-create policy "anon full access" on settings for all
+create policy "authenticated access" on settings for all to authenticated
   using (true) with check (true);
 
 
