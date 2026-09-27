@@ -4,17 +4,26 @@ import { AED } from "../lib/helpers";
 export default function FilamentInventory({ filaments, onUpdate, onReceive, showToast }) {
   const [status, setStatus] = useState("available");
   const [query, setQuery] = useState("");
+  const [material, setMaterial] = useState("all");
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  const materialTypes = useMemo(() => [...new Set(
+    filaments
+      .filter((entry) => entry.stockStatus === status)
+      .map((entry) => entry.material)
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b)), [filaments, status]);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return filaments.filter((entry) => {
       const matchesStatus = entry.stockStatus === status;
+      const matchesMaterial = material === "all" || entry.material === material;
       const text = `${entry.sku} ${entry.brand} ${entry.material} ${entry.color} ${entry.location}`.toLocaleLowerCase();
-      return matchesStatus && (!needle || text.includes(needle));
+      return matchesStatus && matchesMaterial && (!needle || text.includes(needle));
     });
-  }, [filaments, query, status]);
+  }, [filaments, material, query, status]);
 
   const totals = useMemo(() => ({
     availableSpools: filaments.filter((entry) => entry.stockStatus === "available").reduce((sum, entry) => sum + entry.remainingG / entry.spoolWeightG, 0),
@@ -101,7 +110,11 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
           <button style={{ ...s.tab, ...(status === "available" ? s.tabActive : {}) }} onClick={() => setStatus("available")}>Available</button>
           <button style={{ ...s.tab, ...(status === "incoming" ? s.tabActive : {}) }} onClick={() => setStatus("incoming")}>Incoming</button>
         </div>
-        <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search material, colour, location or SKU" />
+        <select style={s.typeFilter} value={material} onChange={(event) => setMaterial(event.target.value)} aria-label="Filter by filament type">
+          <option value="all">All types</option>
+          {materialTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+        </select>
+        <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search colour, location or SKU" />
       </div>
 
       <div className="filament-grid" style={s.grid}>
@@ -190,6 +203,7 @@ const s = {
   tabs: { display: "flex", gap: 6 },
   tab: { padding: "9px 13px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#6B6355", fontWeight: 700, cursor: "pointer" },
   tabActive: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
+  typeFilter: { minWidth: 180, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#1B2A3D", fontWeight: 700 },
   search: { flex: 1, maxWidth: 380, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 8 },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 },
   card: { padding: 14, border: "1px solid #E4DFD3", borderRadius: 11, background: "#fff" },
