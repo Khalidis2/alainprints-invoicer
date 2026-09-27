@@ -25,6 +25,16 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
     });
   }, [filaments, material, query, status]);
 
+  const groupedRows = useMemo(() => {
+    const groups = new Map();
+    rows.forEach((entry) => {
+      const type = entry.material || "Other";
+      if (!groups.has(type)) groups.set(type, []);
+      groups.get(type).push(entry);
+    });
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [rows]);
+
   const totals = useMemo(() => ({
     availableSpools: filaments.filter((entry) => entry.stockStatus === "available").reduce((sum, entry) => sum + entry.remainingG / entry.spoolWeightG, 0),
     incomingSpools: filaments.filter((entry) => entry.stockStatus === "incoming").reduce((sum, entry) => sum + entry.quantitySpools, 0),
@@ -117,8 +127,15 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
         <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search colour, location or SKU" />
       </div>
 
-      <div className="filament-grid" style={s.grid}>
-        {rows.map((entry) => {
+      <div style={s.groups}>
+        {groupedRows.map(([type, entries]) => (
+          <section key={type} style={s.group}>
+            <div style={s.groupHead}>
+              <h3 style={s.groupTitle}>{type}</h3>
+              <span style={s.groupCount}>{entries.length} {entries.length === 1 ? "colour" : "colours"}</span>
+            </div>
+            <div className="filament-grid" style={s.grid}>
+              {entries.map((entry) => {
           const low = entry.stockStatus === "available" && entry.remainingG < entry.spoolWeightG;
           const spoolEquivalent = entry.remainingG / Number(entry.spoolWeightG || 1000);
           return (
@@ -151,7 +168,10 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
               </div>
             </article>
           );
-        })}
+              })}
+            </div>
+          </section>
+        ))}
       </div>
 
       {rows.length === 0 && <div style={s.empty}>No filament matches this view.</div>}
@@ -205,6 +225,11 @@ const s = {
   tabActive: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
   typeFilter: { minWidth: 180, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#1B2A3D", fontWeight: 700 },
   search: { flex: 1, maxWidth: 380, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 8 },
+  groups: { display: "grid", gap: 28 },
+  group: { display: "grid", gap: 10 },
+  groupHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, paddingBottom: 8, borderBottom: "2px solid #16324F" },
+  groupTitle: { margin: 0, color: "#16324F", fontSize: 20 },
+  groupCount: { color: "#8A7F6D", fontSize: 12, fontWeight: 700 },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 },
   card: { padding: 14, border: "1px solid #E4DFD3", borderRadius: 11, background: "#fff" },
   lowCard: { borderColor: "#F59E0B", background: "#FFFBEB" },
