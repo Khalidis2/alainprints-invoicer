@@ -8,10 +8,12 @@ const PRINTERS = {
 };
 
 const PRICE_LEVELS = {
-  moderate: { label: "Moderate", multiplier: 2.5 },
+  budget: { label: "Budget", multiplier: 1.6 },
+  recommended: { label: "Recommended", multiplier: 2.2 },
+  premium: { label: "Premium", multiplier: 3 },
 };
 
-const AUTOMATIC_LABOR_RATE = 0.25;
+const MINIMUM_PRICE_PER_PIECE = 8;
 
 function durationText(hours) {
   const minutes = Math.round(hours * 60);
@@ -101,10 +103,10 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
   const [hours, setHours] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [spoolPrice, setSpoolPrice] = useState(75);
-   const [packaging, setPackaging] = useState(0);
+  const [laborOther, setLaborOther] = useState(5);
+  const [packaging, setPackaging] = useState(0);
   const [shipping, setShipping] = useState(0);
-  const [customPrice, setCustomPrice] = useState("");
-  const [priceLevel, setPriceLevel] = useState("moderate");
+  const [priceLevel, setPriceLevel] = useState("recommended");
   const [plates, setPlates] = useState(1);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -115,29 +117,17 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
     const printer = PRINTERS[printerKey];
     const material = grams * spoolPrice / 1000;
     const electricity = hours * (printer.watts / 1000) * 0.3;
-    const laborOther = (material + electricity) * AUTOMATIC_LABOR_RATE;
     const baseCost = material + electricity + laborOther + packaging + shipping;
     const prices = Object.fromEntries(
       Object.entries(PRICE_LEVELS).map(([key, level]) => {
-        const batch = baseCost * level.multiplier;
-        const profitPerPiece = (batch - baseCost) / quantity;
-        return [key, { batch, perPiece: batch / quantity, profitPerPiece }];
+        const batch = Math.max(baseCost * level.multiplier, MINIMUM_PRICE_PER_PIECE * quantity);
+        return [key, { batch, perPiece: batch / quantity }];
       }),
     );
-    return { material, electricity, laborOther, baseCost, prices };
-  }, [grams, hours, quantity, spoolPrice, packaging, shipping, printerKey]);
+    return { material, electricity, baseCost, prices };
+  }, [grams, hours, quantity, spoolPrice, laborOther, packaging, shipping, printerKey]);
 
-  const enteredCustomPrice = Number(customPrice);
-  const hasCustomPrice = customPrice !== "" && Number.isFinite(enteredCustomPrice) && enteredCustomPrice > 0;
-  const selectedPrice = result
-    ? hasCustomPrice
-      ? {
-          batch: enteredCustomPrice * quantity,
-          perPiece: enteredCustomPrice,
-          profitPerPiece: enteredCustomPrice - (result.baseCost / quantity),
-        }
-      : result.prices[priceLevel]
-    : null;
+  const selectedPrice = result?.prices[priceLevel];
   const availableFilaments = filaments.filter((entry) => entry.stockStatus === "available" && entry.remainingG > 0);
   const selectedFilament = availableFilaments.find((entry) => entry.id === filamentId);
 
@@ -169,7 +159,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
         nameAr: "",
         category: "3D Print",
         price: Math.round(selectedPrice.perPiece * 100) / 100,
-        description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g total · ${durationText(hours)} · ${hasCustomPrice ? "Custom" : PRICE_LEVELS[priceLevel].label} price`,
+        description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g total · ${durationText(hours)} · ${PRICE_LEVELS[priceLevel].label} price`,
         imageUrl: null,
         filamentId: filamentId || null,
         gramsPerUnit: grams / quantity,
@@ -234,9 +224,9 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
         <Field label="Total print time (hours)" type="number" value={hours} onChange={(value) => setHours(Number(value))} />
         <Field label="Quantity made" type="number" value={quantity} onChange={(value) => setQuantity(Math.max(1, Number(value) || 1))} />
         <Field label="Spool price (AED / 1 kg)" type="number" value={spoolPrice} onChange={(value) => setSpoolPrice(Number(value))} />
-         <Field label="Packaging (AED)" type="number" value={packaging} onChange={(value) => setPackaging(Math.max(0, Number(value) || 0))} />
+        <Field label="Labor and other costs (AED)" type="number" value={laborOther} onChange={(value) => setLaborOther(Math.max(0, Number(value) || 0))} />
+        <Field label="Packaging (AED)" type="number" value={packaging} onChange={(value) => setPackaging(Math.max(0, Number(value) || 0))} />
         <Field label="Shipping paid by you (AED)" type="number" value={shipping} onChange={(value) => setShipping(Math.max(0, Number(value) || 0))} />
-        <Field label="My selling price per item (AED, optional)" type="number" value={customPrice} onChange={setCustomPrice} />
       </div>
 
       {result && (
@@ -244,21 +234,18 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
           <div style={s.cost}>
             <span>Material <strong>{AED(result.material)}</strong></span>
             <span>Electricity <strong>{AED(result.electricity)}</strong></span>
-            <span>Automatic labor (25%) <strong>{AED(result.laborOther)}</strong></span>
+            <span>Labor and other <strong>{AED(laborOther)}</strong></span>
             <span>Packaging <strong>{AED(packaging)}</strong></span>
             <span>Shipping <strong>{AED(shipping)}</strong></span>
             <span style={s.costTotal}>Estimated cost <strong>{AED(result.baseCost)}</strong></span>
           </div>
 
-          <div className="price-levels" style={{ ...s.levels, gridTemplateColumns: "1fr" }}>
+          <div className="price-levels" style={s.levels}>
             {Object.entries(PRICE_LEVELS).map(([key, level]) => (
               <button key={key} style={{ ...s.level, ...(priceLevel === key ? s.levelActive : {}) }} onClick={() => setPriceLevel(key)}>
-                <span>{hasCustomPrice ? "Your price" : level.label}</span>
-                <strong>{AED(selectedPrice.perPiece)}</strong>
-                <small>per piece · batch {AED(selectedPrice.batch)}</small>
-                <small style={{ color: selectedPrice.profitPerPiece >= 0 ? "#166534" : "#B91C1C", fontWeight: 800 }}>
-                  Profit per item {AED(selectedPrice.profitPerPiece)}
-                </small>
+                <span>{level.label}</span>
+                <strong>{AED(result.prices[key].perPiece)}</strong>
+                <small>per piece · batch {AED(result.prices[key].batch)}</small>
               </button>
             ))}
           </div>
@@ -266,7 +253,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
       )}
 
       <button style={{ ...s.button, opacity: !result || !name.trim() || saving ? 0.55 : 1 }} disabled={!result || !name.trim() || saving} onClick={save}>
-        {saving ? "Adding…" : `Add ${hasCustomPrice ? "your" : PRICE_LEVELS[priceLevel].label} price to Items menu`}
+        {saving ? "Adding…" : `Add ${PRICE_LEVELS[priceLevel].label} price to Items menu`}
       </button>
     </div>
   );
