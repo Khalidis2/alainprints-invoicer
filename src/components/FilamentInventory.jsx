@@ -11,7 +11,7 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
     const needle = query.trim().toLocaleLowerCase();
     return filaments.filter((entry) => {
       const matchesStatus = entry.stockStatus === status;
-      const text = `${entry.sku} ${entry.brand} ${entry.material} ${entry.color}`.toLocaleLowerCase();
+      const text = `${entry.sku} ${entry.brand} ${entry.material} ${entry.color} ${entry.location}`.toLocaleLowerCase();
       return matchesStatus && (!needle || text.includes(needle));
     });
   }, [filaments, query, status]);
@@ -34,6 +34,44 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
     } finally {
       setBusy(false);
     }
+  };
+
+  const adjustStock = async (entry, deltaSpools) => {
+    const spoolWeightG = Number(entry.spoolWeightG || 1000);
+    const remainingG = Math.max(0, Number(entry.remainingG || 0) + deltaSpools * spoolWeightG);
+    setBusy(true);
+    try {
+      await onUpdate({
+        ...entry,
+        remainingG,
+        quantitySpools: remainingG / spoolWeightG,
+      });
+      showToast(deltaSpools < 0 ? "Removed 1 spool" : "Added 1 spool");
+    } catch {
+      showToast("Couldn't update filament stock");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateEditingSpools = (value) => {
+    const quantitySpools = Math.max(0, Number(value) || 0);
+    const spoolWeightG = Number(editing.spoolWeightG || 1000);
+    setEditing({
+      ...editing,
+      quantitySpools,
+      remainingG: editing.stockStatus === "available" ? quantitySpools * spoolWeightG : editing.remainingG,
+    });
+  };
+
+  const updateEditingGrams = (value) => {
+    const remainingG = Math.max(0, Number(value) || 0);
+    const spoolWeightG = Number(editing.spoolWeightG || 1000);
+    setEditing({
+      ...editing,
+      remainingG,
+      quantitySpools: remainingG / spoolWeightG,
+    });
   };
 
   const receive = async (entry) => {
@@ -63,12 +101,13 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
           <button style={{ ...s.tab, ...(status === "available" ? s.tabActive : {}) }} onClick={() => setStatus("available")}>Available</button>
           <button style={{ ...s.tab, ...(status === "incoming" ? s.tabActive : {}) }} onClick={() => setStatus("incoming")}>Incoming</button>
         </div>
-        <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search material, colour or SKU" />
+        <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search material, colour, location or SKU" />
       </div>
 
       <div className="filament-grid" style={s.grid}>
         {rows.map((entry) => {
           const low = entry.stockStatus === "available" && entry.remainingG < entry.spoolWeightG;
+          const spoolEquivalent = entry.remainingG / Number(entry.spoolWeightG || 1000);
           return (
             <article key={entry.id} style={{ ...s.card, ...(low ? s.lowCard : {}) }}>
               <div style={s.cardHead}>
@@ -79,14 +118,22 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
                 <span style={entry.stockStatus === "available" ? s.available : s.incoming}>{entry.stockStatus}</span>
               </div>
               <div style={s.meta}>{entry.brand}{entry.sku ? ` · ${entry.sku}` : ""}</div>
+              {entry.location && <div style={s.location}>📍 {entry.location}</div>}
               {entry.stockStatus === "available" ? (
-                <div style={s.stock}>{(entry.remainingG / 1000).toFixed(2)} kg remaining</div>
+                <>
+                  <div style={s.stock}>{(entry.remainingG / 1000).toFixed(2)} kg remaining</div>
+                  <div style={s.spoolCount}>{spoolEquivalent.toFixed(1)} spool equivalent</div>
+                  <div style={s.stockActions}>
+                    <button style={s.minus} disabled={busy || entry.remainingG <= 0} onClick={() => adjustStock(entry, -1)}>− 1 spool</button>
+                    <button style={s.plus} disabled={busy} onClick={() => adjustStock(entry, 1)}>+ 1 spool</button>
+                  </div>
+                </>
               ) : (
                 <div style={s.stock}>{entry.quantitySpools} × 1 kg ordered</div>
               )}
               <div style={s.price}>Sell {AED(entry.sellingPrice)} · Cost {entry.purchaseCost > 0 ? AED(entry.purchaseCost) : "not set"}</div>
               <div style={s.actions}>
-                <button style={s.edit} onClick={() => setEditing({ ...entry })}>Edit</button>
+                <button style={s.edit} onClick={() => setEditing({ ...entry })}>Edit details</button>
                 {entry.stockStatus === "incoming" && <button style={s.receive} disabled={busy} onClick={() => receive(entry)}>Mark received</button>}
               </div>
             </article>
@@ -105,10 +152,10 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
               <Field label="SKU" value={editing.sku} onChange={(value) => setEditing({ ...editing, sku: value })} />
               <Field label="Material" value={editing.material} onChange={(value) => setEditing({ ...editing, material: value })} />
               <Field label="Colour" value={editing.color} onChange={(value) => setEditing({ ...editing, color: value })} />
-              <Field label="Spools" type="number" value={editing.quantitySpools} onChange={(value) => setEditing({ ...editing, quantitySpools: Number(value) })} />
-              <Field label="Remaining grams" type="number" value={editing.remainingG} onChange={(value) => setEditing({ ...editing, remainingG: Number(value) })} />
-              <Field label="Cost per spool" type="number" value={editing.purchaseCost} onChange={(value) => setEditing({ ...editing, purchaseCost: Number(value) })} />
-              <Field label="Selling price" type="number" value={editing.sellingPrice} onChange={(value) => setEditing({ ...editing, sellingPrice: Number(value) })} />
+              <Field label={editing.stockStatus === "available" ? "Stock (spool equivalent)" : "Spools ordered"} type="number" min="0" step="0.1" value={editing.quantitySpools} onChange={updateEditingSpools} />
+              <Field label="Remaining grams" type="number" min="0" step="1" value={editing.remainingG} onChange={updateEditingGrams} />
+              <Field label="Cost per spool" type="number" min="0" step="0.01" value={editing.purchaseCost} onChange={(value) => setEditing({ ...editing, purchaseCost: Number(value) })} />
+              <Field label="Selling price" type="number" min="0" step="0.01" value={editing.sellingPrice} onChange={(value) => setEditing({ ...editing, sellingPrice: Number(value) })} />
               <Field label="Location" value={editing.location} onChange={(value) => setEditing({ ...editing, location: value })} />
               <Field label="Expected date" type="date" value={editing.expectedDate} onChange={(value) => setEditing({ ...editing, expectedDate: value })} />
             </div>
@@ -116,7 +163,7 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
             <textarea style={{ ...s.input, minHeight: 70 }} value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} />
             <div className="modal-actions" style={s.modalActions}>
               <button style={s.cancel} disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
-              <button style={s.save} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+              <button style={s.save} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
             </div>
           </div>
         </div>
@@ -129,8 +176,8 @@ function Summary({ label, value }) {
   return <div style={s.summaryCard}><span style={s.summaryLabel}>{label}</span><strong style={s.summaryValue}>{value}</strong></div>;
 }
 
-function Field({ label, value, onChange, type = "text" }) {
-  return <label style={s.label}>{label}<input style={s.input} type={type} value={value ?? ""} onChange={(event) => onChange(event.target.value)} /></label>;
+function Field({ label, value, onChange, type = "text", min, step }) {
+  return <label style={s.label}>{label}<input style={s.input} type={type} min={min} step={step} value={value ?? ""} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 const s = {
@@ -151,8 +198,13 @@ const s = {
   material: { fontWeight: 800, fontSize: 14 },
   color: { marginTop: 3, fontSize: 16, color: "#16324F" },
   meta: { marginTop: 10, color: "#8A7F6D", fontSize: 11.5 },
+  location: { marginTop: 6, color: "#6B6355", fontSize: 12, fontWeight: 650 },
   stock: { marginTop: 12, fontWeight: 850, color: "#16324F" },
-  price: { marginTop: 5, color: "#6B6355", fontSize: 11.5 },
+  spoolCount: { marginTop: 3, color: "#6B6355", fontSize: 11.5 },
+  stockActions: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginTop: 10 },
+  minus: { padding: "9px 8px", border: "1px solid #F2B8A2", borderRadius: 7, background: "#FFF7F3", color: "#B3451D", fontWeight: 800, cursor: "pointer" },
+  plus: { padding: "9px 8px", border: "1px solid #A7D7C5", borderRadius: 7, background: "#F0FDF7", color: "#047857", fontWeight: 800, cursor: "pointer" },
+  price: { marginTop: 10, color: "#6B6355", fontSize: 11.5 },
   available: { alignSelf: "start", padding: "4px 7px", borderRadius: 20, background: "#ECFDF5", color: "#047857", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
   incoming: { alignSelf: "start", padding: "4px 7px", borderRadius: 20, background: "#EFF6FF", color: "#1D4ED8", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
   actions: { display: "flex", justifyContent: "flex-end", gap: 7, marginTop: 12 },
