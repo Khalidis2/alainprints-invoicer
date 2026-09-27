@@ -8,7 +8,7 @@ const PRINTERS = {
 };
 
 const PRICE_LEVELS = {
-  moderate: { label: "Moderate", multiplier: 2.2 },
+  moderate: { label: "Moderate", multiplier: 2.5 },
 };
 
 const AUTOMATIC_LABOR_RATE = 0.25;
