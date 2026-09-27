@@ -103,6 +103,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
   const [spoolPrice, setSpoolPrice] = useState(75);
    const [packaging, setPackaging] = useState(0);
   const [shipping, setShipping] = useState(0);
+  const [customPrice, setCustomPrice] = useState("");
   const [priceLevel, setPriceLevel] = useState("moderate");
   const [plates, setPlates] = useState(1);
   const [reading, setReading] = useState(false);
@@ -126,7 +127,17 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
     return { material, electricity, laborOther, baseCost, prices };
   }, [grams, hours, quantity, spoolPrice, packaging, shipping, printerKey]);
 
-  const selectedPrice = result?.prices[priceLevel];
+  const enteredCustomPrice = Number(customPrice);
+  const hasCustomPrice = customPrice !== "" && Number.isFinite(enteredCustomPrice) && enteredCustomPrice > 0;
+  const selectedPrice = result
+    ? hasCustomPrice
+      ? {
+          batch: enteredCustomPrice * quantity,
+          perPiece: enteredCustomPrice,
+          profitPerPiece: enteredCustomPrice - (result.baseCost / quantity),
+        }
+      : result.prices[priceLevel]
+    : null;
   const availableFilaments = filaments.filter((entry) => entry.stockStatus === "available" && entry.remainingG > 0);
   const selectedFilament = availableFilaments.find((entry) => entry.id === filamentId);
 
@@ -158,7 +169,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
         nameAr: "",
         category: "3D Print",
         price: Math.round(selectedPrice.perPiece * 100) / 100,
-        description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g total · ${durationText(hours)} · ${PRICE_LEVELS[priceLevel].label} price`,
+        description: `${quantity} piece${quantity === 1 ? "" : "s"} · ${grams.toFixed(1)} g total · ${durationText(hours)} · ${hasCustomPrice ? "Custom" : PRICE_LEVELS[priceLevel].label} price`,
         imageUrl: null,
         filamentId: filamentId || null,
         gramsPerUnit: grams / quantity,
@@ -225,6 +236,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
         <Field label="Spool price (AED / 1 kg)" type="number" value={spoolPrice} onChange={(value) => setSpoolPrice(Number(value))} />
          <Field label="Packaging (AED)" type="number" value={packaging} onChange={(value) => setPackaging(Math.max(0, Number(value) || 0))} />
         <Field label="Shipping paid by you (AED)" type="number" value={shipping} onChange={(value) => setShipping(Math.max(0, Number(value) || 0))} />
+        <Field label="My selling price per item (AED, optional)" type="number" value={customPrice} onChange={setCustomPrice} />
       </div>
 
       {result && (
@@ -241,10 +253,12 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
           <div className="price-levels" style={{ ...s.levels, gridTemplateColumns: "1fr" }}>
             {Object.entries(PRICE_LEVELS).map(([key, level]) => (
               <button key={key} style={{ ...s.level, ...(priceLevel === key ? s.levelActive : {}) }} onClick={() => setPriceLevel(key)}>
-                <span>{level.label}</span>
-                <strong>{AED(result.prices[key].perPiece)}</strong>
-                <small>per piece · batch {AED(result.prices[key].batch)}</small>
-                <small style={{ color: "#166534", fontWeight: 800 }}>Profit per item {AED(result.prices[key].profitPerPiece)}</small>
+                <span>{hasCustomPrice ? "Your price" : level.label}</span>
+                <strong>{AED(selectedPrice.perPiece)}</strong>
+                <small>per piece · batch {AED(selectedPrice.batch)}</small>
+                <small style={{ color: selectedPrice.profitPerPiece >= 0 ? "#166534" : "#B91C1C", fontWeight: 800 }}>
+                  Profit per item {AED(selectedPrice.profitPerPiece)}
+                </small>
               </button>
             ))}
           </div>
@@ -252,7 +266,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
       )}
 
       <button style={{ ...s.button, opacity: !result || !name.trim() || saving ? 0.55 : 1 }} disabled={!result || !name.trim() || saving} onClick={save}>
-        {saving ? "Adding…" : `Add ${PRICE_LEVELS[priceLevel].label} price to Items menu`}
+        {saving ? "Adding…" : `Add ${hasCustomPrice ? "your" : PRICE_LEVELS[priceLevel].label} price to Items menu`}
       </button>
     </div>
   );
