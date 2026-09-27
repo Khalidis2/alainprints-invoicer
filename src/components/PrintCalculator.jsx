@@ -8,12 +8,10 @@ const PRINTERS = {
 };
 
 const PRICE_LEVELS = {
-  budget: { label: "Budget", multiplier: 1.6 },
-  recommended: { label: "Recommended", multiplier: 2.2 },
-  premium: { label: "Premium", multiplier: 3 },
+  moderate: { label: "Moderate", multiplier: 2.2 },
 };
 
-const MINIMUM_PRICE_PER_PIECE = 8;
+const AUTOMATIC_LABOR_RATE = 0.25;
 
 function durationText(hours) {
   const minutes = Math.round(hours * 60);
@@ -103,10 +101,9 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
   const [hours, setHours] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [spoolPrice, setSpoolPrice] = useState(75);
-  const [laborOther, setLaborOther] = useState(5);
-  const [packaging, setPackaging] = useState(0);
+   const [packaging, setPackaging] = useState(0);
   const [shipping, setShipping] = useState(0);
-  const [priceLevel, setPriceLevel] = useState("recommended");
+  const [priceLevel, setPriceLevel] = useState("moderate");
   const [plates, setPlates] = useState(1);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,15 +114,16 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
     const printer = PRINTERS[printerKey];
     const material = grams * spoolPrice / 1000;
     const electricity = hours * (printer.watts / 1000) * 0.3;
+    const laborOther = (material + electricity) * AUTOMATIC_LABOR_RATE;
     const baseCost = material + electricity + laborOther + packaging + shipping;
     const prices = Object.fromEntries(
       Object.entries(PRICE_LEVELS).map(([key, level]) => {
-        const batch = Math.max(baseCost * level.multiplier, MINIMUM_PRICE_PER_PIECE * quantity);
+        const batch = baseCost * level.multiplier;
         return [key, { batch, perPiece: batch / quantity }];
       }),
     );
-    return { material, electricity, baseCost, prices };
-  }, [grams, hours, quantity, spoolPrice, laborOther, packaging, shipping, printerKey]);
+    return { material, electricity, laborOther, baseCost, prices };
+  }, [grams, hours, quantity, spoolPrice, packaging, shipping, printerKey]);
 
   const selectedPrice = result?.prices[priceLevel];
   const availableFilaments = filaments.filter((entry) => entry.stockStatus === "available" && entry.remainingG > 0);
@@ -224,8 +222,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
         <Field label="Total print time (hours)" type="number" value={hours} onChange={(value) => setHours(Number(value))} />
         <Field label="Quantity made" type="number" value={quantity} onChange={(value) => setQuantity(Math.max(1, Number(value) || 1))} />
         <Field label="Spool price (AED / 1 kg)" type="number" value={spoolPrice} onChange={(value) => setSpoolPrice(Number(value))} />
-        <Field label="Labor and other costs (AED)" type="number" value={laborOther} onChange={(value) => setLaborOther(Math.max(0, Number(value) || 0))} />
-        <Field label="Packaging (AED)" type="number" value={packaging} onChange={(value) => setPackaging(Math.max(0, Number(value) || 0))} />
+         <Field label="Packaging (AED)" type="number" value={packaging} onChange={(value) => setPackaging(Math.max(0, Number(value) || 0))} />
         <Field label="Shipping paid by you (AED)" type="number" value={shipping} onChange={(value) => setShipping(Math.max(0, Number(value) || 0))} />
       </div>
 
@@ -234,13 +231,13 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
           <div style={s.cost}>
             <span>Material <strong>{AED(result.material)}</strong></span>
             <span>Electricity <strong>{AED(result.electricity)}</strong></span>
-            <span>Labor and other <strong>{AED(laborOther)}</strong></span>
+            <span>Automatic labor (25%) <strong>{AED(result.laborOther)}</strong></span>
             <span>Packaging <strong>{AED(packaging)}</strong></span>
             <span>Shipping <strong>{AED(shipping)}</strong></span>
             <span style={s.costTotal}>Estimated cost <strong>{AED(result.baseCost)}</strong></span>
           </div>
 
-          <div className="price-levels" style={s.levels}>
+          <div className="price-levels" style={{ ...s.levels, gridTemplateColumns: "1fr" }}>
             {Object.entries(PRICE_LEVELS).map(([key, level]) => (
               <button key={key} style={{ ...s.level, ...(priceLevel === key ? s.levelActive : {}) }} onClick={() => setPriceLevel(key)}>
                 <span>{level.label}</span>
