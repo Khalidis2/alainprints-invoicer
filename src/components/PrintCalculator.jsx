@@ -119,7 +119,8 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
     const prices = Object.fromEntries(
       Object.entries(PRICE_LEVELS).map(([key, level]) => {
         const batch = baseCost * level.multiplier;
-        return [key, { batch, perPiece: batch / quantity }];
+        const profitPerPiece = (batch - baseCost) / quantity;
+        return [key, { batch, perPiece: batch / quantity, profitPerPiece }];
       }),
     );
     return { material, electricity, laborOther, baseCost, prices };
@@ -243,6 +244,7 @@ export default function PrintCalculator({ filaments = [], onAdd, onAdded }) {
                 <span>{level.label}</span>
                 <strong>{AED(result.prices[key].perPiece)}</strong>
                 <small>per piece · batch {AED(result.prices[key].batch)}</small>
+                <small style={{ color: "#166534", fontWeight: 800 }}>Profit per item {AED(result.prices[key].profitPerPiece)}</small>
               </button>
             ))}
           </div>
