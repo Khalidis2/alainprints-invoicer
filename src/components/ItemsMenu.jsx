@@ -12,7 +12,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
   const [translating, setTranslating] = useState(false);
 
   const startNew = () => {
-    setEditing({ id: null, name: "", nameAr: "", category: "3D Print", price: "", description: "", imageUrl: null });
+    setEditing({ id: null, name: "", nameAr: "", category: "3D Print", price: "", description: "", imageUrl: null, publicVisible: false });
     setShowForm(true);
   };
   const startEdit = (item) => {
@@ -159,6 +159,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
                 <span style={s.price}>{AED(item.price)}</span>
               </div>
               <div style={s.name}>{item.name}</div>
+              <div className={`publish-status ${item.publicVisible ? "is-live" : ""}`}>{item.publicVisible ? "Published on website" : "Hidden from website"}</div>
               {item.nameAr && <div style={s.nameAr}>{item.nameAr}</div>}
               <div style={s.desc}>{item.description}</div>
               <div style={s.actions}>
@@ -243,6 +244,11 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               onChange={(e) => setEditing({ ...editing, price: e.target.value })}
               placeholder="0.00"
             />
+
+            <label className="publish-control">
+              <input type="checkbox" checked={Boolean(editing.publicVisible)} onChange={(e) => setEditing({ ...editing, publicVisible: e.target.checked })} />
+              <span><strong>Publish on PrintTools3D</strong><small>Only enable this when the image, name, description and price are ready.</small></span>
+            </label>
 
             <label style={s.label}>Feature</label>
             <input
