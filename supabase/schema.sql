@@ -368,3 +368,23 @@ begin
   end if;
 end;
 $$;
+
+
+insert into settings (key, value) values
+  ('store_open', 'true'::jsonb),
+  ('announcement_banner', '""'::jsonb)
+on conflict (key) do nothing;
+
+create or replace function public_site_settings()
+returns table(store_open boolean, announcement text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    coalesce((select (value #>> '{}')::boolean from settings where key = 'store_open'), true),
+    coalesce((select value #>> '{}' from settings where key = 'announcement_banner'), '');
+$$;
+
+grant execute on function public_site_settings() to anon, authenticated;

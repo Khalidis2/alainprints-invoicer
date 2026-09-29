@@ -341,3 +341,23 @@ export function subscribeToChanges({ onItems, onInvoices, onCustomers, onFilamen
 
   return () => supabase.removeChannel(channel);
 }
+
+
+export async function fetchWebsiteSettings() {
+  const { data, error } = await supabase.from("settings").select("key,value").in("key", ["store_open", "announcement_banner"]);
+  if (error) throw error;
+  const values = Object.fromEntries((data || []).map((row) => [row.key, row.value]));
+  return {
+    storeOpen: values.store_open !== false,
+    announcement: typeof values.announcement_banner === "string" ? values.announcement_banner : "",
+  };
+}
+
+export async function saveWebsiteSettings(settings) {
+  const rows = [
+    { key: "store_open", value: Boolean(settings.storeOpen) },
+    { key: "announcement_banner", value: String(settings.announcement || "").trim() },
+  ];
+  const { error } = await supabase.from("settings").upsert(rows, { onConflict: "key" });
+  if (error) throw error;
+}
