@@ -28,6 +28,8 @@ import PrintCalculator from "./components/PrintCalculator";
 import Customers from "./components/Customers";
 import FilamentInventory from "./components/FilamentInventory";
 import StoreOrders from "./components/StoreOrders";
+import AdminDashboard from "./components/AdminDashboard";
+import WebsiteSettings from "./components/WebsiteSettings";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -76,8 +78,8 @@ function Login() {
     <main style={authStyles.page}>
       <form style={authStyles.card} onSubmit={signIn}>
         <div style={authStyles.brand}>ALAINPRINTS</div>
-        <h1 style={authStyles.title}>Invoice maker</h1>
-        <p style={authStyles.sub}>Sign in to access invoices and customer records.</p>
+        <h1 style={authStyles.title}>PrintTools3D admin</h1>
+        <p style={authStyles.sub}>Sign in to manage stock, products, orders, customers and invoices.</p>
         <label style={authStyles.label}>Email</label>
         <input style={authStyles.input} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <label style={authStyles.label}>Password</label>
@@ -103,7 +105,7 @@ const authStyles = {
 };
 
 function Invoicer({ userEmail, onSignOut }) {
-  const [tab, setTab] = useState("items");
+  const [tab, setTab] = useState("dashboard");
   const [items, setItems] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -249,13 +251,15 @@ function Invoicer({ userEmail, onSignOut }) {
   };
 
   const tabs = [
-    { id: "items", label: "Items menu" },
+    { id: "dashboard", label: "Dashboard" },
+    { id: "filament", label: "Stock" },
+    { id: "items", label: "Printed products" },
+    { id: "store-orders", label: `Orders${storeOrders.filter((order) => order.status === "pending").length ? ` (${storeOrders.filter((order) => order.status === "pending").length})` : ""}` },
     { id: "calculator", label: "Slice & price" },
-    { id: "filament", label: "Filament" },
-    { id: "store-orders", label: `Store orders${storeOrders.filter((order) => order.status === "pending").length ? ` (${storeOrders.filter((order) => order.status === "pending").length})` : ""}` },
     { id: "invoice", label: "New invoice" },
     { id: "customers", label: "Customers" },
-    { id: "history", label: "History" },
+    { id: "history", label: "Invoices & revenue" },
+    { id: "settings", label: "Website" },
   ];
 
   if (loading) {
@@ -287,7 +291,7 @@ function Invoicer({ userEmail, onSignOut }) {
           <Spool />
           <div>
             <div style={s.brandName}>alainprints</div>
-            <div style={s.brandSub}>Item catalog & invoice maker · synced</div>
+            <div style={s.brandSub}>PrintTools3D business admin · synced</div>
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -50, marginBottom: 20 }}>
@@ -311,6 +315,16 @@ function Invoicer({ userEmail, onSignOut }) {
       </div>
 
       <div className="app-body" style={s.body}>
+        {tab === "dashboard" && (
+          <AdminDashboard
+            items={items}
+            invoices={invoices}
+            customers={customers}
+            filaments={filaments}
+            storeOrders={storeOrders}
+            onNavigate={setTab}
+          />
+        )}
         {tab === "items" && (
           <ItemsMenu
             items={items}
@@ -364,6 +378,9 @@ function Invoicer({ userEmail, onSignOut }) {
         )}
         {tab === "history" && (
           <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} showToast={showToast} />
+        )}
+        {tab === "settings" && (
+          <WebsiteSettings filaments={filaments} items={items} />
         )}
       </div>
 
