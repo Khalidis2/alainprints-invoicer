@@ -388,3 +388,21 @@ as $$
 $$;
 
 grant execute on function public_site_settings() to anon, authenticated;
+
+
+alter table items add column if not exists public_visible boolean not null default false;
+
+create or replace function public_printed_products()
+returns table(id uuid, name text, name_ar text, category text, price numeric, description text, image_url text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select id, name, name_ar, category, price, description, image_url
+  from items
+  where public_visible = true
+  order by created_at desc;
+$$;
+
+grant execute on function public_printed_products() to anon, authenticated;

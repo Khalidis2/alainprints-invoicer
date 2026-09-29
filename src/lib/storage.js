@@ -37,6 +37,7 @@ function dbToItem(row) {
     price: Number(row.price),
     description: row.description ?? "",
     imageUrl: row.image_url ?? null,
+    publicVisible: Boolean(row.public_visible),
     filamentId: row.filament_id ?? null,
     gramsPerUnit: Number(row.grams_per_unit || 0),
   };
@@ -49,6 +50,7 @@ function itemToDb(item) {
     price: item.price,
     description: item.description ?? "",
     image_url: item.imageUrl ?? null,
+    public_visible: Boolean(item.publicVisible),
     filament_id: item.filamentId ?? null,
     grams_per_unit: Number(item.gramsPerUnit || 0),
   };
