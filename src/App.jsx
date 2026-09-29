@@ -360,6 +360,7 @@ function Invoicer({ userEmail, onSignOut }) {
             key={editingInvoice?.id ?? `new-${invoiceNo}`}
             items={items}
             customers={customers}
+            filaments={filaments}
             invoiceNo={invoiceNo}
             initialInvoice={editingInvoice}
             onSave={editingInvoice ? handleUpdateInvoice : handleGenerateInvoice}
