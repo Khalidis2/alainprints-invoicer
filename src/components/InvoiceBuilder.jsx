@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 
@@ -17,11 +17,6 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const [discountInput, setDiscountInput] = useState(initialInvoice?.discount ? String(initialInvoice.discount) : "");
   const [finalized, setFinalized] = useState(null);
   const [generating, setGenerating] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState("");
-  const recognitionRef = useRef(null);
-
-  useEffect(() => () => recognitionRef.current?.abort?.(), []);
 
   const addItem = (item) => {
     setLines((prev) => {
@@ -30,82 +25,37 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
       return [...prev, { itemId: item.id, name: item.name, price: item.price, qty: 1, filamentId: item.filamentId || null, gramsPerUnit: Number(item.gramsPerUnit || 0) }];
     });
   };
-  const normalizeVoiceText = (value) => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const availableFilaments = filaments.filter((filament) => filament.stockStatus === "available" && Number(filament.remainingG || 0) >= Number(filament.spoolWeightG || 1000));
+  const availableFilaments = filaments
+    .filter((filament) => filament.stockStatus === "available")
+    .map((filament) => ({
+      ...filament,
+      availableSpools: Math.floor(Number(filament.remainingG || 0) / Number(filament.spoolWeightG || 1000)),
+    }))
+    .filter((filament) => filament.availableSpools > 0);
 
-  const voiceQuantity = (transcript) => {
-    const match = normalizeVoiceText(transcript).match(/\b(\d+)\b/);
-    if (match) return Math.max(1, Number(match[1]));
-    const words = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-    return Object.entries(words).find(([word]) => normalizeVoiceText(transcript).split(" ").includes(word))?.[1] || 1;
-  };
-
-  const addFilamentSpool = (filament, requestedQty) => {
-    const spoolWeightG = Number(filament.spoolWeightG || 1000);
-    const availableQty = Math.floor(Number(filament.remainingG || 0) / spoolWeightG);
-    if (availableQty < 1) {
-      showToast(`${filament.material} ${filament.color} is no longer available`);
-      return;
-    }
-
+  const addFilamentSpool = (filament) => {
     const itemId = `filament-spool:${filament.id}`;
+    const spoolWeightG = Number(filament.spoolWeightG || 1000);
     const lineName = `${filament.brand ? `${filament.brand} · ` : ""}${filament.material} ${filament.color} filament spool`;
+
     setLines((previous) => {
       const existing = previous.find((line) => line.itemId === itemId);
-      const currentQty = Number(existing?.qty || 0);
-      const nextQty = Math.min(currentQty + requestedQty, availableQty);
-      if (existing) return previous.map((line) => line.itemId === itemId ? { ...line, qty: nextQty } : line);
+      if (existing) {
+        if (Number(existing.qty || 0) >= filament.availableSpools) {
+          showToast(`Only ${filament.availableSpools} spool(s) available`);
+          return previous;
+        }
+        return previous.map((line) => line.itemId === itemId ? { ...line, qty: Number(line.qty || 0) + 1 } : line);
+      }
       return [...previous, {
         itemId,
         name: lineName,
         price: Number(filament.sellingPrice || 0),
-        qty: Math.min(requestedQty, availableQty),
+        qty: 1,
         filamentId: filament.id,
         gramsPerUnit: spoolWeightG,
       }];
     });
-    showToast(`Added ${Math.min(requestedQty, availableQty)} × ${filament.material} ${filament.color} spool to this invoice`);
-  };
-
-  const handleVoiceResult = (transcript) => {
-    setVoiceTranscript(transcript);
-    const spoken = normalizeVoiceText(transcript);
-    const matches = availableFilaments.filter((filament) => {
-      const requiredWords = `${filament.material} ${filament.color}`
-        .split(/\s+/)
-        .map(normalizeVoiceText)
-        .filter((word) => word.length > 1);
-      return requiredWords.every((word) => spoken.split(" ").includes(word));
-    });
-
-    if (matches.length !== 1) {
-      showToast(matches.length > 1 ? "Say the exact material and colour, for example: add 1 PETG Blue spool" : "No matching available filament found");
-      return;
-    }
-    addFilamentSpool(matches[0], voiceQuantity(transcript));
-  };
-
-  const startVoiceAdd = () => {
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) {
-      showToast("Voice input is not supported in this browser. Use Chrome or Safari on a secure connection.");
-      return;
-    }
-
-    recognitionRef.current?.abort?.();
-    const recognition = new Recognition();
-    recognition.lang = "en-AE";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => setListening(true);
-    recognition.onerror = () => {
-      setListening(false);
-      showToast("Couldn't hear that. Try again: add 1 PETG Blue spool.");
-    };
-    recognition.onend = () => setListening(false);
-    recognition.onresult = (event) => handleVoiceResult(event.results[0][0].transcript);
-    recognitionRef.current = recognition;
-    recognition.start();
   };
 
   const setQty = (itemId, qty) =>
@@ -185,15 +135,19 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         <h2 style={s.h2}>{editing ? `Edit invoice #${initialInvoice.number}` : "New invoice"}</h2>
         <div style={s.sub}>Invoice #{customInvoiceNo || "—"} · {invoiceDate} — tap items to add them.</div>
 
-        <div style={s.voiceCard}>
-          <div>
-            <strong style={s.voiceTitle}>Voice add available filament spool</strong>
-            <div style={s.voiceHelp}>Say: “add 2 PETG Blue spools”. Only Available stock can be matched.</div>
-            {voiceTranscript && <div style={s.voiceTranscript}>Heard: {voiceTranscript}</div>}
+        <div style={s.filamentSection}>
+          <div style={s.filamentSectionTitle}>Available filament spools</div>
+          <div style={s.filamentSectionHelp}>Tap a spool to add it to this invoice. Saving as Unpaid or Paid deducts the exact spool from Available stock.</div>
+          <div className="item-picker-grid" style={s.pickGrid}>
+            {availableFilaments.map((filament) => (
+              <button key={filament.id} type="button" style={s.filamentCard} onClick={() => addFilamentSpool(filament)}>
+                <span style={s.filamentMaterial}>{filament.material}</span>
+                <div style={s.pickName}>{filament.color}</div>
+                <div style={s.filamentStock}>{filament.availableSpools} in stock · {AED(filament.sellingPrice)}</div>
+              </button>
+            ))}
+            {availableFilaments.length === 0 && <div style={s.empty}>No Available filament spools in stock.</div>}
           </div>
-          <button type="button" style={s.voiceButton} onClick={startVoiceAdd} disabled={listening}>
-            {listening ? "Listening…" : "🎙 Add spool by voice"}
-          </button>
         </div>
 
         <div className="item-picker-grid" style={s.pickGrid}>
@@ -380,9 +334,10 @@ const s = {
   secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
   empty: { padding: "30px 16px", textAlign: "center", color: "#8A7F6D", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff" },
   error: { marginTop: 4, color: "#B3451D", fontSize: 11.5 },
-  voiceCard: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: 16, padding: 14, border: "1.5px solid #D8E5DF", borderRadius: 10, background: "#F4FAF7" },
-  voiceTitle: { color: "#16324F", fontSize: 13 },
-  voiceHelp: { marginTop: 4, color: "#6B6355", fontSize: 11.5, lineHeight: 1.4 },
-  voiceTranscript: { marginTop: 6, color: "#047857", fontSize: 11.5, fontWeight: 700 },
-  voiceButton: { flex: "0 0 auto", minHeight: 42, border: 0, borderRadius: 8, padding: "10px 13px", background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
+  filamentSection: { marginBottom: 22, padding: 14, border: "1.5px solid #D8E5DF", borderRadius: 10, background: "#F4FAF7" },
+  filamentSectionTitle: { color: "#16324F", fontSize: 14, fontWeight: 800 },
+  filamentSectionHelp: { margin: "4px 0 12px", color: "#6B6355", fontSize: 11.5, lineHeight: 1.4 },
+  filamentCard: { textAlign: "left", background: "#fff", border: "1.5px solid #CFE0D8", borderRadius: 9, padding: 11, display: "flex", flexDirection: "column", gap: 5, cursor: "pointer" },
+  filamentMaterial: { color: "#047857", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
+  filamentStock: { color: "#6B6355", fontSize: 11.5 },
 };
