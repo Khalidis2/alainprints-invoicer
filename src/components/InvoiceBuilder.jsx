@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 
-export default function InvoiceBuilder({ items, customers = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
+export default function InvoiceBuilder({ items, customers = [], filaments = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
   const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "" });
   const [lines, setLines] = useState(initialInvoice?.lines ?? []);
@@ -17,6 +17,11 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
   const [discountInput, setDiscountInput] = useState(initialInvoice?.discount ? String(initialInvoice.discount) : "");
   const [finalized, setFinalized] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const recognitionRef = useRef(null);
+
+  useEffect(() => () => recognitionRef.current?.abort?.(), []);
 
   const addItem = (item) => {
     setLines((prev) => {
@@ -25,6 +30,84 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
       return [...prev, { itemId: item.id, name: item.name, price: item.price, qty: 1, filamentId: item.filamentId || null, gramsPerUnit: Number(item.gramsPerUnit || 0) }];
     });
   };
+  const normalizeVoiceText = (value) => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const availableFilaments = filaments.filter((filament) => filament.stockStatus === "available" && Number(filament.remainingG || 0) >= Number(filament.spoolWeightG || 1000));
+
+  const voiceQuantity = (transcript) => {
+    const match = normalizeVoiceText(transcript).match(/\b(\d+)\b/);
+    if (match) return Math.max(1, Number(match[1]));
+    const words = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+    return Object.entries(words).find(([word]) => normalizeVoiceText(transcript).split(" ").includes(word))?.[1] || 1;
+  };
+
+  const addFilamentSpool = (filament, requestedQty) => {
+    const spoolWeightG = Number(filament.spoolWeightG || 1000);
+    const availableQty = Math.floor(Number(filament.remainingG || 0) / spoolWeightG);
+    if (availableQty < 1) {
+      showToast(`${filament.material} ${filament.color} is no longer available`);
+      return;
+    }
+
+    const itemId = `filament-spool:${filament.id}`;
+    const lineName = `${filament.brand ? `${filament.brand} · ` : ""}${filament.material} ${filament.color} filament spool`;
+    setLines((previous) => {
+      const existing = previous.find((line) => line.itemId === itemId);
+      const currentQty = Number(existing?.qty || 0);
+      const nextQty = Math.min(currentQty + requestedQty, availableQty);
+      if (existing) return previous.map((line) => line.itemId === itemId ? { ...line, qty: nextQty } : line);
+      return [...previous, {
+        itemId,
+        name: lineName,
+        price: Number(filament.sellingPrice || 0),
+        qty: Math.min(requestedQty, availableQty),
+        filamentId: filament.id,
+        gramsPerUnit: spoolWeightG,
+      }];
+    });
+    showToast(`Added ${Math.min(requestedQty, availableQty)} × ${filament.material} ${filament.color} spool to this invoice`);
+  };
+
+  const handleVoiceResult = (transcript) => {
+    setVoiceTranscript(transcript);
+    const spoken = normalizeVoiceText(transcript);
+    const matches = availableFilaments.filter((filament) => {
+      const requiredWords = `${filament.material} ${filament.color}`
+        .split(/\s+/)
+        .map(normalizeVoiceText)
+        .filter((word) => word.length > 1);
+      return requiredWords.every((word) => spoken.split(" ").includes(word));
+    });
+
+    if (matches.length !== 1) {
+      showToast(matches.length > 1 ? "Say the exact material and colour, for example: add 1 PETG Blue spool" : "No matching available filament found");
+      return;
+    }
+    addFilamentSpool(matches[0], voiceQuantity(transcript));
+  };
+
+  const startVoiceAdd = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      showToast("Voice input is not supported in this browser. Use Chrome or Safari on a secure connection.");
+      return;
+    }
+
+    recognitionRef.current?.abort?.();
+    const recognition = new Recognition();
+    recognition.lang = "en-AE";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setListening(true);
+    recognition.onerror = () => {
+      setListening(false);
+      showToast("Couldn't hear that. Try again: add 1 PETG Blue spool.");
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onresult = (event) => handleVoiceResult(event.results[0][0].transcript);
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
   const setQty = (itemId, qty) =>
     setLines((prev) => prev.map((l) => (l.itemId === itemId ? { ...l, qty: Math.max(1, Number(qty) || 1) } : l)));
   const setLine = (itemId, field, value) =>
@@ -101,6 +184,17 @@ export default function InvoiceBuilder({ items, customers = [], invoiceNo, initi
       <div>
         <h2 style={s.h2}>{editing ? `Edit invoice #${initialInvoice.number}` : "New invoice"}</h2>
         <div style={s.sub}>Invoice #{customInvoiceNo || "—"} · {invoiceDate} — tap items to add them.</div>
+
+        <div style={s.voiceCard}>
+          <div>
+            <strong style={s.voiceTitle}>Voice add available filament spool</strong>
+            <div style={s.voiceHelp}>Say: “add 2 PETG Blue spools”. Only Available stock can be matched.</div>
+            {voiceTranscript && <div style={s.voiceTranscript}>Heard: {voiceTranscript}</div>}
+          </div>
+          <button type="button" style={s.voiceButton} onClick={startVoiceAdd} disabled={listening}>
+            {listening ? "Listening…" : "🎙 Add spool by voice"}
+          </button>
+        </div>
 
         <div className="item-picker-grid" style={s.pickGrid}>
           {items.map((item) => {
@@ -286,4 +380,9 @@ const s = {
   secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
   empty: { padding: "30px 16px", textAlign: "center", color: "#8A7F6D", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff" },
   error: { marginTop: 4, color: "#B3451D", fontSize: 11.5 },
+  voiceCard: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: 16, padding: 14, border: "1.5px solid #D8E5DF", borderRadius: 10, background: "#F4FAF7" },
+  voiceTitle: { color: "#16324F", fontSize: 13 },
+  voiceHelp: { marginTop: 4, color: "#6B6355", fontSize: 11.5, lineHeight: 1.4 },
+  voiceTranscript: { marginTop: 6, color: "#047857", fontSize: 11.5, fontWeight: 700 },
+  voiceButton: { flex: "0 0 auto", minHeight: 42, border: 0, borderRadius: 8, padding: "10px 13px", background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
 };
