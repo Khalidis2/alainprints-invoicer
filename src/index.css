@@ -299,3 +299,9 @@ button, input, textarea, select { font-family: inherit; }
   .admin-grid, .website-settings-grid { grid-template-columns: minmax(0, 1fr); }
   .admin-card, .website-settings-grid article { min-height: 180px; }
 }
+
+.website-control-panel{display:grid;gap:18px;margin-bottom:18px;padding:20px;border:1px solid #E4DFD3;border-radius:13px;background:#fff}
+.website-toggle{display:flex;justify-content:space-between;gap:20px;align-items:center}.website-toggle span{display:grid;gap:4px}.website-toggle small,.website-announcement small{color:#8A7F6D}.website-toggle input{width:26px;height:26px;accent-color:#E8792D}
+.website-announcement{display:grid;gap:7px}.website-announcement>span{font-weight:800}.website-announcement textarea{width:100%;resize:vertical;padding:12px;border:1px solid #DCD5C6;border-radius:8px;font-size:16px}
+.website-save-row{display:flex;justify-content:space-between;gap:14px;align-items:center}.website-save-row span{color:#047857;font-size:13px}.website-save-row button{min-height:44px;padding:10px 16px;border:0;border-radius:8px;background:#16324F;color:#fff;font-weight:800;cursor:pointer}
+@media(max-width:560px){.website-save-row{align-items:stretch;flex-direction:column}.website-save-row button{width:100%}}
