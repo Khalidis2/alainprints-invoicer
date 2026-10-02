@@ -16,6 +16,7 @@ import {
   upsertCustomer,
   updateCustomerRow,
   fetchFilaments,
+  syncFilamentInventoryOnce,
   updateFilamentRow,
   receiveFilamentRow,
   fetchStoreOrders,
@@ -142,6 +143,7 @@ function Invoicer({ userEmail, onSignOut }) {
     let cancelled = false;
     (async () => {
       try {
+        await syncFilamentInventoryOnce();
         const [i, inv, n, savedCustomers, savedFilaments, savedStoreOrders] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers(), fetchFilaments(), fetchStoreOrders()]);
         if (cancelled) return;
         setItems(i);

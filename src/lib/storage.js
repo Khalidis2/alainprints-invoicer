@@ -135,10 +135,142 @@ export async function updateCustomerRow(customer) {
 
 // ---------- filament inventory ----------
 
+const FILAMENT_INVENTORY_SEED_KEY = "filament_inventory_2026_10_02_v1";
+
+const FILAMENT_INVENTORY_2026_10_02 = [
+  ["AVAILABLE-MATTE-ORANGE", "Mixed/Unknown", "PLA Matte", "Orange", 1, 70],
+  ["AVAILABLE-MATTE-RED", "Mixed/Unknown", "PLA Matte", "Red", 1, 70],
+  ["AVAILABLE-MATTE-BLACK", "Mixed/Unknown", "PLA Matte", "Black", 4, 70],
+  ["AVAILABLE-MATTE-WHITE", "Mixed/Unknown", "PLA Matte", "White", 4, 70],
+  ["AVAILABLE-HS-BLACK", "Mixed/Unknown", "PLA HS", "Black", 2, 70],
+  ["AVAILABLE-HS-WHITE", "Mixed/Unknown", "PLA HS", "White", 1, 70],
+  ["AVAILABLE-BASIC-SILVER", "Mixed/Unknown", "PLA Basic", "Silver", 4, 70],
+  ["AVAILABLE-BASIC-WHITE", "Mixed/Unknown", "PLA Basic", "White", 2, 70],
+  ["AVAILABLE-BASIC-BLACK", "Mixed/Unknown", "PLA Basic", "Black", 1, 70],
+  ["AVAILABLE-BASIC-RED", "Mixed/Unknown", "PLA Basic", "Red", 2, 70],
+  ["AVAILABLE-BASIC-GREEN", "Mixed/Unknown", "PLA Basic", "Green", 3, 70],
+  ["AVAILABLE-BASIC-BROWN", "Mixed/Unknown", "PLA Basic", "Brown", 2, 70],
+  ["AVAILABLE-BASIC-BLUE", "Mixed/Unknown", "PLA Basic", "Blue", 4, 70],
+  ["AVAILABLE-PETG-BLUE", "Mixed/Unknown", "PETG", "Blue", 7, 75],
+  ["AVAILABLE-PETG-WHITE", "Mixed/Unknown", "PETG", "White", 1, 75],
+  ["AVAILABLE-PETG-GREEN", "Mixed/Unknown", "PETG", "Green", 4, 75],
+  ["AVAILABLE-PETG-RED", "Mixed/Unknown", "PETG", "Red", 3, 75],
+
+  ["KR-PLA102Y-1CH", "Kingroon", "PLA+", "Black", 10, 70],
+  ["KR-PLA101Y-1CH", "Kingroon", "PLA+", "White", 10, 70],
+  ["KR-PLA117Y-1CH", "Kingroon", "PLA+", "Gold", 10, 70],
+  ["KR-PLA105Y-1CH", "Kingroon", "PLA+", "Gray", 5, 70],
+  ["KR-PLA110Y-1CH", "Kingroon", "PLA+", "Silver", 10, 70],
+  ["KR-PLA103Y-1CH", "Kingroon", "PLA+", "Red", 5, 70],
+  ["KR-PLA104Y-1CH", "Kingroon", "PLA+", "Blue", 5, 70],
+  ["KR-PLA107Y-1CH", "Kingroon", "PLA+", "Green", 5, 70],
+  ["KR-PLA112Y-1CH", "Kingroon", "PLA+", "Purple", 5, 70],
+  ["KR-PLA109Y-1CH", "Kingroon", "PLA+", "Orange", 5, 70],
+  ["KR-PLA111Y-1CH", "Kingroon", "PLA+", "Pink", 5, 70],
+  ["KR-PLA108Y-1CH", "Kingroon", "PLA+", "Yellow", 5, 70],
+  ["KR-PLA115Y-1CH", "Kingroon", "PLA+", "Skin", 5, 70],
+  ["KR-PLA116Y-1CH", "Kingroon", "PLA+", "Transparent", 5, 70],
+
+  ["KR-PLA301Y-1CH", "Kingroon", "PLA Matte", "Black", 14, 70],
+  ["KR-PLA302Y-1CH", "Kingroon", "PLA Matte", "White", 14, 70],
+  ["KR-PLA303Y-1CH", "Kingroon", "PLA Matte", "Gray", 7, 70],
+  ["KR-PLA304Y-1CH", "Kingroon", "PLA Matte", "Blue", 5, 70],
+  ["KR-PLA305Y-1CH", "Kingroon", "PLA Matte", "Red", 5, 70],
+  ["KR-PLA306Y-1CH", "Kingroon", "PLA Matte", "Green", 5, 70],
+  ["KR-PLA307Y-1CH", "Kingroon", "PLA Matte", "Skin", 5, 70],
+  ["KR-PLA308Y-1CH", "Kingroon", "PLA Matte", "Yellow", 5, 70],
+  ["KR-PLA309Y-1CH", "Kingroon", "PLA Matte", "Orange", 5, 70],
+  ["KR-PLA310Y-1CH", "Kingroon", "PLA Matte", "Lilac Purple", 3, 70],
+  ["KR-PLA311Y-1CH", "Kingroon", "PLA Matte", "Grass Green", 5, 70],
+  ["KR-PLA312Y-1CH", "Kingroon", "PLA Matte", "Midnight Brown", 5, 70],
+
+  ["KR-PETG301Y-1CH", "Kingroon", "PETG Matte", "Black", 30, 75],
+  ["KR-PETG302Y-1CH", "Kingroon", "PETG Matte", "White", 35, 75],
+  ["KR-PETG-BASIC-BLACK", "Kingroon", "PETG", "Black", 10, 75],
+
+  ["KR-Silk212Y-1CH", "Kingroon", "Silk Tricolor", "Gold / Purple / Red / Blue", 5, 90],
+  ["KR-Silk202Y-1CH", "Kingroon", "Silk Tricolor", "Red / Green / Blue", 5, 90],
+  ["KR-Silk215Y-1CH", "Kingroon", "Silk Tricolor", "Purple / Red / Blue / Green", 5, 90],
+  ["KR-Silk201Y-1CH", "Kingroon", "Silk Tricolor", "Red / Yellow / Blue", 5, 90],
+  ["KR-Silk208Y-1CH", "Kingroon", "Silk Tricolor", "Black / Blue / Purple", 10, 90],
+  ["KR-Silk204Y-1CH", "Kingroon", "Silk Tricolor", "Gold / Green / Rose Red", 5, 90],
+  ["KR-Silk213Y-1CH", "Kingroon", "Silk Tricolor", "Gold / Green / Black", 5, 90],
+  ["KR-Silk214Y-1CH", "Kingroon", "Silk Tricolor", "Gold / Green / Blue", 5, 90],
+
+  ["KR-PLA901Y-1CH", "Kingroon", "PLA Marble", "Marble", 5, 75],
+];
+
+const OBSOLETE_FILAMENT_SKUS = [
+  "KR-PLA114Y-1CH",
+  "KR-PETG303Y-1CH",
+  "KR-PETG304Y-1CH",
+  "KR-PETG305Y-1CH",
+  "KR-PETG306Y-1CH",
+  "KR-PETG307Y-1CH",
+  "KR-PETG308Y-1CH",
+  "KR-PETG309Y-1CH",
+  "KR-PETG310Y-1CH",
+  "KR-PETG311Y-1CH",
+  "KR-PETG312Y-1CH",
+  "KR-Silk210Y-1CH",
+  "KR-Silk209Y-1CH",
+];
+
+export async function syncFilamentInventoryOnce() {
+  const { data: marker, error: markerError } = await supabase
+    .from("settings")
+    .select("key")
+    .eq("key", FILAMENT_INVENTORY_SEED_KEY)
+    .maybeSingle();
+  if (markerError) throw markerError;
+  if (marker) return false;
+
+  const now = new Date().toISOString();
+
+  const { error: archiveError } = await supabase
+    .from("filaments")
+    .update({
+      quantity_spools: 0,
+      remaining_g: 0,
+      selling_price: 0,
+      notes: "__archived__",
+      updated_at: now,
+    })
+    .in("sku", OBSOLETE_FILAMENT_SKUS);
+  if (archiveError) throw archiveError;
+
+  const rows = FILAMENT_INVENTORY_2026_10_02.map(([sku, brand, material, color, quantity, price]) => ({
+    sku,
+    brand,
+    material,
+    color,
+    spool_weight_g: 1000,
+    quantity_spools: quantity,
+    remaining_g: quantity * 1000,
+    selling_price: price,
+    stock_status: "available",
+    notes: "",
+    updated_at: now,
+  }));
+
+  const { error: upsertError } = await supabase
+    .from("filaments")
+    .upsert(rows, { onConflict: "sku" });
+  if (upsertError) throw upsertError;
+
+  const { error: settingsError } = await supabase
+    .from("settings")
+    .upsert({ key: FILAMENT_INVENTORY_SEED_KEY, value: true }, { onConflict: "key" });
+  if (settingsError) throw settingsError;
+
+  return true;
+}
+
 export async function fetchFilaments() {
   const { data, error } = await supabase
     .from("filaments")
     .select("*")
+    .neq("notes", "__archived__")
     .order("stock_status", { ascending: true })
     .order("material", { ascending: true })
     .order("color", { ascending: true });
