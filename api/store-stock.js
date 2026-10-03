@@ -42,7 +42,7 @@ export default async function handler(request, response) {
     }
 
     const inventory = await result.json();
-    response.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+    response.setHeader("Cache-Control", "public, s-maxage=10, stale-while-revalidate=20");
     return response.status(200).json({ inventory });
   } catch {
     return response.status(502).json({ error: "Inventory database is unavailable" });

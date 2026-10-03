@@ -96,9 +96,10 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         total,
       });
       setFinalized(saved);
-      showToast(editing ? "Invoice updated" : "Invoice saved");
+      const movesStock = ["Unpaid", "Paid"].includes(status) && lines.some((line) => line.filamentId);
+      showToast(`${editing ? "Invoice updated" : "Invoice saved"}${movesStock ? " · stock updated on website" : ""}`);
     } catch (e) {
-      showToast(e.code === "23505" ? `Invoice #${parsedInvoiceNo} already exists` : "Couldn't save invoice — check connection");
+      showToast(e.code === "23505" ? `Invoice #${parsedInvoiceNo} already exists` : (e.message || "Couldn't save invoice — check connection"));
     } finally {
       setGenerating(false);
     }

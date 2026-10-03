@@ -362,22 +362,26 @@ export async function insertInvoice(invoice) {
   const payload = invoiceToDb(invoice);
   const { data, error } = await supabase.rpc("save_invoice", { p_id: null, ...rpcPayload(payload) });
   if (!error) return dbToInvoice(Array.isArray(data) ? data[0] : data);
-  if (error.code !== "42883") throw error;
-
-  const fallback = await supabase.from("invoices").insert(payload).select().single();
-  if (fallback.error) throw fallback.error;
-  return dbToInvoice(fallback.data);
+  throw invoiceSaveError(error);
 }
 
 export async function updateInvoiceRow(invoice) {
   const payload = invoiceToDb(invoice);
   const { data, error } = await supabase.rpc("save_invoice", { p_id: invoice.id, ...rpcPayload(payload) });
   if (!error) return dbToInvoice(Array.isArray(data) ? data[0] : data);
-  if (error.code !== "42883") throw error;
+  throw invoiceSaveError(error);
+}
 
-  const fallback = await supabase.from("invoices").update(payload).eq("id", invoice.id).select().single();
-  if (fallback.error) throw fallback.error;
-  return dbToInvoice(fallback.data);
+// Never fall back to a plain insert/update: that would save the invoice without moving stock,
+// so the website would keep selling spools that were already invoiced.
+function invoiceSaveError(error) {
+  if (error?.code === "42883" || error?.code === "PGRST202") {
+    return new Error("Stock sync is not installed in Supabase. Run supabase/filament_inventory_upgrade.sql in the SQL Editor, then save again. The invoice was NOT saved, so stock stays correct.");
+  }
+  if (/Not enough available filament stock/i.test(error?.message || "")) {
+    return new Error("Not enough filament in stock for this invoice. Check the Stock tab, then try again.");
+  }
+  return error;
 }
 
 function rpcPayload(payload) {

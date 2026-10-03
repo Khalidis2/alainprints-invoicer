@@ -120,7 +120,7 @@ function Invoicer({ userEmail, onSignOut }) {
 
   const showToast = (msg) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 2200);
+    setTimeout(() => setToast(null), Math.max(2200, String(msg).length * 60));
   };
 
   const refreshItems = useCallback(() => {
@@ -201,6 +201,7 @@ function Invoicer({ userEmail, onSignOut }) {
     await persistInvoiceNo(next);
     setInvoiceNo(next);
     refreshInvoices();
+    refreshFilaments();
     return saved;
   };
   const handleUpdateInvoice = async (draft) => {
@@ -215,6 +216,7 @@ function Invoicer({ userEmail, onSignOut }) {
     await persistInvoiceNo(next);
     setInvoiceNo(next);
     refreshInvoices();
+    refreshFilaments();
     return saved;
   };
   const handleDeleteInvoice = async (id) => {
@@ -252,16 +254,27 @@ function Invoicer({ userEmail, onSignOut }) {
     await Promise.all([refreshStoreOrders(), refreshFilaments()]);
   };
 
-  const tabs = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "filament", label: "Stock" },
-    { id: "items", label: "Printed products" },
-    { id: "store-orders", label: `Orders${storeOrders.filter((order) => order.status === "pending").length ? ` (${storeOrders.filter((order) => order.status === "pending").length})` : ""}` },
-    { id: "calculator", label: "Slice & price" },
-    { id: "invoice", label: "New invoice" },
-    { id: "customers", label: "Customers" },
-    { id: "history", label: "Invoices & revenue" },
-    { id: "settings", label: "Website" },
+  const pendingOrders = storeOrders.filter((order) => order.status === "pending").length;
+  const tabGroups = [
+    {
+      label: "Store admin",
+      tabs: [
+        { id: "dashboard", label: "Dashboard" },
+        { id: "filament", label: "Stock" },
+        { id: "items", label: "Products" },
+        { id: "store-orders", label: `Orders${pendingOrders ? ` (${pendingOrders})` : ""}` },
+        { id: "settings", label: "Website" },
+      ],
+    },
+    {
+      label: "alainprints invoicer",
+      tabs: [
+        { id: "invoice", label: "New invoice" },
+        { id: "history", label: "Invoices" },
+        { id: "customers", label: "Customers" },
+        { id: "calculator", label: "Slice & price" },
+      ],
+    },
   ];
 
   if (loading) {
@@ -300,20 +313,27 @@ function Invoicer({ userEmail, onSignOut }) {
           <span style={{ fontSize: 11, color: "#8A7F6D", marginRight: 10 }}>{userEmail}</span>
           <button style={s.signOutBtn} onClick={onSignOut}>Sign out</button>
         </div>
-        <div className="app-tabs" style={s.tabRow}>
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => {
-                setTab(t.id);
-                if (t.id !== "invoice") setEditingInvoice(null);
-              }}
-              style={{ ...s.tabBtn, ...(tab === t.id ? s.tabBtnActive : {}) }}
-            >
-              {t.label}
-            </button>
+        <nav className="tab-groups" aria-label="Admin sections">
+          {tabGroups.map((group) => (
+            <div className="tab-group" key={group.label}>
+              <span className="tab-group-label">{group.label}</span>
+              <div className="app-tabs" style={s.tabRow}>
+                {group.tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      setTab(t.id);
+                      if (t.id !== "invoice") setEditingInvoice(null);
+                    }}
+                    style={{ ...s.tabBtn, ...(tab === t.id ? s.tabBtnActive : {}) }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
-        </div>
+        </nav>
       </div>
 
       <div className="app-body" style={s.body}>

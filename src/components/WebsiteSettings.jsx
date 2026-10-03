@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchWebsiteSettings, saveWebsiteSettings } from "../lib/storage";
+import LiveWebsiteStock from "./LiveWebsiteStock";
 
 export default function WebsiteSettings({ filaments, items }) {
   const [settings, setSettings] = useState({ storeOpen: true, announcement: "" });
@@ -56,6 +57,8 @@ export default function WebsiteSettings({ filaments, items }) {
           <button type="button" onClick={save} disabled={loading || saving}>{saving ? "Saving…" : "Save website settings"}</button>
         </div>
       </div>
+
+      <LiveWebsiteStock refreshKey={availableSpools} />
 
       <div className="website-settings-grid">
         <article><span>Store inventory</span><strong>{availableSpools} sellable spools</strong><p>Available full spools appear automatically.</p></article>

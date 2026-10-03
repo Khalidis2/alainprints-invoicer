@@ -308,3 +308,22 @@ button, input, textarea, select { font-family: inherit; }
 
 .publish-status{width:max-content;margin-top:2px;padding:4px 7px;border-radius:999px;background:#F3F4F6;color:#6B7280;font-size:10px;font-weight:800}.publish-status.is-live{background:#ECFDF5;color:#047857}
 .publish-control{display:flex;gap:10px;align-items:flex-start;margin-top:15px;padding:12px;border:1px solid #DCD5C6;border-radius:9px;background:#fff}.publish-control input{width:22px;height:22px;flex:0 0 auto;accent-color:#E8792D}.publish-control span{display:grid;gap:3px}.publish-control strong{color:#1B2A3D}.publish-control small{color:#8A7F6D;line-height:1.4}
+
+/* Live website stock check */
+.live-stock{display:grid;gap:12px;margin-bottom:18px;padding:18px;border:1px solid #E4DFD3;border-radius:13px;background:#fff}
+.live-stock-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.live-stock-head strong{display:block;color:#16324F;font-size:16px}
+.live-stock-head small{display:block;margin-top:3px;color:#6B6355;font-size:12.5px;line-height:1.45}
+.live-stock-head button{flex:0 0 auto;min-height:42px;padding:0 16px;border:1px solid #16324F;border-radius:8px;background:#fff;color:#16324F;font-weight:800;cursor:pointer}
+.live-stock-table{max-height:340px;overflow:auto;border:1px solid #E4DFD3;border-radius:9px}
+.live-stock table{width:100%;border-collapse:collapse;font-size:13px}
+.live-stock th{position:sticky;top:0;background:#F6F3EC;color:#8A7F6D;font-size:11px;text-align:left;text-transform:uppercase;letter-spacing:.06em}
+.live-stock th,.live-stock td{padding:9px 11px;border-bottom:1px solid #EFEAE0}
+.live-stock p{margin:0;color:#6B6355;font-size:13px}
+.live-stock .live-stock-note{font-size:12px;color:#8A7F6D}
+
+/* Two tab groups: Store admin | alainprints invoicer */
+.tab-groups{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:end}
+.tab-group{display:grid;gap:4px;min-width:0}
+.tab-group-label{color:#8A7F6D;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+@media (max-width:760px){.tab-groups{grid-template-columns:minmax(0,1fr);gap:10px}}
