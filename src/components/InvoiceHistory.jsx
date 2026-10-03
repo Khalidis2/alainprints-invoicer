@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AED, today } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
+import { StripeLinkButton, StripeLinkDetails, initialStripeUrl } from "./StripeLinkPanel";
 
 const STATUSES = ["Draft", "Unpaid", "Paid", "Cancelled"];
 const STATUS_COLOR = {
@@ -23,6 +24,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
   const [workingId, setWorkingId] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [stripeUrls, setStripeUrls] = useState({});
 
   const totals = useMemo(() => {
     const billable = invoices.filter((invoice) => ["Paid", "Unpaid"].includes(invoice.status || "Unpaid"));
@@ -182,12 +184,16 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
 
                 <div className="history-actions" style={s.actionGroup}>
                   {status === "Unpaid" && <button style={s.paidBtn} disabled={busy} onClick={() => updateStatus(invoice, "Paid")}>Mark paid</button>}
+                  {status === "Unpaid" && !(stripeUrls[invoice.id] || initialStripeUrl(invoice)) && (
+                    <StripeLinkButton invoice={invoice} showToast={showToast} compact onUrl={(url) => setStripeUrls((current) => ({ ...current, [invoice.id]: url }))} />
+                  )}
                   <button style={s.shareBtn} disabled={busy} onClick={() => { setAutoPrint(false); setAutoShare(true); setOpen(invoice); }}>Share PDF</button>
                   <button style={s.printBtn} disabled={busy} onClick={() => { setAutoShare(false); setAutoPrint(true); setOpen(invoice); }}>Print</button>
                   {editable && <button style={s.editBtn} disabled={busy} onClick={() => onEdit(invoice)}>Edit</button>}
                   {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete</button>}
                   {locked && <span style={s.locked}>Locked</span>}
                 </div>
+                <StripeLinkDetails invoice={invoice} url={stripeUrls[invoice.id] || initialStripeUrl(invoice)} showToast={showToast} />
                 {status === "Paid" && (
                   <div className="payment-summary" style={s.paymentSummary}>
                     Paid {invoice.paidDate || "date not recorded"}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}{invoice.paymentReference ? ` · Ref: ${invoice.paymentReference}` : ""}
@@ -224,7 +230,7 @@ const s = {
   filter: { width: "100%", padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 9, background: "#fff", color: "#1B2A3D", fontSize: 13.5, fontWeight: 700 },
   list: { display: "flex", flexDirection: "column", gap: 8 },
   empty: { padding: "30px 16px", textAlign: "center", color: "#8A7F6D", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff" },
-  row: { display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1px solid #E4DFD3", borderRadius: 10, padding: "11px 13px", boxShadow: "0 1px 2px rgba(27,42,61,.03)" },
+  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, background: "#fff", border: "1px solid #E4DFD3", borderRadius: 10, padding: "11px 13px", boxShadow: "0 1px 2px rgba(27,42,61,.03)" },
   rowMain: { flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "90px minmax(120px,1fr) 95px 100px", gap: 10, alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", fontSize: 13 },
   no: { color: "#E8792D", fontWeight: 800 },
   name: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 700, color: "#1B2A3D" },

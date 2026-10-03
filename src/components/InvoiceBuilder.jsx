@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 
@@ -84,6 +84,9 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     try {
       const saved = await onSave({
         id: initialInvoice?.id,
+        stripeLinkId: initialInvoice?.stripeLinkId,
+        stripeLinkUrl: initialInvoice?.stripeLinkUrl,
+        stripeLinkAmount: initialInvoice?.stripeLinkAmount,
         number: parsedInvoiceNo,
         date: invoiceDate,
         dueDate,
@@ -107,6 +110,13 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     }
   };
 
+  // Keep the suggested number current (it loads after the screen opens and moves up after each save),
+  // without remounting the screen, so the saved invoice + payment link view stays visible.
+  useEffect(() => {
+    if (!editing && !finalized && lines.length === 0) setCustomInvoiceNo(String(invoiceNo));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceNo]);
+
   const startOver = () => {
     setFinalized(null);
     setCustomer({ name: "", phone: "" });
@@ -126,6 +136,8 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     return (
       <InvoicePrint
         invoice={finalized}
+        showPaymentLink
+        showToast={showToast}
         onBack={editing ? onFinished : startOver}
         backLabel={editing ? "Back to history" : "New invoice"}
       />

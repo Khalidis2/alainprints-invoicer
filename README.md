@@ -91,3 +91,20 @@ alainprints-invoicer/
 - **Categories**: edit `CATEGORIES` in `src/lib/helpers.js`.
 - **Branding**: colors and the spool icon live in `App.jsx` and
   `InvoicePrint.jsx`.
+
+## Stripe payment links
+
+Each Unpaid invoice can get its own Stripe Payment Link (exact AED total, payable once).
+When the customer pays, Stripe calls `/api/stripe-webhook` and the invoice is marked **Paid**
+(method "Card (Stripe)", reference = Stripe payment ID). Stock is not touched again.
+
+Vercel environment variables (Production):
+
+| Name | Value |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | Stripe restricted key (`rk_live_…`) with **Write**: Prices, Products, Payment Links; **Read**: Checkout Sessions, Events |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` key (server only) |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret (`whsec_…`) of the webhook below |
+
+Stripe webhook: `https://alainprints-invoicer.vercel.app/api/stripe-webhook`
+Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`.

@@ -418,6 +418,9 @@ function dbToInvoice(row) {
     paymentMethod: invoiceMeta?.paymentMethod ?? "",
     paidDate: invoiceMeta?.paidDate ?? "",
     paymentReference: invoiceMeta?.paymentReference ?? "",
+    stripeLinkId: invoiceMeta?.stripeLinkId ?? "",
+    stripeLinkUrl: invoiceMeta?.stripeLinkUrl ?? "",
+    stripeLinkAmount: Number(invoiceMeta?.stripeLinkAmount) || 0,
     subtotal: total + discount,
     discount,
     total,
@@ -436,6 +439,8 @@ function invoiceToDb(invoice) {
       paymentMethod: invoice.paymentMethod ?? "",
       paidDate: invoice.paidDate ?? "",
       paymentReference: invoice.paymentReference ?? "",
+      // Keep the Stripe link attached when the invoice is edited or its status changes.
+      ...(invoice.stripeLinkId ? { stripeLinkId: invoice.stripeLinkId, stripeLinkUrl: invoice.stripeLinkUrl, stripeLinkAmount: invoice.stripeLinkAmount } : {}),
     },
   ];
   return {
@@ -498,4 +503,21 @@ export async function saveWebsiteSettings(settings) {
   ];
   const { error } = await supabase.from("settings").upsert(rows, { onConflict: "key" });
   if (error) throw error;
+}
+
+
+// ---------- Stripe payment link ----------
+// Asks our server (which holds the Stripe key) for a one-time payment link for this invoice.
+export async function createPaymentLink(invoiceId) {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) throw new Error("Please sign in again.");
+  const response = await fetch("/api/stripe-payment-link", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ invoiceId }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Couldn't create the payment link.");
+  return result.url;
 }

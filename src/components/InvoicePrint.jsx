@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { AED } from "../lib/helpers";
+import StripeLinkPanel from "./StripeLinkPanel";
 
 const statusColor = {
   Draft: "#6B7280",
@@ -10,7 +11,8 @@ const statusColor = {
   Cancelled: "#B91C1C",
 };
 
-export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = false, autoShare = false }) {
+export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = false, autoShare = false, showPaymentLink = false, showToast }) {
+  const [payUrl, setPayUrl] = useState(invoice.stripeLinkUrl && Number(invoice.stripeLinkAmount) === Math.round(Number(invoice.total) * 100) ? invoice.stripeLinkUrl : "");
   const [sharing, setSharing] = useState(false);
   const [receiptMode, setReceiptMode] = useState(false);
   useEffect(() => {
@@ -105,6 +107,12 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
         </div>
       </div>
 
+      {showPaymentLink && (invoice.status || "Unpaid") === "Unpaid" && (
+        <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 14px" }}>
+          <StripeLinkPanel invoice={invoice} showToast={showToast} onLink={setPayUrl} />
+        </div>
+      )}
+
       <article className="invoice-sheet" style={s.sheet}>
         <header className="invoice-hero" style={s.hero}>
           <div>
@@ -174,6 +182,13 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
             <div style={s.totalRow}><span>TOTAL</span><span>{AED(invoice.total)}</span></div>
           </div>
         </section>
+
+        {payUrl && (invoice.status || "Unpaid") === "Unpaid" && (
+          <section className="invoice-notes" style={s.notes}>
+            <div style={s.notesTitle}>PAY ONLINE BY CARD</div>
+            <div style={{ wordBreak: "break-all", color: "#3B3599", fontWeight: 700 }}>{payUrl}</div>
+          </section>
+        )}
 
         {invoice.notes && (
           <section className="invoice-notes" style={s.notes}>

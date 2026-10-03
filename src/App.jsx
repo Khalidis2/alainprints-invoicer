@@ -379,7 +379,7 @@ function Invoicer({ userEmail, onSignOut }) {
         )}
         {tab === "invoice" && (
           <InvoiceBuilder
-            key={editingInvoice?.id ?? `new-${invoiceNo}`}
+            key={editingInvoice?.id ?? "new-invoice"}
             items={items}
             customers={customers}
             filaments={filaments}
