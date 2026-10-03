@@ -327,3 +327,17 @@ button, input, textarea, select { font-family: inherit; }
 .tab-group{display:grid;gap:4px;min-width:0}
 .tab-group-label{color:#8A7F6D;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 @media (max-width:760px){.tab-groups{grid-template-columns:minmax(0,1fr);gap:10px}}
+
+/* Invoice maker: phone layout */
+.section-chips::-webkit-scrollbar{display:none}
+@media (max-width:760px){
+  .invoice-line-editor{grid-template-columns:minmax(0,1fr) auto auto 28px !important}
+  .invoice-line-editor > :first-child{grid-column:1 / -1}
+  .invoice-panel input,.invoice-panel select{font-size:16px !important}
+}
+.jump-to-bill{display:none}
+@media (max-width:760px){
+  .jump-to-bill{display:flex;align-items:center;justify-content:center;min-height:46px;margin-bottom:12px;border-radius:10px;background:#1B2A3D;color:#fff;font-weight:800;font-size:14px;text-decoration:none}
+  .invoice-line-editor > div:nth-child(2){justify-self:start}
+  #invoice-bill{scroll-margin-top:12px}
+}
