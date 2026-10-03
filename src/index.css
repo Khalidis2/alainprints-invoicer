@@ -341,3 +341,23 @@ button, input, textarea, select { font-family: inherit; }
   .invoice-line-editor > div:nth-child(2){justify-self:start}
   #invoice-bill{scroll-margin-top:12px}
 }
+
+/* Tabs: every section visible without sideways scrolling (phone + tablet) */
+@media (max-width:1100px){
+  .tab-groups{grid-template-columns:minmax(0,1fr);gap:10px}
+  .tab-groups .app-tabs{flex-wrap:wrap;overflow:visible;border-bottom:none !important;gap:6px !important}
+  .tab-groups .app-tabs > button{flex:0 0 auto;min-height:40px;border:1.5px solid #E4DFD3 !important;border-radius:999px;margin-bottom:0 !important;background:#fff !important;padding-inline:14px !important}
+}
+
+/* Native file pickers never push past their box */
+.app-body label{min-width:0}
+.app-body input[type="file"]{max-width:100%;min-width:0;justify-self:center}
+@media (max-width:760px){.category-filters{flex-wrap:wrap !important;overflow:visible !important}}
+
+/* Phone: status on its own row, actions on their own row, nothing squashed */
+@media screen and (max-width:720px){
+  .history-row > select{grid-column:1 / -1 !important;min-height:42px}
+  .history-actions{grid-column:1 / -1 !important;display:grid !important;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px}
+  .history-actions > *{width:100%}
+}
+@media screen and (max-width:720px){.history-summary{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}

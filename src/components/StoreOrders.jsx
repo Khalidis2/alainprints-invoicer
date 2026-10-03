@@ -64,7 +64,7 @@ export default function StoreOrders({ orders, onStatus, showToast }) {
 }
 
 const s = {
-  heading: { display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-end", marginBottom: 18 },
+  heading: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "flex-end", marginBottom: 18 },
   title: { margin: 0, fontSize: 24 },
   sub: { margin: "5px 0 0", color: "#8A7F6D", fontSize: 12 },
   filters: { display: "flex", flexWrap: "wrap", gap: 6 },
