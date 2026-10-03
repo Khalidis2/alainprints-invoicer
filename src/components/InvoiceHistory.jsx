@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AED, today } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 import { StripeLinkButton, StripeLinkDetails, initialStripeUrl } from "./StripeLinkPanel";
+import { checkStripePayment } from "../lib/storage";
 
 const STATUSES = ["Draft", "Unpaid", "Paid", "Cancelled"];
 const STATUS_COLOR = {
@@ -17,7 +18,7 @@ const STATUS_BG = {
   Cancelled: "#FEF2F2",
 };
 
-export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, showToast }) {
+export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, onRefresh, showToast }) {
   const [open, setOpen] = useState(null);
   const [autoPrint, setAutoPrint] = useState(false);
   const [autoShare, setAutoShare] = useState(false);
@@ -25,6 +26,23 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [stripeUrls, setStripeUrls] = useState({});
+
+  // Backup for the Stripe webhook: when this tab opens, quietly ask Stripe about unpaid invoices that have a link.
+  const checkedOnce = useRef(false);
+  useEffect(() => {
+    if (checkedOnce.current) return;
+    const waiting = invoices.filter((invoice) => (invoice.status || "Unpaid") === "Unpaid" && invoice.stripeLinkId).slice(0, 10);
+    if (!waiting.length) return;
+    checkedOnce.current = true;
+    Promise.all(waiting.map((invoice) => checkStripePayment(invoice.id).catch(() => ({ paid: false }))))
+      .then((results) => {
+        const paid = results.filter((result) => result.paid && !result.already).length;
+        if (paid) {
+          showToast(`${paid} Stripe payment${paid === 1 ? "" : "s"} found: marked Paid`);
+          onRefresh?.();
+        }
+      });
+  }, [invoices, onRefresh, showToast]);
 
   const totals = useMemo(() => {
     const billable = invoices.filter((invoice) => ["Paid", "Unpaid"].includes(invoice.status || "Unpaid"));
@@ -193,7 +211,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, s
                   {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete</button>}
                   {locked && <span style={s.locked}>Locked</span>}
                 </div>
-                <StripeLinkDetails invoice={invoice} url={stripeUrls[invoice.id] || initialStripeUrl(invoice)} showToast={showToast} />
+                <StripeLinkDetails invoice={invoice} url={stripeUrls[invoice.id] || initialStripeUrl(invoice)} showToast={showToast} onPaid={onRefresh} />
                 {status === "Paid" && (
                   <div className="payment-summary" style={s.paymentSummary}>
                     Paid {invoice.paidDate || "date not recorded"}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}{invoice.paymentReference ? ` · Ref: ${invoice.paymentReference}` : ""}

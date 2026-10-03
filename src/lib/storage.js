@@ -508,16 +508,24 @@ export async function saveWebsiteSettings(settings) {
 
 // ---------- Stripe payment link ----------
 // Asks our server (which holds the Stripe key) for a one-time payment link for this invoice.
+export async function checkStripePayment(invoiceId) {
+  return callStripeApi({ invoiceId, action: "check" });
+}
+
 export async function createPaymentLink(invoiceId) {
+  return (await callStripeApi({ invoiceId })).url;
+}
+
+async function callStripeApi(payload) {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
   if (!token) throw new Error("Please sign in again.");
   const response = await fetch("/api/stripe-payment-link", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ invoiceId }),
+    body: JSON.stringify(payload),
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || "Couldn't create the payment link.");
-  return result.url;
+  if (!response.ok) throw new Error(result.error || "Stripe request failed.");
+  return result;
 }

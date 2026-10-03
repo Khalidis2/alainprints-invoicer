@@ -1,4 +1,4 @@
-import { getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch } from "./_stripe-shared.js";
+import { getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // POST { invoiceId } with the logged-in admin's Supabase token.
 // Returns a Stripe Payment Link for exactly this invoice's total, payable once.
@@ -27,6 +27,24 @@ export default async function handler(request, response) {
 
     const meta = readMeta(row);
     const status = meta.status || "Unpaid";
+
+    // "Check payment": ask Stripe directly whether this invoice's link was paid (backup for the webhook).
+    if (body.action === "check") {
+      if (status === "Paid") return response.status(200).json({ paid: true, already: true });
+      if (!meta.stripeLinkId) return response.status(200).json({ paid: false, reason: "No Stripe link on this invoice yet." });
+      const sessions = await stripe(`/checkout/sessions?payment_link=${encodeURIComponent(meta.stripeLinkId)}&limit=10`);
+      const session = (sessions.data || []).find((entry) => entry.payment_status === "paid");
+      if (!session) return response.status(200).json({ paid: false, reason: "Stripe has no completed payment for this link yet." });
+      await saveInvoiceMeta(row, {
+        status: "Paid",
+        paymentMethod: "Card (Stripe)",
+        paidDate: uaeDate(session.created),
+        paymentReference: session.payment_intent || session.id,
+        stripePaidAmount: session.amount_total,
+      }, token);
+      return response.status(200).json({ paid: true });
+    }
+
     if (status === "Paid") return response.status(409).json({ error: "This invoice is already paid." });
     if (status === "Cancelled") return response.status(409).json({ error: "This invoice is cancelled." });
 

@@ -400,7 +400,7 @@ function Invoicer({ userEmail, onSignOut }) {
           />
         )}
         {tab === "history" && (
-          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} showToast={showToast} />
+          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} onRefresh={refreshInvoices} showToast={showToast} />
         )}
         {tab === "settings" && (
           <WebsiteSettings filaments={filaments} items={items} />

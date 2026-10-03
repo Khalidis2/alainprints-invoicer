@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createPaymentLink } from "../lib/storage";
+import { checkStripePayment, createPaymentLink } from "../lib/storage";
 import { AED } from "../lib/helpers";
 
 // Stripe payment link for an Unpaid invoice: create once, then WhatsApp / copy.
@@ -27,7 +27,8 @@ export function StripeLinkButton({ invoice, onUrl, showToast, compact = false, l
   );
 }
 
-export function StripeLinkDetails({ invoice, url, showToast }) {
+export function StripeLinkDetails({ invoice, url, showToast, onPaid }) {
+  const [checking, setChecking] = useState(false);
   if (!url || (invoice.status || "Unpaid") !== "Unpaid") return null;
   const message = `Hi ${invoice.customer?.name || ""}, here is your payment link for alainprints invoice #${invoice.number} (${AED(invoice.total)}):\n${url}\nThank you!`;
   const copy = async () => {
@@ -51,6 +52,18 @@ export function StripeLinkDetails({ invoice, url, showToast }) {
         <button type="button" style={s.waBtn} onClick={whatsapp}>WhatsApp</button>
         <button type="button" style={s.ghostBtn} onClick={copy}>Copy link</button>
       </div>
+      <button type="button" style={s.checkBtn} disabled={checking} onClick={async () => {
+        setChecking(true);
+        try {
+          const result = await checkStripePayment(invoice.id);
+          showToast?.(result.paid ? "Paid in Stripe: invoice marked Paid" : result.reason || "Not paid yet");
+          if (result.paid) onPaid?.();
+        } catch (error) {
+          showToast?.(error.message);
+        } finally {
+          setChecking(false);
+        }
+      }}>{checking ? "Checking Stripe…" : "Check payment"}</button>
       <div style={s.note}>Marks itself Paid when the customer pays. One payment only.</div>
     </div>
   );
@@ -92,5 +105,6 @@ const s = {
   row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 },
   waBtn: { minHeight: 40, borderRadius: 8, border: "none", background: "#128C4A", color: "#fff", fontWeight: 800, cursor: "pointer" },
   ghostBtn: { minHeight: 40, borderRadius: 8, border: "1.5px solid #635BFF", background: "#fff", color: "#3B3599", fontWeight: 800, cursor: "pointer" },
+  checkBtn: { minHeight: 38, borderRadius: 8, border: "1.5px dashed #635BFF", background: "transparent", color: "#3B3599", fontWeight: 800, cursor: "pointer" },
   note: { color: "#5B5880", fontSize: 11.5 },
 };
