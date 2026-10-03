@@ -103,3 +103,29 @@ function flatten(object, prefix = "", out = {}) {
 export function uaeDate(unixSeconds) {
   return new Date(unixSeconds * 1000).toLocaleDateString("en-CA", { timeZone: "Asia/Dubai" });
 }
+
+// ---------- refunds ----------
+export async function findInvoiceByPaymentIntent(paymentIntent, token) {
+  if (!paymentIntent) return null;
+  for (const field of ["stripePaymentIntent", "paymentReference"]) {
+    const filter = encodeURIComponent(JSON.stringify([{ [field]: paymentIntent }]));
+    const rows = await supabaseFetch(`/rest/v1/invoices?lines=cs.${filter}&select=*`, { token });
+    if (rows?.[0]) return rows[0];
+  }
+  return null;
+}
+
+// Full refund -> "Refunded" (save_invoice puts spools back in stock). Partial refund -> stays Paid, amount noted.
+export async function applyRefund(charge, token) {
+  const row = await findInvoiceByPaymentIntent(charge.payment_intent, token);
+  if (!row) return { ignored: "No matching invoice" };
+  const meta = readMeta(row);
+  const refunded = Number(charge.amount_refunded) || 0;
+  const full = charge.refunded === true || refunded >= Number(charge.amount);
+  if (meta.status === "Refunded" || (!full && Number(meta.stripeRefundedAmount) === refunded)) return { already: true, invoice: row.number };
+  const refundedDate = uaeDate(Math.floor(Date.now() / 1000));
+  await saveInvoiceMeta(row, full
+    ? { status: "Refunded", stripeRefundedAmount: refunded, refundedDate }
+    : { stripeRefundedAmount: refunded, refundedDate }, token);
+  return { marked: full ? "Refunded" : "Partly refunded", invoice: row.number };
+}

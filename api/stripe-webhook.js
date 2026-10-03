@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
+import { applyRefund, env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // Stripe calls this when a payment link is paid. It marks the matching invoice Paid.
 export const config = { api: { bodyParser: false } };
@@ -21,6 +21,8 @@ export default async function handler(request, response) {
     if (!event && posted?.id) event = await stripe(`/events/${posted.id}`);
     if (!event) return response.status(400).json({ error: "Unverified event" });
 
+    if (event.type === "charge.refunded") return response.status(200).json(await applyRefund(event.data.object));
+
     const paidEvents = ["checkout.session.completed", "checkout.session.async_payment_succeeded"];
     if (!paidEvents.includes(event.type)) return response.status(200).json({ ignored: event.type });
 
@@ -36,6 +38,7 @@ export default async function handler(request, response) {
     await saveInvoiceMeta(row, {
       status: "Paid",
       paymentMethod: "Card (Stripe)",
+      stripePaymentIntent: session.payment_intent || "",
       paidDate: uaeDate(session.created || event.created),
       paymentReference: `${session.payment_intent || session.id}${Number(session.amount_total) !== Math.round(Number(row.total) * 100) ? ` (paid AED ${(Number(session.amount_total) / 100).toFixed(2)}, check amount)` : ""}`,
       stripePaidAmount: session.amount_total,

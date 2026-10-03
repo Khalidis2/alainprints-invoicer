@@ -421,6 +421,9 @@ function dbToInvoice(row) {
     stripeLinkId: invoiceMeta?.stripeLinkId ?? "",
     stripeLinkUrl: invoiceMeta?.stripeLinkUrl ?? "",
     stripeLinkAmount: Number(invoiceMeta?.stripeLinkAmount) || 0,
+    stripePaymentIntent: invoiceMeta?.stripePaymentIntent ?? "",
+    stripeRefundedAmount: Number(invoiceMeta?.stripeRefundedAmount) || 0,
+    refundedDate: invoiceMeta?.refundedDate ?? "",
     subtotal: total + discount,
     discount,
     total,
@@ -441,6 +444,8 @@ function invoiceToDb(invoice) {
       paymentReference: invoice.paymentReference ?? "",
       // Keep the Stripe link attached when the invoice is edited or its status changes.
       ...(invoice.stripeLinkId ? { stripeLinkId: invoice.stripeLinkId, stripeLinkUrl: invoice.stripeLinkUrl, stripeLinkAmount: invoice.stripeLinkAmount } : {}),
+      ...(invoice.stripePaymentIntent ? { stripePaymentIntent: invoice.stripePaymentIntent } : {}),
+      ...(invoice.stripeRefundedAmount ? { stripeRefundedAmount: invoice.stripeRefundedAmount, refundedDate: invoice.refundedDate } : {}),
     },
   ];
   return {
@@ -510,6 +515,10 @@ export async function saveWebsiteSettings(settings) {
 // Asks our server (which holds the Stripe key) for a one-time payment link for this invoice.
 export async function checkStripePayment(invoiceId) {
   return callStripeApi({ invoiceId, action: "check" });
+}
+
+export async function syncStripeRefunds() {
+  return callStripeApi({ action: "refunds" });
 }
 
 export async function createPaymentLink(invoiceId) {

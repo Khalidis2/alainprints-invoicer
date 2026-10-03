@@ -2,19 +2,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AED, today } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 import { StripeLinkButton, StripeLinkDetails, initialStripeUrl } from "./StripeLinkPanel";
-import { checkStripePayment } from "../lib/storage";
+import { checkStripePayment, syncStripeRefunds } from "../lib/storage";
 
-const STATUSES = ["Draft", "Unpaid", "Paid", "Cancelled"];
+const STATUSES = ["Draft", "Unpaid", "Paid", "Refunded", "Cancelled"];
 const STATUS_COLOR = {
   Draft: "#6B7280",
   Unpaid: "#B45309",
   Paid: "#047857",
+  Refunded: "#6D28D9",
   Cancelled: "#B91C1C",
 };
 const STATUS_BG = {
   Draft: "#F3F4F6",
   Unpaid: "#FFF7ED",
   Paid: "#ECFDF5",
+  Refunded: "#F5F3FF",
   Cancelled: "#FEF2F2",
 };
 
@@ -28,6 +30,20 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
   const [stripeUrls, setStripeUrls] = useState({});
 
   // Backup for the Stripe webhook: when this tab opens, quietly ask Stripe about unpaid invoices that have a link.
+  const refundsChecked = useRef(false);
+  useEffect(() => {
+    if (refundsChecked.current || !invoices.some((invoice) => invoice.stripeLinkId)) return;
+    refundsChecked.current = true;
+    syncStripeRefunds()
+      .then((result) => {
+        if (result.changed) {
+          showToast(`${result.changed} Stripe refund${result.changed === 1 ? "" : "s"} found: invoice updated, spools back in stock`);
+          onRefresh?.();
+        }
+      })
+      .catch(() => {});
+  }, [invoices, onRefresh, showToast]);
+
   const checkedOnce = useRef(false);
   useEffect(() => {
     if (checkedOnce.current) return;
@@ -79,7 +95,8 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
 
   const updateStatus = async (invoice, nextStatus) => {
     const currentStatus = invoice.status || "Unpaid";
-    if (nextStatus === currentStatus || currentStatus === "Cancelled") return;
+    if (nextStatus === currentStatus || ["Cancelled", "Refunded"].includes(currentStatus)) return;
+    if (nextStatus === "Refunded" && !window.confirm(`Mark INV-${invoice.number} as refunded? Any spools on it go back into stock. Refund the money in Stripe yourself if it was paid by card.`)) return;
     if (nextStatus === "Cancelled" && !window.confirm(`Cancel invoice INV-${invoice.number}? It will remain permanently in history.`)) return;
     setWorkingId(invoice.id);
     try {
@@ -178,7 +195,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
             const status = invoice.status || "Unpaid";
             const editable = ["Draft", "Unpaid"].includes(status);
             const deletable = status === "Draft";
-            const locked = status === "Cancelled";
+            const locked = status === "Cancelled" || status === "Refunded";
             const busy = workingId === invoice.id;
 
             return (
@@ -215,6 +232,16 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
                 {status === "Paid" && (
                   <div className="payment-summary" style={s.paymentSummary}>
                     Paid {invoice.paidDate || "date not recorded"}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}{invoice.paymentReference ? ` · Ref: ${invoice.paymentReference}` : ""}
+                  </div>
+                )}
+                {status === "Refunded" && (
+                  <div className="payment-summary" style={{ ...s.paymentSummary, color: "#6D28D9" }}>
+                    Refunded {invoice.refundedDate || ""}{invoice.stripeRefundedAmount ? ` · ${AED(invoice.stripeRefundedAmount / 100)}` : ""} · spools returned to stock
+                  </div>
+                )}
+                {status === "Paid" && invoice.stripeRefundedAmount > 0 && (
+                  <div className="payment-summary" style={{ ...s.paymentSummary, color: "#6D28D9" }}>
+                    Partly refunded in Stripe: {AED(invoice.stripeRefundedAmount / 100)}
                   </div>
                 )}
               </div>

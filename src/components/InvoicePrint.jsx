@@ -8,6 +8,7 @@ const statusColor = {
   Draft: "#6B7280",
   Unpaid: "#B45309",
   Paid: "#047857",
+  Refunded: "#6D28D9",
   Cancelled: "#B91C1C",
 };
 

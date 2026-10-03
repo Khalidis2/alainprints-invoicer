@@ -1,4 +1,4 @@
-import { getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
+import { applyRefund, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // POST { invoiceId } with the logged-in admin's Supabase token.
 // Returns a Stripe Payment Link for exactly this invoice's total, payable once.
@@ -19,6 +19,15 @@ export default async function handler(request, response) {
     await supabaseFetch("/auth/v1/user", { token });
 
     const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+
+    // "Sync refunds": read recent refund events from Stripe (backup for the webhook).
+    if (body.action === "refunds") {
+      const events = await stripe("/events?type=charge.refunded&limit=50");
+      const results = [];
+      for (const event of events.data || []) results.push(await applyRefund(event.data.object, token));
+      return response.status(200).json({ changed: results.filter((result) => result.marked).length });
+    }
+
     const invoiceId = String(body.invoiceId || "");
     if (!invoiceId) return response.status(400).json({ error: "Missing invoice." });
 
@@ -38,6 +47,7 @@ export default async function handler(request, response) {
       await saveInvoiceMeta(row, {
         status: "Paid",
         paymentMethod: "Card (Stripe)",
+        stripePaymentIntent: session.payment_intent || "",
         paidDate: uaeDate(session.created),
         paymentReference: session.payment_intent || session.id,
         stripePaidAmount: session.amount_total,
