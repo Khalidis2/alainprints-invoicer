@@ -1,4 +1,4 @@
-import { stripe } from "./_stripe-shared.js";
+import { env, stripe } from "./_stripe-shared.js";
 import { SITE_URL, cors, createStoreOrder, getStoreOrder, markStoreOrderPaid, updateStoreOrder } from "./_store-shared.js";
 
 // POST: reserve the website order and open Stripe Checkout for it.
@@ -16,6 +16,10 @@ export default async function handler(request, response) {
     }
 
     const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+    // Fail before reserving stock: without the service key the order can't be read back, paid or released.
+    if (!env("SUPABASE_SERVICE_ROLE_KEY")) {
+      return response.status(503).json({ error: "Card payment is not set up yet. Please order on WhatsApp." });
+    }
     const created = await createStoreOrder(body);
     const order = (await getStoreOrder(`id=eq.${created.id}`)) || created;
     const items = order.store_order_items || [];
