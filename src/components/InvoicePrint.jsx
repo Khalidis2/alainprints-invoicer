@@ -30,6 +30,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
     document.body.appendChild(clone);
 
     try {
+      paginateForPdf(clone);
       const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
@@ -239,3 +240,44 @@ const s = {
   notesTitle: { color: "#1F2937", fontWeight: 800, letterSpacing: 2, marginBottom: 8 },
   footer: { margin: "auto 42px 0", borderTop: "1px solid #CBD5E1", padding: "16px 0 28px", display: "flex", justifyContent: "space-between", fontSize: 9.5, letterSpacing: 0.8, color: "#64748B" },
 };
+
+// The PDF is one tall image cut into A4 slices. Before taking the image, push any row or block
+// that would be cut by a page edge down to the next page, and repeat the table header there.
+function paginateForPdf(sheet) {
+  const pageHeight = (sheet.offsetWidth * 297) / 210;
+  const topGap = 40; // breathing room at the top of continuation pages
+  const sheetTop = () => sheet.getBoundingClientRect().top;
+  const crossesPage = (element) => {
+    const rect = element.getBoundingClientRect();
+    const top = rect.top - sheetTop();
+    const bottom = top + rect.height;
+    return { top, height: rect.height, crosses: Math.floor(top / pageHeight) !== Math.floor((bottom - 1) / pageHeight) };
+  };
+
+  const headerRow = sheet.querySelector(".invoice-table thead tr");
+  sheet.querySelectorAll(".invoice-table tbody tr.invoice-line").forEach((row) => {
+    const { top, height, crosses } = crossesPage(row);
+    if (!crosses || height >= pageHeight) return;
+    const nextPageTop = Math.ceil(top / pageHeight) * pageHeight;
+    const spacer = document.createElement("tr");
+    spacer.className = "pdf-page-spacer";
+    const cell = document.createElement("td");
+    cell.colSpan = row.children.length;
+    cell.style.cssText = `height:${nextPageTop - top + topGap}px;padding:0;border:none;background:#fff`;
+    spacer.appendChild(cell);
+    row.parentNode.insertBefore(spacer, row);
+    if (headerRow) row.parentNode.insertBefore(headerRow.cloneNode(true), row);
+  });
+
+  sheet.querySelectorAll(".invoice-summary, .invoice-notes, .invoice-footer").forEach((block) => {
+    const { top, height, crosses } = crossesPage(block);
+    if (!crosses || height >= pageHeight) return;
+    const nextPageTop = Math.ceil(top / pageHeight) * pageHeight;
+    const current = parseFloat(window.getComputedStyle(block).marginTop) || 0;
+    block.style.setProperty("margin-top", `${current + nextPageTop - top + topGap}px`, "important");
+  });
+
+  // Make the sheet a whole number of pages so the last page isn't a thin strip.
+  const total = sheet.scrollHeight;
+  sheet.style.setProperty("min-height", `${Math.ceil(total / pageHeight) * pageHeight - 1}px`, "important");
+}
