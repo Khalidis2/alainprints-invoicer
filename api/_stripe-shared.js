@@ -18,6 +18,12 @@ export function supabaseConfig() {
 export async function supabaseFetch(path, { token, method = "GET", body } = {}) {
   const { url, anonKey, serviceKey } = supabaseConfig();
   const key = token ? anonKey : serviceKey;
+  if (!url || !key) {
+    throw Object.assign(
+      new Error(token ? "VITE_SUPABASE_ANON_KEY is not set in Vercel." : "SUPABASE_SERVICE_ROLE_KEY is not set in Vercel (Project Settings > Environment Variables), then redeploy."),
+      { status: 500 },
+    );
+  }
   const response = await fetch(`${url}${path}`, {
     method,
     headers: {
