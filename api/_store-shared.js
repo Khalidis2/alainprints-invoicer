@@ -72,7 +72,7 @@ export async function emailOrder(order, headline, note = "") {
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${key.trim()}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from, to: [to], subject: `${headline} · ${order.reference} · ${aed(order.total)}`, html }),
     });
     return response.ok ? { sent: true } : { failed: response.status, detail: await response.text() };
@@ -129,6 +129,6 @@ export async function markStoreOrderPaid(order, { paymentIntent, sessionId, amou
     : Number(amount) && Math.round(Number(order.total) * 100) !== Number(amount)
       ? `Stripe charged AED ${(Number(amount) / 100).toFixed(2)}, order total is AED ${Number(order.total).toFixed(2)}.`
       : "";
-  await emailOrder(full, "New PAID website order", note);
-  return { marked: "paid", reference: order.reference };
+  const email = await emailOrder(full, "New PAID website order", note);
+  return { marked: "paid", reference: order.reference, email };
 }

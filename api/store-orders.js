@@ -13,7 +13,8 @@ export default async function handler(request, response) {
     const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
     const order = await createStoreOrder(body);
     const full = (await getStoreOrder(`id=eq.${order.id}`).catch(() => null)) || order;
-    await emailOrder(full, "New website order (WhatsApp)");
+    const email = await emailOrder(full, "New website order (WhatsApp)");
+    if (!email.sent) console.error("Order email not sent", order.reference, JSON.stringify(email));
 
     response.setHeader("Cache-Control", "no-store");
     return response.status(201).json({
