@@ -45,9 +45,14 @@ export default function StoreOrders({ orders, onStatus, showToast }) {
               ))}
             </ul>
             <div style={s.total}><span>Total</span><strong>{AED(Number(order.total))}</strong></div>
+            <div style={{ ...s.payment, ...(PAYMENT_STYLE[paymentKey(order)] || {}) }}>
+              {paymentLabel(order)}
+              {order.paid_at ? <small style={{ fontWeight: 600, opacity: 0.8 }}> · {new Date(order.paid_at).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
+            </div>
             {order.notes && <p style={s.notes}>{order.notes}</p>}
             {order.status === "pending" && (
               <>
+                {order.payment_method === "card" && order.payment_status !== "paid" ? <p style={s.expiry}>Customer is on the card payment page. If unpaid, the spools go back to stock automatically.</p> : null}
                 <p style={s.expiry}>Reserved until {new Date(order.expires_at).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit" })}</p>
                 <div style={s.actions}>
                   <button style={s.cancel} disabled={busyId === order.id} onClick={() => changeStatus(order, "cancelled")}>Cancel & restore</button>
@@ -63,7 +68,23 @@ export default function StoreOrders({ orders, onStatus, showToast }) {
   );
 }
 
+
+const paymentKey = (order) => (order.payment_status === "paid" ? "paid" : order.payment_status === "refunded" ? "refunded" : order.payment_method === "card" ? "awaiting" : "later");
+const paymentLabel = (order) => ({
+  paid: "Paid by card (Stripe)",
+  refunded: "Refunded in Stripe",
+  awaiting: "Card payment not completed",
+  later: "Pay later · WhatsApp order",
+})[paymentKey(order)];
+const PAYMENT_STYLE = {
+  paid: { background: "#ECFDF5", color: "#047857", borderColor: "#A7F3D0" },
+  refunded: { background: "#F5F3FF", color: "#6D28D9", borderColor: "#DDD6FE" },
+  awaiting: { background: "#FFF7ED", color: "#B45309", borderColor: "#FED7AA" },
+  later: { background: "#F8FAFC", color: "#475569", borderColor: "#E2E8F0" },
+};
+
 const s = {
+  payment: { marginTop: 10, padding: "8px 10px", borderRadius: 8, border: "1px solid", fontSize: 12.5, fontWeight: 800 },
   heading: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "flex-end", marginBottom: 18 },
   title: { margin: 0, fontSize: 24 },
   sub: { margin: "5px 0 0", color: "#8A7F6D", fontSize: 12 },

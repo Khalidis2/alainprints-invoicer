@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder } from "./_store-shared.js";
 import { applyRefund, env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // Stripe calls this when a payment link is paid. It marks the matching invoice Paid.
@@ -21,13 +22,32 @@ export default async function handler(request, response) {
     if (!event && posted?.id) event = await stripe(`/events/${posted.id}`);
     if (!event) return response.status(400).json({ error: "Unverified event" });
 
-    if (event.type === "charge.refunded") return response.status(200).json(await applyRefund(event.data.object));
+    if (event.type === "charge.refunded") {
+      const charge = event.data.object;
+      const storeOrder = charge.payment_intent ? await getStoreOrder(`stripe_payment_intent=eq.${encodeURIComponent(charge.payment_intent)}`).catch(() => null) : null;
+      if (storeOrder) {
+        const full = charge.refunded === true || Number(charge.amount_refunded) >= Number(charge.amount);
+        if (full && storeOrder.payment_status !== "refunded") {
+          await updateStoreOrder(storeOrder.id, { payment_status: "refunded" });
+          await emailOrder({ ...storeOrder, payment_status: "refunded" }, "Website order REFUNDED", "Refunded in Stripe. If the spools were not shipped, cancel the order in the invoicer to put them back in stock.");
+        }
+        return response.status(200).json({ storeOrder: storeOrder.reference, refunded: full });
+      }
+      return response.status(200).json(await applyRefund(charge));
+    }
 
     const paidEvents = ["checkout.session.completed", "checkout.session.async_payment_succeeded"];
     if (!paidEvents.includes(event.type)) return response.status(200).json({ ignored: event.type });
 
     const session = event.data.object;
     if (session.payment_status !== "paid") return response.status(200).json({ waiting: session.payment_status });
+
+    // Website (printtools3d) card order?
+    if (session.metadata?.store_order_id) {
+      const storeOrder = await getStoreOrder(`id=eq.${encodeURIComponent(session.metadata.store_order_id)}`);
+      if (!storeOrder) return response.status(200).json({ ignored: "Store order not found" });
+      return response.status(200).json(await markStoreOrderPaid(storeOrder, { paymentIntent: session.payment_intent, sessionId: session.id, amount: session.amount_total }));
+    }
 
     const row = await findInvoice(session);
     if (!row) return response.status(200).json({ ignored: "No matching invoice" });
