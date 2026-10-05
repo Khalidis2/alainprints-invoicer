@@ -1,8 +1,7 @@
-import crypto from "node:crypto";
-import { env, stripe } from "./_stripe-shared.js";
+import { stripe } from "./_stripe-shared.js";
 import { SITE_URL, cors } from "./_store-shared.js";
 
-// Owner-only AED 2 Stripe Checkout to prove card payments work end to end. Disabled unless CHECKOUT_TEST_CODE is set.
+// Temporary AED 2 Stripe Checkout to prove card payments work end to end. Delete this file when testing is done.
 // It creates no store order and touches no stock; the webhook ignores it (no order or invoice metadata).
 export default async function handler(request, response) {
   cors(request, response, "POST, OPTIONS");
@@ -12,13 +11,6 @@ export default async function handler(request, response) {
     response.setHeader("Allow", "POST, OPTIONS");
     return response.status(405).json({ error: "Method not allowed" });
   }
-
-  const secret = env("CHECKOUT_TEST_CODE");
-  const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
-  const given = String(body.code || "");
-  const a = crypto.createHash("sha256").update(secret).digest();
-  const b = crypto.createHash("sha256").update(given).digest();
-  if (!secret || !crypto.timingSafeEqual(a, b)) return response.status(404).json({ error: "Not found" });
 
   try {
     const session = await stripe("/checkout/sessions", {
