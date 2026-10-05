@@ -42,16 +42,6 @@ export default async function handler(request, response) {
     const session = event.data.object;
     if (session.payment_status !== "paid") return response.status(200).json({ waiting: session.payment_status });
 
-    // Owner's AED 2 payment test: send the order email straight away to prove email works.
-    if (session.metadata?.test_payment) {
-      const email = await emailOrder(
-        { reference: `TEST-${String(session.id).slice(-8)}`, payment_status: "paid", shipping: 0, total: Number(session.amount_total) / 100, customer_name: "Payment test", mobile: "", emirate: "", address: "", store_order_items: [] },
-        "Payment test received",
-        "This is the AED 2 test payment. Card payments and order emails are both working. No order or stock was created.",
-      );
-      return response.status(200).json({ test: true, email });
-    }
-
     // Website (printtools3d) card order?
     if (session.metadata?.store_order_id) {
       const storeOrder = await getStoreOrder(`id=eq.${encodeURIComponent(session.metadata.store_order_id)}`);
