@@ -702,3 +702,24 @@ export async function resendOrderEmail(id) {
   const detail = typeof r.detail === "string" ? r.detail.slice(0, 220) : "";
   return `Not sent: ${result.error || (r.failed ? `Resend ${r.failed}` : "unknown error")}${detail ? ` - ${detail}` : ""}`;
 }
+
+// Real Stripe fee and net amount per payment (from Stripe's balance transaction). Cached for the session.
+const feeCache = new Map();
+export async function fetchStripeFees(paymentIntents) {
+  const wanted = [...new Set(paymentIntents.filter(Boolean))];
+  const missing = wanted.filter((id) => !feeCache.has(id) || feeCache.get(id)?.pending);
+  for (let index = 0; index < missing.length; index += 30) {
+    const chunk = missing.slice(index, index + 30);
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    const response = await fetch("/api/stripe-fees", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ paymentIntents: chunk }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Couldn't load Stripe fees");
+    for (const [id, value] of Object.entries(result.fees || {})) feeCache.set(id, value);
+  }
+  return Object.fromEntries(wanted.map((id) => [id, feeCache.get(id)]));
+}

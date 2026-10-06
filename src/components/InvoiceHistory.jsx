@@ -3,6 +3,7 @@ import { AED, today } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 import { StripeLinkButton, StripeLinkDetails, initialStripeUrl } from "./StripeLinkPanel";
 import { checkStripePayment, syncStripeRefunds } from "../lib/storage";
+import { FeeLine, FeeSummary } from "./StripeFees";
 
 const STATUSES = ["Draft", "Unpaid", "Paid", "Refunded", "Cancelled"];
 const STATUS_COLOR = {
@@ -166,6 +167,8 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
         </div>
       </div>
 
+      <FeeSummary label="Paid by card (Stripe)" payments={invoices.filter((invoice) => invoice.status === "Paid" && invoice.stripePaymentIntent).map((invoice) => ({ paymentIntent: invoice.stripePaymentIntent }))} />
+
       <div className="history-summary" style={s.summaryGrid}>
         <SummaryCard label="Total billed" value={AED(totals.billed)} accent="#16324F" />
         <SummaryCard label="Paid" value={AED(totals.paid)} accent="#047857" />
@@ -232,6 +235,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
                 {status === "Paid" && (
                   <div className="payment-summary" style={s.paymentSummary}>
                     Paid {invoice.paidDate || "date not recorded"}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}{invoice.paymentReference ? ` · Ref: ${invoice.paymentReference}` : ""}
+                    {invoice.stripePaymentIntent ? <FeeLine paymentIntent={invoice.stripePaymentIntent} total={Number(invoice.total)} /> : null}
                   </div>
                 )}
                 {status === "Refunded" && (

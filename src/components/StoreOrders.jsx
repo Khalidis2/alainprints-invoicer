@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import { resendOrderEmail } from "../lib/storage";
+import { FeeLine, FeeSummary } from "./StripeFees";
 
 export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }) {
   const [filter, setFilter] = useState("pending");
@@ -32,6 +33,8 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
         </div>
       </div>
 
+      <FeeSummary label="Paid by card (Stripe)" payments={orders.filter((order) => order.payment_status === "paid" && order.stripe_payment_intent).map((order) => ({ paymentIntent: order.stripe_payment_intent }))} />
+
       {onTestSpool && (
         <div style={s.testBox}>
           <span><strong>Payment test:</strong> adds an AED 2 "Card payment test" item to the store (no delivery fee, nothing ships). Order it by card, then remove it.</span>
@@ -60,6 +63,7 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
               {paymentLabel(order)}
               {order.paid_at ? <small style={{ fontWeight: 600, opacity: 0.8 }}> · {new Date(order.paid_at).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
             </div>
+            {order.payment_status === "paid" && order.stripe_payment_intent ? <FeeLine paymentIntent={order.stripe_payment_intent} total={Number(order.total)} /> : null}
             {order.notes && <p style={s.notes}>{order.notes}</p>}
             <button style={s.resend} disabled={busyId === order.id} onClick={async () => {
               setBusyId(order.id);
