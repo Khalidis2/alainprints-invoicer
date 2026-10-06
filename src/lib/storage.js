@@ -336,7 +336,7 @@ function dbToFilament(row) {
 
 export async function fetchStoreOrders() {
   // Release reservations whose time ran out first, so the list never shows them as pending.
-  await supabase.rpc("expire_store_orders").catch(() => null);
+  try { await supabase.rpc("expire_store_orders"); } catch { /* best effort */ }
   const { data, error } = await supabase
     .from("store_orders")
     .select("*, store_order_items(*)")
