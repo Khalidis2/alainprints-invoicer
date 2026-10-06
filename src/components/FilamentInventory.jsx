@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
+import StockList from "./StockList";
 
 export default function FilamentInventory({ filaments, onUpdate, onReceive, showToast }) {
   const [status, setStatus] = useState("available");
@@ -114,6 +115,8 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
         <Summary label="Available weight" value={`${totals.availableKg.toFixed(1)} kg`} />
         <Summary label="Incoming" value={`${totals.incomingSpools} spools`} />
       </div>
+
+      <StockList filaments={filaments} showToast={showToast} />
 
       <div className="filament-toolbar" style={s.toolbar}>
         <div style={s.tabs}>
