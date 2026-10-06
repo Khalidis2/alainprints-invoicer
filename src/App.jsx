@@ -19,6 +19,10 @@ import {
   syncFilamentInventoryOnce,
   makeAllFilamentKingroon,
   setPetgBasicPrice,
+  addFilamentRow,
+  archiveFilamentRow,
+  restoreFilamentRow,
+  fetchArchivedFilaments,
   updateFilamentRow,
   receiveFilamentRow,
   fetchStoreOrders,
@@ -252,6 +256,18 @@ function Invoicer({ userEmail, onSignOut }) {
     await updateFilamentRow(filament);
     refreshFilaments();
   };
+  const handleAddFilament = async (filament) => {
+    await addFilamentRow(filament);
+    refreshFilaments();
+  };
+  const handleArchiveFilament = async (id) => {
+    await archiveFilamentRow(id);
+    refreshFilaments();
+  };
+  const handleRestoreFilament = async (id) => {
+    await restoreFilamentRow(id);
+    refreshFilaments();
+  };
   const handleReceiveFilament = async (filament) => {
     await receiveFilamentRow(filament);
     refreshFilaments();
@@ -386,6 +402,10 @@ function Invoicer({ userEmail, onSignOut }) {
             filaments={filaments}
             onUpdate={handleUpdateFilament}
             onReceive={handleReceiveFilament}
+            onAdd={handleAddFilament}
+            onArchive={handleArchiveFilament}
+            onRestore={handleRestoreFilament}
+            loadRemoved={fetchArchivedFilaments}
             showToast={showToast}
           />
         )}

@@ -367,6 +367,49 @@ export async function updateFilamentRow(filament) {
   return dbToFilament(data);
 }
 
+// Add a new colour/type. Starts as a normal row; `status` is "available" (in stock now) or "incoming" (on order).
+export async function addFilamentRow({ material, color, spools, sellingPrice, purchaseCost, status, brand = "Kingroon", location = "", notes = "" }) {
+  const count = Math.max(0, Number(spools) || 0);
+  const now = new Date().toISOString();
+  const row = {
+    sku: `AP-${Date.now().toString(36).toUpperCase()}`,
+    brand,
+    material: String(material).trim(),
+    color: String(color).trim(),
+    spool_weight_g: 1000,
+    quantity_spools: count,
+    remaining_g: status === "available" ? count * 1000 : 0,
+    purchase_cost_per_spool: Number(purchaseCost) || 0,
+    selling_price: Number(sellingPrice) || 0,
+    stock_status: status === "incoming" ? "incoming" : "available",
+    location,
+    notes,
+    updated_at: now,
+  };
+  const { data, error } = await supabase.from("filaments").insert(row).select().single();
+  if (error) throw error;
+  return dbToFilament(data);
+}
+
+// "Remove" never deletes data: the row is archived (hidden from stock and the shop) and can be restored.
+export async function archiveFilamentRow(id) {
+  const { error } = await supabase.from("filaments")
+    .update({ notes: "__archived__", remaining_g: 0, quantity_spools: 0, stock_status: "incoming", updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function restoreFilamentRow(id) {
+  const { error } = await supabase.from("filaments").update({ notes: "", stock_status: "available", updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function fetchArchivedFilaments() {
+  const { data, error } = await supabase.from("filaments").select("*").eq("notes", "__archived__").order("material", { ascending: true }).order("color", { ascending: true });
+  if (error) throw error;
+  return data.map(dbToFilament);
+}
+
 export async function receiveFilamentRow(filament) {
   const totalGrams = Number(filament.quantitySpools || 0) * Number(filament.spoolWeightG || 1000);
   const { data, error } = await supabase

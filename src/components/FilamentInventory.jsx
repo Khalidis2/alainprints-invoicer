@@ -1,31 +1,38 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import StockList from "./StockList";
 import ProfitPanel from "./ProfitPanel";
+import { AddFilamentModal, EditFilamentModal } from "./StockEditor";
 
-export default function FilamentInventory({ filaments, onUpdate, onReceive, showToast }) {
+const spoolsOf = (entry) => entry.remainingG / Number(entry.spoolWeightG || 1000);
+const fmt = (value) => (Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : value.toFixed(1));
+
+export default function FilamentInventory({ filaments, onUpdate, onReceive, onAdd, onArchive, onRestore, loadRemoved, showToast }) {
   const [status, setStatus] = useState("available");
   const [query, setQuery] = useState("");
   const [material, setMaterial] = useState("all");
   const [editing, setEditing] = useState(null);
+  const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [removed, setRemoved] = useState([]);
+  const [removedTick, setRemovedTick] = useState(0);
 
-  const materialTypes = useMemo(() => [...new Set(
-    filaments
-      .filter((entry) => entry.stockStatus === status)
-      .map((entry) => entry.material)
-      .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b)), [filaments, status]);
+  useEffect(() => {
+    if (status !== "removed") return;
+    loadRemoved().then(setRemoved).catch(() => showToast("Couldn't load removed filament"));
+  }, [status, removedTick, filaments, loadRemoved, showToast]);
+
+  const source = status === "removed" ? removed : filaments.filter((entry) => entry.stockStatus === status);
+
+  const materialTypes = useMemo(() => [...new Set(source.map((entry) => entry.material).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [source]);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return filaments.filter((entry) => {
-      const matchesStatus = entry.stockStatus === status;
-      const matchesMaterial = material === "all" || entry.material === material;
+    return source.filter((entry) => {
       const text = `${entry.sku} ${entry.brand} ${entry.material} ${entry.color} ${entry.location}`.toLocaleLowerCase();
-      return matchesStatus && matchesMaterial && (!needle || text.includes(needle));
+      return (material === "all" || entry.material === material) && (!needle || text.includes(needle));
     });
-  }, [filaments, material, query, status]);
+  }, [source, material, query]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map();
@@ -38,61 +45,23 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
   }, [rows]);
 
   const totals = useMemo(() => ({
-    availableSpools: filaments.filter((entry) => entry.stockStatus === "available").reduce((sum, entry) => sum + entry.remainingG / entry.spoolWeightG, 0),
+    availableSpools: filaments.filter((entry) => entry.stockStatus === "available").reduce((sum, entry) => sum + spoolsOf(entry), 0),
     incomingSpools: filaments.filter((entry) => entry.stockStatus === "incoming").reduce((sum, entry) => sum + entry.quantitySpools, 0),
     availableKg: filaments.filter((entry) => entry.stockStatus === "available").reduce((sum, entry) => sum + entry.remainingG, 0) / 1000,
   }), [filaments]);
 
-  const save = async () => {
-    if (!editing?.material.trim() || !editing?.color.trim()) return;
-    setBusy(true);
-    try {
-      await onUpdate(editing);
-      setEditing(null);
-      showToast("Filament updated");
-    } catch {
-      showToast("Couldn't update filament");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const adjustStock = async (entry, deltaSpools) => {
-    const spoolWeightG = Number(entry.spoolWeightG || 1000);
-    const remainingG = Math.max(0, Number(entry.remainingG || 0) + deltaSpools * spoolWeightG);
+    const weight = Number(entry.spoolWeightG || 1000);
+    const remainingG = Math.max(0, Number(entry.remainingG || 0) + deltaSpools * weight);
     setBusy(true);
     try {
-      await onUpdate({
-        ...entry,
-        remainingG,
-        quantitySpools: remainingG / spoolWeightG,
-      });
-      showToast(deltaSpools < 0 ? "Removed 1 spool" : "Added 1 spool");
+      await onUpdate({ ...entry, remainingG, quantitySpools: remainingG / weight });
+      showToast(`${entry.color}: ${fmt(remainingG / weight)} in stock`);
     } catch {
-      showToast("Couldn't update filament stock");
+      showToast("Couldn't change the stock");
     } finally {
       setBusy(false);
     }
-  };
-
-  const updateEditingSpools = (value) => {
-    const quantitySpools = Math.max(0, Number(value) || 0);
-    const spoolWeightG = Number(editing.spoolWeightG || 1000);
-    setEditing({
-      ...editing,
-      quantitySpools,
-      remainingG: editing.stockStatus === "available" ? quantitySpools * spoolWeightG : editing.remainingG,
-    });
-  };
-
-  const updateEditingGrams = (value) => {
-    const remainingG = Math.max(0, Number(value) || 0);
-    const spoolWeightG = Number(editing.spoolWeightG || 1000);
-    setEditing({
-      ...editing,
-      remainingG,
-      quantitySpools: remainingG / spoolWeightG,
-    });
   };
 
   const receive = async (entry) => {
@@ -100,9 +69,22 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
     setBusy(true);
     try {
       await onReceive(entry);
-      showToast("Filament moved to available stock");
+      showToast("Moved to stock");
     } catch {
-      showToast("Couldn't receive filament");
+      showToast("Couldn't receive it");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restore = async (entry) => {
+    setBusy(true);
+    try {
+      await onRestore(entry.id);
+      setRemovedTick((tick) => tick + 1);
+      showToast(`${entry.color} restored with 0 spools. Open In stock and press + to add spools.`);
+    } catch {
+      showToast("Couldn't restore it");
     } finally {
       setBusy(false);
     }
@@ -110,11 +92,14 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
 
   return (
     <section>
-      <h2 style={s.title}>Filament inventory</h2>
+      <div style={s.titleRow}>
+        <h2 style={s.title}>Filament stock</h2>
+        <button type="button" style={s.addBtn} onClick={() => setAdding(true)}>＋ Add filament</button>
+      </div>
       <div className="filament-summary" style={s.summary}>
-        <Summary label="Available" value={`${totals.availableSpools.toFixed(1)} spools`} />
-        <Summary label="Available weight" value={`${totals.availableKg.toFixed(1)} kg`} />
-        <Summary label="Incoming" value={`${totals.incomingSpools} spools`} />
+        <Summary label="In stock" value={`${fmt(totals.availableSpools)} spools`} />
+        <Summary label="Weight" value={`${totals.availableKg.toFixed(1)} kg`} />
+        <Summary label="On order" value={`${fmt(totals.incomingSpools)} spools`} />
       </div>
 
       <StockList filaments={filaments} showToast={showToast} />
@@ -122,15 +107,18 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
 
       <div className="filament-toolbar" style={s.toolbar}>
         <div style={s.tabs}>
-          <button style={{ ...s.tab, ...(status === "available" ? s.tabActive : {}) }} onClick={() => setStatus("available")}>Available</button>
-          <button style={{ ...s.tab, ...(status === "incoming" ? s.tabActive : {}) }} onClick={() => setStatus("incoming")}>Incoming</button>
+          {[["available", "In stock"], ["incoming", "On order"], ["removed", "Removed"]].map(([key, label]) => (
+            <button key={key} style={{ ...s.tab, ...(status === key ? s.tabActive : {}) }} onClick={() => { setStatus(key); setMaterial("all"); }}>{label}</button>
+          ))}
         </div>
         <select style={s.typeFilter} value={material} onChange={(event) => setMaterial(event.target.value)} aria-label="Filter by filament type">
           <option value="all">All types</option>
           {materialTypes.map((type) => <option key={type} value={type}>{type}</option>)}
         </select>
-        <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search colour, location or SKU" />
+        <input style={s.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search colour or type" />
       </div>
+
+      {status === "removed" && <p style={s.note}>Removed colours are hidden from your stock and the shop. Nothing is deleted. Press Restore to bring one back.</p>}
 
       <div style={s.groups}>
         {groupedRows.map(([type, entries]) => (
@@ -141,71 +129,53 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
             </div>
             <div className="filament-grid" style={s.grid}>
               {entries.map((entry) => {
-          const low = entry.stockStatus === "available" && entry.remainingG < entry.spoolWeightG;
-          const spoolEquivalent = entry.remainingG / Number(entry.spoolWeightG || 1000);
-          return (
-            <article key={entry.id} style={{ ...s.card, ...(low ? s.lowCard : {}) }}>
-              <div style={s.cardHead}>
-                <div>
-                  <div style={s.material}>{entry.material}</div>
-                  <div style={s.color}>{entry.color}</div>
-                </div>
-                <span style={entry.stockStatus === "available" ? s.available : s.incoming}>{entry.stockStatus}</span>
-              </div>
-              <div style={s.meta}>{entry.brand}{entry.sku ? ` · ${entry.sku}` : ""}</div>
-              {entry.location && <div style={s.location}>📍 {entry.location}</div>}
-              {entry.stockStatus === "available" ? (
-                <>
-                  <div style={s.stock}>{(entry.remainingG / 1000).toFixed(2)} kg remaining</div>
-                  <div style={s.spoolCount}>{spoolEquivalent.toFixed(1)} spool equivalent</div>
-                  <div style={s.stockActions}>
-                    <button style={s.minus} disabled={busy || entry.remainingG <= 0} onClick={() => adjustStock(entry, -1)}>− 1 spool</button>
-                    <button style={s.plus} disabled={busy} onClick={() => adjustStock(entry, 1)}>+ 1 spool</button>
-                  </div>
-                </>
-              ) : (
-                <div style={s.stock}>{entry.quantitySpools} × 1 kg ordered</div>
-              )}
-              <div style={s.price}>Sell {AED(entry.sellingPrice)} · Cost {entry.purchaseCost > 0 ? AED(entry.purchaseCost) : "not set"}</div>
-              <div style={s.actions}>
-                <button style={s.edit} onClick={() => setEditing({ ...entry })}>Edit details</button>
-                {entry.stockStatus === "incoming" && <button style={s.receive} disabled={busy} onClick={() => receive(entry)}>Mark received</button>}
-              </div>
-            </article>
-          );
+                const count = spoolsOf(entry);
+                const low = entry.stockStatus === "available" && count < 1;
+                return (
+                  <article key={entry.id} style={{ ...s.card, ...(low ? s.lowCard : {}), ...(status === "removed" ? s.removedCard : {}) }}>
+                    <div style={s.cardHead}>
+                      <div style={s.color}>{entry.color}</div>
+                      {status === "available" && <span style={low ? s.lowPill : s.okPill}>{low ? "Low" : "OK"}</span>}
+                    </div>
+                    {status === "available" && (
+                      <>
+                        <div style={s.bigCount}>{fmt(count)} <span style={s.unit}>{count === 1 ? "spool" : "spools"}</span></div>
+                        <div style={s.stockActions}>
+                          <button style={s.minus} disabled={busy || entry.remainingG <= 0} onClick={() => adjustStock(entry, -1)} aria-label={`Remove one ${entry.color} spool`}>− 1</button>
+                          <button style={s.plus} disabled={busy} onClick={() => adjustStock(entry, 1)} aria-label={`Add one ${entry.color} spool`}>+ 1</button>
+                        </div>
+                      </>
+                    )}
+                    {status === "incoming" && <div style={s.bigCount}>{fmt(entry.quantitySpools)} <span style={s.unit}>on order</span></div>}
+                    {status === "removed" && <div style={s.unitLine}>Removed</div>}
+                    <div style={s.price}>Sell {AED(entry.sellingPrice)} · Cost {entry.purchaseCost > 0 ? AED(entry.purchaseCost) : "not set"}</div>
+                    <div style={s.actions}>
+                      {status === "removed" ? (
+                        <button style={s.receive} disabled={busy} onClick={() => restore(entry)}>Restore</button>
+                      ) : (
+                        <>
+                          {status === "incoming" && <button style={s.receive} disabled={busy} onClick={() => receive(entry)}>Mark received</button>}
+                          <button style={s.edit} onClick={() => setEditing({ ...entry })}>Edit</button>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                );
               })}
             </div>
           </section>
         ))}
       </div>
 
-      {rows.length === 0 && <div style={s.empty}>No filament matches this view.</div>}
-
-      {editing && (
-        <div style={s.overlay} onClick={() => !busy && setEditing(null)}>
-          <div className="filament-modal" style={s.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 style={s.modalTitle}>Edit filament</h3>
-            <div className="two-column-fields" style={s.formGrid}>
-              <Field label="Brand" value={editing.brand} onChange={(value) => setEditing({ ...editing, brand: value })} />
-              <Field label="SKU" value={editing.sku} onChange={(value) => setEditing({ ...editing, sku: value })} />
-              <Field label="Material" value={editing.material} onChange={(value) => setEditing({ ...editing, material: value })} />
-              <Field label="Colour" value={editing.color} onChange={(value) => setEditing({ ...editing, color: value })} />
-              <Field label={editing.stockStatus === "available" ? "Stock (spool equivalent)" : "Spools ordered"} type="number" min="0" step="0.1" value={editing.quantitySpools} onChange={updateEditingSpools} />
-              <Field label="Remaining grams" type="number" min="0" step="1" value={editing.remainingG} onChange={updateEditingGrams} />
-              <Field label="Cost per spool" type="number" min="0" step="0.01" value={editing.purchaseCost} onChange={(value) => setEditing({ ...editing, purchaseCost: Number(value) })} />
-              <Field label="Selling price" type="number" min="0" step="0.01" value={editing.sellingPrice} onChange={(value) => setEditing({ ...editing, sellingPrice: Number(value) })} />
-              <Field label="Location" value={editing.location} onChange={(value) => setEditing({ ...editing, location: value })} />
-              <Field label="Expected date" type="date" value={editing.expectedDate} onChange={(value) => setEditing({ ...editing, expectedDate: value })} />
-            </div>
-            <label style={s.label}>Notes</label>
-            <textarea style={{ ...s.input, minHeight: 70 }} value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} />
-            <div className="modal-actions" style={s.modalActions}>
-              <button style={s.cancel} disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
-              <button style={s.save} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
-            </div>
-          </div>
+      {rows.length === 0 && (
+        <div style={s.empty}>
+          {status === "removed" ? "Nothing has been removed." : "No filament matches this view."}
+          {status !== "removed" && <div><button type="button" style={{ ...s.addBtn, marginTop: 12 }} onClick={() => setAdding(true)}>＋ Add filament</button></div>}
         </div>
       )}
+
+      {adding && <AddFilamentModal filaments={filaments} onSave={onAdd} onClose={() => setAdding(false)} showToast={showToast} />}
+      {editing && <EditFilamentModal entry={editing} onSave={onUpdate} onRemove={async (id) => { await onArchive(id); setRemovedTick((tick) => tick + 1); }} onClose={() => setEditing(null)} showToast={showToast} />}
     </section>
   );
 }
@@ -214,54 +184,43 @@ function Summary({ label, value }) {
   return <div style={s.summaryCard}><span style={s.summaryLabel}>{label}</span><strong style={s.summaryValue}>{value}</strong></div>;
 }
 
-function Field({ label, value, onChange, type = "text", min, step }) {
-  return <label style={s.label}>{label}<input style={s.input} type={type} min={min} step={step} value={value ?? ""} onChange={(event) => onChange(event.target.value)} /></label>;
-}
-
 const s = {
+  titleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" },
   title: { margin: 0, fontSize: 24 },
+  addBtn: { minHeight: 46, padding: "0 20px", border: 0, borderRadius: 12, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   summary: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, margin: "18px 0" },
   summaryCard: { display: "grid", gap: 5, padding: 14, border: "1px solid #E4DFD3", borderRadius: 10, background: "#fff" },
   summaryLabel: { color: "#8A7F6D", fontSize: 11, fontWeight: 700, textTransform: "uppercase" },
   summaryValue: { color: "#16324F", fontSize: 19 },
-  toolbar: { display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14 },
+  toolbar: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 14 },
   tabs: { display: "flex", gap: 6 },
-  tab: { padding: "9px 13px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#6B6355", fontWeight: 700, cursor: "pointer" },
+  tab: { minHeight: 44, padding: "0 14px", border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#6B6355", fontWeight: 800, cursor: "pointer" },
   tabActive: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
-  typeFilter: { minWidth: 180, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#1B2A3D", fontWeight: 700 },
-  search: { flex: 1, maxWidth: 380, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 8 },
+  typeFilter: { minWidth: 160, minHeight: 44, padding: "0 12px", border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#1B2A3D", fontWeight: 700 },
+  search: { flex: 1, minWidth: 160, maxWidth: 380, minHeight: 44, padding: "0 12px", border: "1px solid #DCD5C6", borderRadius: 10, fontSize: 16 },
+  note: { margin: "0 0 14px", color: "#6B6355", fontSize: 13 },
   groups: { display: "grid", gap: 28 },
   group: { display: "grid", gap: 10 },
   groupHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, paddingBottom: 8, borderBottom: "2px solid #16324F" },
   groupTitle: { margin: 0, color: "#16324F", fontSize: 20 },
   groupCount: { color: "#8A7F6D", fontSize: 12, fontWeight: 700 },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 },
-  card: { padding: 14, border: "1px solid #E4DFD3", borderRadius: 11, background: "#fff" },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 },
+  card: { display: "grid", gap: 8, padding: 14, border: "1px solid #E4DFD3", borderRadius: 14, background: "#fff" },
   lowCard: { borderColor: "#F59E0B", background: "#FFFBEB" },
-  cardHead: { display: "flex", justifyContent: "space-between", gap: 10 },
-  material: { fontWeight: 800, fontSize: 14 },
-  color: { marginTop: 3, fontSize: 16, color: "#16324F" },
-  meta: { marginTop: 10, color: "#8A7F6D", fontSize: 11.5 },
-  location: { marginTop: 6, color: "#6B6355", fontSize: 12, fontWeight: 650 },
-  stock: { marginTop: 12, fontWeight: 850, color: "#16324F" },
-  spoolCount: { marginTop: 3, color: "#6B6355", fontSize: 11.5 },
-  stockActions: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginTop: 10 },
-  minus: { padding: "9px 8px", border: "1px solid #F2B8A2", borderRadius: 7, background: "#FFF7F3", color: "#B3451D", fontWeight: 800, cursor: "pointer" },
-  plus: { padding: "9px 8px", border: "1px solid #A7D7C5", borderRadius: 7, background: "#F0FDF7", color: "#047857", fontWeight: 800, cursor: "pointer" },
-  price: { marginTop: 10, color: "#6B6355", fontSize: 11.5 },
-  available: { alignSelf: "start", padding: "4px 7px", borderRadius: 20, background: "#ECFDF5", color: "#047857", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
-  incoming: { alignSelf: "start", padding: "4px 7px", borderRadius: 20, background: "#EFF6FF", color: "#1D4ED8", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
-  actions: { display: "flex", justifyContent: "flex-end", gap: 7, marginTop: 12 },
-  edit: { padding: "7px 10px", border: "1px solid #DCD5C6", borderRadius: 7, background: "#fff", color: "#2E7D8C", fontWeight: 700, cursor: "pointer" },
-  receive: { padding: "7px 10px", border: "none", borderRadius: 7, background: "#047857", color: "#fff", fontWeight: 800, cursor: "pointer" },
+  removedCard: { opacity: 0.8, background: "#FAF8F3" },
+  cardHead: { display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 },
+  color: { fontSize: 17, fontWeight: 800, color: "#16324F", lineHeight: 1.25 },
+  okPill: { padding: "3px 8px", borderRadius: 20, background: "#ECFDF5", color: "#047857", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
+  lowPill: { padding: "3px 8px", borderRadius: 20, background: "#FEF3C7", color: "#B45309", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
+  bigCount: { fontSize: 34, fontWeight: 900, color: "#16324F", letterSpacing: "-.02em", lineHeight: 1 },
+  unit: { fontSize: 14, fontWeight: 700, color: "#6B6355", letterSpacing: 0 },
+  unitLine: { color: "#8A7F6D", fontWeight: 700 },
+  stockActions: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 },
+  minus: { minHeight: 46, border: "1px solid #F2B8A2", borderRadius: 10, background: "#FFF7F3", color: "#B3451D", fontWeight: 900, fontSize: 18, cursor: "pointer" },
+  plus: { minHeight: 46, border: "1px solid #A7D7C5", borderRadius: 10, background: "#F0FDF7", color: "#047857", fontWeight: 900, fontSize: 18, cursor: "pointer" },
+  price: { color: "#6B6355", fontSize: 12.5 },
+  actions: { display: "flex", justifyContent: "flex-end", gap: 8 },
+  edit: { minHeight: 40, padding: "0 16px", border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#2E7D8C", fontWeight: 800, cursor: "pointer" },
+  receive: { minHeight: 40, padding: "0 14px", border: 0, borderRadius: 10, background: "#047857", color: "#fff", fontWeight: 800, cursor: "pointer" },
   empty: { padding: 30, textAlign: "center", color: "#8A7F6D" },
-  overlay: { position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center", padding: 10, background: "rgba(15,23,42,.52)" },
-  modal: { width: "100%", maxWidth: 620, maxHeight: "calc(100dvh - 20px)", overflowY: "auto", padding: 22, borderRadius: 14, background: "#fff" },
-  modalTitle: { margin: "0 0 14px" },
-  formGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
-  label: { display: "grid", gap: 5, marginTop: 8, color: "#6B6355", fontSize: 11.5, fontWeight: 700 },
-  input: { width: "100%", padding: "9px 10px", border: "1px solid #DCD5C6", borderRadius: 8 },
-  modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 },
-  cancel: { padding: "9px 14px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", fontWeight: 700 },
-  save: { padding: "9px 14px", border: "none", borderRadius: 8, background: "#16324F", color: "#fff", fontWeight: 800 },
 };
