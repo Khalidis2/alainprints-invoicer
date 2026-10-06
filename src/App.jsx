@@ -148,6 +148,8 @@ function Invoicer({ userEmail, onSignOut }) {
       try {
         await syncFilamentInventoryOnce();
         try { await makeAllFilamentKingroon(); } catch (e) { console.error("Kingroon tidy-up failed", e); }
+        // Wakes the server-side one-time price updates (same endpoint the store uses); safe to ignore failures.
+        fetch("/api/store-stock").catch(() => {});
         try { await setPetgBasicPrice(); } catch (e) { console.error("PETG price update failed", e); }
         const [i, inv, n, savedCustomers, savedFilaments, savedStoreOrders] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers(), fetchFilaments(), fetchStoreOrders()]);
         if (cancelled) return;
