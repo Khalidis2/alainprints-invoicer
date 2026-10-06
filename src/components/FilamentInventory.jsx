@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import StockList from "./StockList";
+import ProfitPanel from "./ProfitPanel";
 
 export default function FilamentInventory({ filaments, onUpdate, onReceive, showToast }) {
   const [status, setStatus] = useState("available");
@@ -117,6 +118,7 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, show
       </div>
 
       <StockList filaments={filaments} showToast={showToast} />
+      <ProfitPanel filaments={filaments} onUpdate={onUpdate} showToast={showToast} />
 
       <div className="filament-toolbar" style={s.toolbar}>
         <div style={s.tabs}>
