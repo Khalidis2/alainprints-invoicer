@@ -356,6 +356,13 @@ export async function setStoreOrderStatus(id, status) {
 const TEST_SPOOL_SKU = "TEST-2AED";
 
 export async function setTestSpool(on) {
+  // Retire the earlier hand-made "PLA Basic · TEST" spool so only the payment-test item remains.
+  const { error: legacyError } = await supabase
+    .from("filaments")
+    .update({ stock_status: "incoming", remaining_g: 0, quantity_spools: 0, updated_at: new Date().toISOString() })
+    .eq("material", "PLA Basic")
+    .eq("color", "TEST");
+  if (legacyError) throw legacyError;
   const row = on
     ? { sku: TEST_SPOOL_SKU, brand: "Test", material: "Payment Test", color: "AED 2 checkout", spool_weight_g: 1000, quantity_spools: 1, remaining_g: 1000, selling_price: 2, stock_status: "available", notes: "AED 2 payment test", updated_at: new Date().toISOString() }
     : { sku: TEST_SPOOL_SKU, stock_status: "incoming", remaining_g: 0, quantity_spools: 0, updated_at: new Date().toISOString() };
