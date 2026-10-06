@@ -151,10 +151,10 @@ const FILAMENT_INVENTORY_2026_10_02 = [
   ["AVAILABLE-BASIC-GREEN", "Kingroon", "PLA Basic", "Green", 3, 70],
   ["AVAILABLE-BASIC-BROWN", "Kingroon", "PLA Basic", "Brown", 2, 70],
   ["AVAILABLE-BASIC-BLUE", "Kingroon", "PLA Basic", "Blue", 4, 70],
-  ["AVAILABLE-PETG-BLUE", "Kingroon", "PETG", "Blue", 7, 75],
-  ["AVAILABLE-PETG-WHITE", "Kingroon", "PETG", "White", 1, 75],
-  ["AVAILABLE-PETG-GREEN", "Kingroon", "PETG", "Green", 4, 75],
-  ["AVAILABLE-PETG-RED", "Kingroon", "PETG", "Red", 3, 75],
+  ["AVAILABLE-PETG-BLUE", "Kingroon", "PETG", "Blue", 7, 67],
+  ["AVAILABLE-PETG-WHITE", "Kingroon", "PETG", "White", 1, 67],
+  ["AVAILABLE-PETG-GREEN", "Kingroon", "PETG", "Green", 4, 67],
+  ["AVAILABLE-PETG-RED", "Kingroon", "PETG", "Red", 3, 67],
 
   ["KR-PLA102Y-1CH", "Kingroon", "PLA+", "Black", 10, 70],
   ["KR-PLA101Y-1CH", "Kingroon", "PLA+", "White", 10, 70],
@@ -186,7 +186,7 @@ const FILAMENT_INVENTORY_2026_10_02 = [
 
   ["KR-PETG301Y-1CH", "Kingroon", "PETG Matte", "Black", 30, 75],
   ["KR-PETG302Y-1CH", "Kingroon", "PETG Matte", "White", 35, 75],
-  ["KR-PETG-BASIC-BLACK", "Kingroon", "PETG", "Black", 10, 75],
+  ["KR-PETG-BASIC-BLACK", "Kingroon", "PETG", "Black", 10, 67],
 
   ["KR-Silk212Y-1CH", "Kingroon", "Silk Tricolor", "Gold / Purple / Red / Blue", 5, 90],
   ["KR-Silk202Y-1CH", "Kingroon", "Silk Tricolor", "Red / Green / Blue", 5, 90],
@@ -311,6 +311,23 @@ export async function makeAllFilamentKingroon() {
   }
 
   const { error: settingsError } = await supabase.from("settings").upsert({ key: KINGROON_MERGE_KEY, value: true }, { onConflict: "key" });
+  if (settingsError) throw settingsError;
+  return true;
+}
+
+// One-time: PETG Basic sells at AED 67 per spool (PETG Matte keeps its own price).
+const PETG_PRICE_KEY = "petg_basic_price_67_v1";
+
+export async function setPetgBasicPrice() {
+  const { data: marker, error: markerError } = await supabase.from("settings").select("key").eq("key", PETG_PRICE_KEY).maybeSingle();
+  if (markerError) throw markerError;
+  if (marker) return false;
+  const { error } = await supabase.from("filaments")
+    .update({ selling_price: 67, updated_at: new Date().toISOString() })
+    .eq("material", "PETG")
+    .neq("notes", "__archived__");
+  if (error) throw error;
+  const { error: settingsError } = await supabase.from("settings").upsert({ key: PETG_PRICE_KEY, value: true }, { onConflict: "key" });
   if (settingsError) throw settingsError;
   return true;
 }

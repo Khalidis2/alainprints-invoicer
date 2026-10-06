@@ -18,6 +18,7 @@ import {
   fetchFilaments,
   syncFilamentInventoryOnce,
   makeAllFilamentKingroon,
+  setPetgBasicPrice,
   updateFilamentRow,
   receiveFilamentRow,
   fetchStoreOrders,
@@ -147,6 +148,7 @@ function Invoicer({ userEmail, onSignOut }) {
       try {
         await syncFilamentInventoryOnce();
         try { await makeAllFilamentKingroon(); } catch (e) { console.error("Kingroon tidy-up failed", e); }
+        try { await setPetgBasicPrice(); } catch (e) { console.error("PETG price update failed", e); }
         const [i, inv, n, savedCustomers, savedFilaments, savedStoreOrders] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers(), fetchFilaments(), fetchStoreOrders()]);
         if (cancelled) return;
         setItems(i);
