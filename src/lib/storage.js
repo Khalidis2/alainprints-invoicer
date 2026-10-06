@@ -363,10 +363,20 @@ export async function setTestSpool(on) {
     .eq("material", "PLA Basic")
     .eq("color", "TEST");
   if (legacyError) throw legacyError;
-  const row = on
-    ? { sku: TEST_SPOOL_SKU, brand: "Test", material: "Payment Test", color: "AED 2 checkout", spool_weight_g: 1000, quantity_spools: 1, remaining_g: 1000, selling_price: 2, stock_status: "available", notes: "AED 2 payment test", updated_at: new Date().toISOString() }
-    : { sku: TEST_SPOOL_SKU, stock_status: "incoming", remaining_g: 0, quantity_spools: 0, updated_at: new Date().toISOString() };
-  const { error } = await supabase.from("filaments").upsert(row, { onConflict: "sku" });
+  const now = new Date().toISOString();
+  if (on) {
+    const { error } = await supabase.from("filaments").upsert(
+      { sku: TEST_SPOOL_SKU, brand: "Test", material: "Payment Test", color: "AED 2 checkout", spool_weight_g: 1000, quantity_spools: 1, remaining_g: 1000, selling_price: 2, stock_status: "available", notes: "AED 2 payment test", updated_at: now },
+      { onConflict: "sku" },
+    );
+    if (error) throw error;
+    return;
+  }
+  // Off: update the existing row only (an upsert would try to insert a row without a material).
+  const { error } = await supabase
+    .from("filaments")
+    .update({ stock_status: "incoming", remaining_g: 0, quantity_spools: 0, updated_at: now })
+    .eq("sku", TEST_SPOOL_SKU);
   if (error) throw error;
 }
 
