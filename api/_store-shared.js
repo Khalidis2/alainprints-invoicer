@@ -117,7 +117,39 @@ export async function createStoreOrder(body) {
   return applyDeliveryRule(Array.isArray(data) ? data[0] : data);
 }
 
-export async function markStoreOrderPaid(order, { paymentIntent, sessionId, amount } = {}) {
+// Confirmation email to the customer (the email they typed on Stripe's page). Never throws.
+export async function emailCustomer(order, to) {
+  const key = env("RESEND_API_KEY");
+  if (!key) return { skipped: "RESEND_API_KEY not set" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(to || ""))) return { skipped: "No customer email" };
+  const from = env("ORDER_EMAIL_FROM") || "printtools3d orders <onboarding@resend.dev>";
+  const replyTo = env("ORDER_EMAIL_REPLY_TO") || env("ORDER_EMAIL_TO") || "itsalainprints@gmail.com";
+  const rows = (order.store_order_items || []).map((item) =>
+    `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(item.material)} · ${escapeHtml(item.color)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${escapeHtml(item.quantity)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${aed(item.unit_price * item.quantity)}</td></tr>`).join("");
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#1f2937">
+    <h2 style="margin:0 0 4px">Thank you, your order is confirmed</h2>
+    <p style="margin:0 0 14px;color:#555">Order <b>${escapeHtml(order.reference)}</b> · <b style="color:#047857">PAID BY CARD</b></p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}
+      <tr><td style="padding:6px 8px">Delivery</td><td></td><td style="padding:6px 8px;text-align:right">${Number(order.shipping) === 0 ? "Free" : aed(order.shipping)}</td></tr>
+      <tr><td style="padding:6px 8px"><b>Total paid</b></td><td></td><td style="padding:6px 8px;text-align:right"><b>${aed(order.total)}</b></td></tr>
+    </table>
+    <p style="margin:18px 0 0;line-height:1.6">Delivery to: ${escapeHtml(order.emirate)} · ${escapeHtml(order.address)}<br>We will contact you on ${escapeHtml(order.mobile)} to arrange delivery. Reply to this email or message us on WhatsApp if you need anything.</p>
+    <p style="margin:18px 0 0;color:#6b7280;font-size:12px">printtools3d.com</p>
+  </div>`;
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key.trim()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], reply_to: replyTo, subject: `Your order ${order.reference} is confirmed · ${aed(order.total)}`, html }),
+    });
+    return response.ok ? { sent: true } : { failed: response.status, detail: await response.text() };
+  } catch (error) {
+    return { failed: error.message };
+  }
+}
+
+export async function markStoreOrderPaid(order, { paymentIntent, sessionId, amount, customerEmail } = {}) {
   if (order.payment_status === "paid") return { already: true, reference: order.reference };
   const wasPending = order.status === "pending";
   const updated = await updateStoreOrder(order.id, {
@@ -135,5 +167,7 @@ export async function markStoreOrderPaid(order, { paymentIntent, sessionId, amou
       : "";
   const email = await emailOrder(full, "New PAID website order", note);
   if (!email.sent) console.error("Order email not sent", order.reference, JSON.stringify(email));
-  return { marked: "paid", reference: order.reference, email };
+  const customer = await emailCustomer(full, customerEmail);
+  if (!customer.sent) console.error("Customer email not sent", order.reference, JSON.stringify(customer));
+  return { marked: "paid", reference: order.reference, email, customer };
 }

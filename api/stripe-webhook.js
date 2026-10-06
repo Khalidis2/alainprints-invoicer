@@ -46,7 +46,7 @@ export default async function handler(request, response) {
     if (session.metadata?.store_order_id) {
       const storeOrder = await getStoreOrder(`id=eq.${encodeURIComponent(session.metadata.store_order_id)}`);
       if (!storeOrder) return response.status(200).json({ ignored: "Store order not found" });
-      return response.status(200).json(await markStoreOrderPaid(storeOrder, { paymentIntent: session.payment_intent, sessionId: session.id, amount: session.amount_total }));
+      return response.status(200).json(await markStoreOrderPaid(storeOrder, { paymentIntent: session.payment_intent, sessionId: session.id, amount: session.amount_total, customerEmail: session.customer_details?.email || session.customer_email }));
     }
 
     const row = await findInvoice(session);

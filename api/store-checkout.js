@@ -78,7 +78,7 @@ async function status(request, response) {
     // Webhook may still be on its way: ask Stripe directly.
     const session = await stripe(`/checkout/sessions/${sessionId}`).catch(() => null);
     if (session?.payment_status === "paid") {
-      await markStoreOrderPaid(order, { paymentIntent: session.payment_intent, sessionId, amount: session.amount_total });
+      await markStoreOrderPaid(order, { paymentIntent: session.payment_intent, sessionId, amount: session.amount_total, customerEmail: session.customer_details?.email || session.customer_email });
       order = { ...order, payment_status: "paid" };
     }
   }
