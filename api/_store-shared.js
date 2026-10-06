@@ -52,6 +52,7 @@ export async function emailOrder(order, headline, note = "") {
   if (!key) return { skipped: "RESEND_API_KEY not set" };
   const to = env("ORDER_EMAIL_TO") || "itsalainprints@gmail.com";
   const from = env("ORDER_EMAIL_FROM") || "printtools3d orders <onboarding@resend.dev>";
+  const replyTo = env("ORDER_EMAIL_REPLY_TO") || to;
   const items = order.store_order_items || [];
   const rows = items.map((item) =>
     `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(item.material)} · ${escapeHtml(item.color)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${escapeHtml(item.quantity)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${aed(item.unit_price * item.quantity)}</td></tr>`).join("");
@@ -73,7 +74,7 @@ export async function emailOrder(order, headline, note = "") {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key.trim()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject: `${headline} · ${order.reference} · ${aed(order.total)}`, html }),
+      body: JSON.stringify({ from, to: [to], reply_to: replyTo, subject: `${headline} · ${order.reference} · ${aed(order.total)}`, html }),
     });
     return response.ok ? { sent: true } : { failed: response.status, detail: await response.text() };
   } catch (error) {
