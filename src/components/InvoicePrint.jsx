@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { AED } from "../lib/helpers";
@@ -16,6 +16,11 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
   const [payUrl, setPayUrl] = useState(invoice.stripeLinkUrl && Number(invoice.stripeLinkAmount) === Math.round(Number(invoice.total) * 100) ? invoice.stripeLinkUrl : "");
   const [sharing, setSharing] = useState(false);
   const [receiptMode, setReceiptMode] = useState(false);
+  // iPhone Safari only allows the share sheet straight from a tap, and building the PDF takes a moment.
+  // So the PDF is prepared ahead of time and the tap shares the finished file immediately.
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfError, setPdfError] = useState(false);
+  const building = useRef(null);
   useEffect(() => {
     if (!autoPrint) return undefined;
     const timer = window.setTimeout(() => window.print(), 250);
@@ -62,37 +67,55 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
     }
   };
 
-  const sharePdf = async () => {
-    if (sharing) return;
-    setSharing(true);
-    try {
-      const file = await createPdfFile();
-      if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-        await navigator.share({
-          title: `Invoice INV-${invoice.number}`,
-          text: `Alainprints invoice INV-${invoice.number}`,
-          files: [file],
-        });
-      } else {
-        const url = URL.createObjectURL(file);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = file.name;
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
-    } catch (error) {
-      if (error?.name !== "AbortError") window.alert("Couldn't create the invoice PDF. Please use Print / Save PDF.");
-    } finally {
-      setSharing(false);
+  const prepare = () => {
+    if (!building.current) {
+      building.current = createPdfFile()
+        .then((file) => { setPdfFile(file); setPdfError(false); return file; })
+        .catch((error) => { building.current = null; setPdfError(true); throw error; });
     }
+    return building.current;
   };
 
   useEffect(() => {
-    if (!autoShare) return undefined;
-    const timer = window.setTimeout(() => sharePdf(), 350);
+    // Rebuild whenever the invoice, receipt view or payment link changes what is on the sheet.
+    setPdfFile(null);
+    building.current = null;
+    const timer = window.setTimeout(() => { prepare().catch(() => {}); }, 600);
     return () => window.clearTimeout(timer);
-  }, [autoShare]);
+  }, [invoice, receiptMode, payUrl]);
+
+  const download = (file) => {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+
+  const sharePdf = async () => {
+    if (sharing) return;
+    if (!pdfFile) {
+      // Not finished yet: build it, then ask for one more tap (Safari needs a fresh tap to open the share sheet).
+      setSharing(true);
+      try { await prepare(); } catch { window.alert("Couldn't create the invoice PDF. Please use Print / Save PDF."); }
+      setSharing(false);
+      return;
+    }
+    const data = { title: `Invoice INV-${invoice.number}`, text: `Alainprints invoice INV-${invoice.number}`, files: [pdfFile] };
+    try {
+      if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
+        await navigator.share(data);
+      } else {
+        download(pdfFile);
+      }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      download(pdfFile);
+    }
+  };
 
   const subtotal = invoice.subtotal ?? invoice.total + (invoice.discount || 0);
   const status = invoice.status || "Unpaid";
@@ -104,10 +127,17 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
         <button style={s.secondaryBtn} onClick={onBack}>← {backLabel}</button>
         <div style={s.toolbarButtons}>
           {status === "Paid" && <button style={s.receiptBtn} onClick={() => setReceiptMode((value) => !value)}>{receiptMode ? "Invoice view" : "Receipt view"}</button>}
-          <button style={s.shareBtn} disabled={sharing} onClick={sharePdf}>{sharing ? "Creating PDF…" : "Share PDF"}</button>
+          <button style={s.shareBtn} disabled={sharing} onClick={pdfError && !pdfFile ? () => { building.current = null; setSharing(true); prepare().catch(() => {}).finally(() => setSharing(false)); } : sharePdf}>{sharing || (!pdfFile && !pdfError) ? "Preparing PDF…" : pdfFile ? "Share PDF" : "Retry PDF"}</button>
           <button style={s.primaryBtn} onClick={() => window.print()}>Print / Save PDF</button>
         </div>
       </div>
+
+      {autoShare && (
+        <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 14px", padding: 14, border: "1px solid #047857", borderRadius: 10, background: "#ECFDF5", display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+          <span style={{ color: "#065F46", fontWeight: 700 }}>{pdfFile ? "PDF is ready." : "Preparing the PDF…"}</span>
+          <button style={s.shareBtn} disabled={!pdfFile} onClick={sharePdf}>Share PDF now</button>
+        </div>
+      )}
 
       {showPaymentLink && (invoice.status || "Unpaid") === "Unpaid" && (
         <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 14px" }}>
