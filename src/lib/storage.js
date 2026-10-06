@@ -576,3 +576,20 @@ export async function sendTestEmail() {
   const response = await fetch("/api/email-test", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   return response.json();
 }
+
+// Re-send the email for one website order; resolves with a short message for the toast.
+export async function resendOrderEmail(id) {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const response = await fetch("/api/store-order-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ id }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (result.ok) return `Email sent for ${result.reference}. Check your inbox and spam.`;
+  const r = result.result || {};
+  if (r.skipped) return `Not sent: ${r.skipped}.`;
+  const detail = typeof r.detail === "string" ? r.detail.slice(0, 220) : "";
+  return `Not sent: ${result.error || (r.failed ? `Resend ${r.failed}` : "unknown error")}${detail ? ` - ${detail}` : ""}`;
+}

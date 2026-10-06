@@ -134,5 +134,6 @@ export async function markStoreOrderPaid(order, { paymentIntent, sessionId, amou
       ? `Stripe charged AED ${(Number(amount) / 100).toFixed(2)}, order total is AED ${Number(order.total).toFixed(2)}.`
       : "";
   const email = await emailOrder(full, "New PAID website order", note);
+  if (!email.sent) console.error("Order email not sent", order.reference, JSON.stringify(email));
   return { marked: "paid", reference: order.reference, email };
 }

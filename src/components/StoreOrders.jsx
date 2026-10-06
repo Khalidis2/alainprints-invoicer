@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
+import { resendOrderEmail } from "../lib/storage";
 
 export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }) {
   const [filter, setFilter] = useState("pending");
@@ -60,6 +61,10 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
               {order.paid_at ? <small style={{ fontWeight: 600, opacity: 0.8 }}> · {new Date(order.paid_at).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
             </div>
             {order.notes && <p style={s.notes}>{order.notes}</p>}
+            <button style={s.resend} disabled={busyId === order.id} onClick={async () => {
+              setBusyId(order.id);
+              try { showToast(await resendOrderEmail(order.id)); } catch (error) { showToast(error.message || "Couldn't send"); } finally { setBusyId(null); }
+            }}>Resend email</button>
             {order.status === "pending" && (
               <>
                 {order.payment_method === "card" && order.payment_status !== "paid" ? <p style={s.expiry}>Customer is on the card payment page. If unpaid, the spools go back to stock automatically.</p> : null}
@@ -118,6 +123,7 @@ const s = {
   total: { display: "flex", justifyContent: "space-between", marginTop: 12, color: "#16324F", fontSize: 16 },
   notes: { color: "#8A7F6D", fontSize: 11.5 },
   expiry: { color: "#B45309", fontSize: 11.5 },
+  resend: { marginTop: 10, padding: "7px 10px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#6B6355", fontWeight: 700, fontSize: 12, cursor: "pointer" },
   actions: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 },
   cancel: { padding: 9, border: "1px solid #DC2626", borderRadius: 8, background: "#fff", color: "#B91C1C", fontWeight: 800, cursor: "pointer" },
   confirm: { padding: 9, border: 0, borderRadius: 8, background: "#047857", color: "#fff", fontWeight: 800, cursor: "pointer" },
