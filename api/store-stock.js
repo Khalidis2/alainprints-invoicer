@@ -1,4 +1,5 @@
 import { env, supabaseFetch } from "./_stripe-shared.js";
+import { applyOneTimeFixes } from "./_one-time.js";
 
 // One-time server-side price fix (PETG Basic = AED 67), run by the first store visit after deploy so nobody
 // has to open the admin app. Same marker as the admin app's update, so it never runs twice.
@@ -42,6 +43,7 @@ export default async function handler(request, response) {
 
   try {
     await applyPetgPriceOnce();
+    await applyOneTimeFixes();
     await fetch(`${supabaseUrl}/rest/v1/rpc/expire_store_orders`, {
       method: "POST",
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
