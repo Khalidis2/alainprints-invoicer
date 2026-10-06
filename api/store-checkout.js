@@ -16,6 +16,10 @@ export default async function handler(request, response) {
     }
 
     const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+    const email = String(body.customer?.email || "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return response.status(400).json({ error: "Please enter a valid email address." });
+    }
     // Fail before reserving stock: without the service key the order can't be read back, paid or released.
     if (!env("SUPABASE_SERVICE_ROLE_KEY")) {
       return response.status(503).json({ error: "Card payment is not set up yet. Please order on WhatsApp." });
@@ -55,6 +59,7 @@ export default async function handler(request, response) {
         metadata: ids,
         payment_intent_data: { metadata: ids, description: `printtools3d order ${order.reference}` },
         client_reference_id: order.reference,
+        customer_email: email,
         expires_at: expiresAt,
         success_url: `${SITE_URL}/store/order-success?ref=${encodeURIComponent(order.reference)}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${SITE_URL}/store?payment=cancelled#build-order`,

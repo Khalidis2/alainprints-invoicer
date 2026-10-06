@@ -105,7 +105,7 @@ export async function createStoreOrder(body) {
       p_mobile: String(body.customer?.mobile || ""),
       p_emirate: String(body.customer?.emirate || ""),
       p_address: String(body.customer?.address || ""),
-      p_notes: String(body.customer?.notes || ""),
+      p_notes: [String(body.customer?.notes || ""), body.customer?.email ? `Email: ${String(body.customer.email).trim().slice(0, 120)}` : ""].filter(Boolean).join(" | "),
       p_items: items.map((item) => ({ material: String(item.material || ""), color: String(item.color || ""), quantity: Number(item.quantity || 0) })),
     }),
   });
