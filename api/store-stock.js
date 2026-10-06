@@ -1,3 +1,23 @@
+import { env, supabaseFetch } from "./_stripe-shared.js";
+
+// One-time server-side price fix (PETG Basic = AED 67), run by the first store visit after deploy so nobody
+// has to open the admin app. Same marker as the admin app's update, so it never runs twice.
+const PETG_PRICE_KEY = "petg_basic_price_67_v1";
+let petgPriceDone = false;
+async function applyPetgPriceOnce() {
+  if (petgPriceDone || !env("SUPABASE_SERVICE_ROLE_KEY")) return;
+  try {
+    const marker = await supabaseFetch(`/rest/v1/settings?key=eq.${PETG_PRICE_KEY}&select=key&limit=1`);
+    if (!marker?.length) {
+      await supabaseFetch("/rest/v1/filaments?material=eq.PETG&notes=neq.__archived__", { method: "PATCH", body: { selling_price: 67, updated_at: new Date().toISOString() } });
+      await supabaseFetch("/rest/v1/settings", { method: "POST", body: { key: PETG_PRICE_KEY, value: true } }).catch(() => null);
+    }
+    petgPriceDone = true;
+  } catch {
+    // try again on a later visit
+  }
+}
+
 const allowedOrigins = new Set(["https://www.printtools3d.com", "https://printtools3d.com"]);
 
 export default async function handler(request, response) {
@@ -21,6 +41,7 @@ export default async function handler(request, response) {
   }
 
   try {
+    await applyPetgPriceOnce();
     await fetch(`${supabaseUrl}/rest/v1/rpc/expire_store_orders`, {
       method: "POST",
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
