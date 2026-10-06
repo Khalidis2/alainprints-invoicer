@@ -138,23 +138,23 @@ export async function updateCustomerRow(customer) {
 const FILAMENT_INVENTORY_SEED_KEY = "filament_inventory_2026_10_02_v1";
 
 const FILAMENT_INVENTORY_2026_10_02 = [
-  ["AVAILABLE-MATTE-ORANGE", "Mixed/Unknown", "PLA Matte", "Orange", 1, 70],
-  ["AVAILABLE-MATTE-RED", "Mixed/Unknown", "PLA Matte", "Red", 1, 70],
-  ["AVAILABLE-MATTE-BLACK", "Mixed/Unknown", "PLA Matte", "Black", 4, 70],
-  ["AVAILABLE-MATTE-WHITE", "Mixed/Unknown", "PLA Matte", "White", 4, 70],
-  ["AVAILABLE-HS-BLACK", "Mixed/Unknown", "PLA HS", "Black", 2, 70],
-  ["AVAILABLE-HS-WHITE", "Mixed/Unknown", "PLA HS", "White", 1, 70],
-  ["AVAILABLE-BASIC-SILVER", "Mixed/Unknown", "PLA Basic", "Silver", 4, 70],
-  ["AVAILABLE-BASIC-WHITE", "Mixed/Unknown", "PLA Basic", "White", 2, 70],
-  ["AVAILABLE-BASIC-BLACK", "Mixed/Unknown", "PLA Basic", "Black", 1, 70],
-  ["AVAILABLE-BASIC-RED", "Mixed/Unknown", "PLA Basic", "Red", 2, 70],
-  ["AVAILABLE-BASIC-GREEN", "Mixed/Unknown", "PLA Basic", "Green", 3, 70],
-  ["AVAILABLE-BASIC-BROWN", "Mixed/Unknown", "PLA Basic", "Brown", 2, 70],
-  ["AVAILABLE-BASIC-BLUE", "Mixed/Unknown", "PLA Basic", "Blue", 4, 70],
-  ["AVAILABLE-PETG-BLUE", "Mixed/Unknown", "PETG", "Blue", 7, 75],
-  ["AVAILABLE-PETG-WHITE", "Mixed/Unknown", "PETG", "White", 1, 75],
-  ["AVAILABLE-PETG-GREEN", "Mixed/Unknown", "PETG", "Green", 4, 75],
-  ["AVAILABLE-PETG-RED", "Mixed/Unknown", "PETG", "Red", 3, 75],
+  ["AVAILABLE-MATTE-ORANGE", "Kingroon", "PLA Matte", "Orange", 1, 70],
+  ["AVAILABLE-MATTE-RED", "Kingroon", "PLA Matte", "Red", 1, 70],
+  ["AVAILABLE-MATTE-BLACK", "Kingroon", "PLA Matte", "Black", 4, 70],
+  ["AVAILABLE-MATTE-WHITE", "Kingroon", "PLA Matte", "White", 4, 70],
+  ["AVAILABLE-HS-BLACK", "Kingroon", "PLA HS", "Black", 2, 70],
+  ["AVAILABLE-HS-WHITE", "Kingroon", "PLA HS", "White", 1, 70],
+  ["AVAILABLE-BASIC-SILVER", "Kingroon", "PLA Basic", "Silver", 4, 70],
+  ["AVAILABLE-BASIC-WHITE", "Kingroon", "PLA Basic", "White", 2, 70],
+  ["AVAILABLE-BASIC-BLACK", "Kingroon", "PLA Basic", "Black", 1, 70],
+  ["AVAILABLE-BASIC-RED", "Kingroon", "PLA Basic", "Red", 2, 70],
+  ["AVAILABLE-BASIC-GREEN", "Kingroon", "PLA Basic", "Green", 3, 70],
+  ["AVAILABLE-BASIC-BROWN", "Kingroon", "PLA Basic", "Brown", 2, 70],
+  ["AVAILABLE-BASIC-BLUE", "Kingroon", "PLA Basic", "Blue", 4, 70],
+  ["AVAILABLE-PETG-BLUE", "Kingroon", "PETG", "Blue", 7, 75],
+  ["AVAILABLE-PETG-WHITE", "Kingroon", "PETG", "White", 1, 75],
+  ["AVAILABLE-PETG-GREEN", "Kingroon", "PETG", "Green", 4, 75],
+  ["AVAILABLE-PETG-RED", "Kingroon", "PETG", "Red", 3, 75],
 
   ["KR-PLA102Y-1CH", "Kingroon", "PLA+", "Black", 10, 70],
   ["KR-PLA101Y-1CH", "Kingroon", "PLA+", "White", 10, 70],
@@ -263,6 +263,55 @@ export async function syncFilamentInventoryOnce() {
     .upsert({ key: FILAMENT_INVENTORY_SEED_KEY, value: true }, { onConflict: "key" });
   if (settingsError) throw settingsError;
 
+  return true;
+}
+
+// One-time tidy-up: every filament becomes Kingroon. Unbranded ("Kingroon") stock is added to the
+// matching Kingroon colour (same material + colour) and its old row is archived, so each colour appears once.
+const KINGROON_MERGE_KEY = "filament_all_kingroon_v1";
+
+export async function makeAllFilamentKingroon() {
+  const { data: marker, error: markerError } = await supabase.from("settings").select("key").eq("key", KINGROON_MERGE_KEY).maybeSingle();
+  if (markerError) throw markerError;
+  if (marker) return false;
+
+  const { data: rows, error } = await supabase.from("filaments").select("*").neq("notes", "__archived__");
+  if (error) throw error;
+  const live = rows.filter((row) => row.sku !== TEST_SPOOL_SKU && row.material !== "Payment Test");
+  const keyOf = (row) => `${String(row.material).trim().toLowerCase()}|${String(row.color).trim().toLowerCase()}`;
+  const kingroon = new Map(live.filter((row) => row.brand === "Kingroon").map((row) => [keyOf(row), row]));
+  const now = new Date().toISOString();
+
+  for (const row of live.filter((entry) => entry.brand !== "Kingroon")) {
+    const target = kingroon.get(keyOf(row));
+    const grams = Number(row.remaining_g) || 0;
+    if (target) {
+      const { error: addError } = await supabase.from("filaments")
+        .update({ remaining_g: Number(target.remaining_g) + grams, quantity_spools: Number(target.quantity_spools) + Number(row.quantity_spools), updated_at: now })
+        .eq("id", target.id);
+      if (addError) throw addError;
+      target.remaining_g = Number(target.remaining_g) + grams;
+      target.quantity_spools = Number(target.quantity_spools) + Number(row.quantity_spools);
+      if (grams) {
+        const { error: moveError } = await supabase.from("inventory_movements").insert([
+          { filament_id: target.id, grams_delta: grams, reason: `Merged unbranded ${row.material} ${row.color} stock into Kingroon` },
+          { filament_id: row.id, grams_delta: -grams, reason: "Merged into the Kingroon row" },
+        ]);
+        if (moveError) throw moveError;
+      }
+      const { error: archiveError } = await supabase.from("filaments")
+        .update({ remaining_g: 0, quantity_spools: 0, selling_price: 0, stock_status: "incoming", notes: "__archived__", updated_at: now })
+        .eq("id", row.id);
+      if (archiveError) throw archiveError;
+    } else {
+      const { error: brandError } = await supabase.from("filaments").update({ brand: "Kingroon", updated_at: now }).eq("id", row.id);
+      if (brandError) throw brandError;
+      kingroon.set(keyOf(row), row);
+    }
+  }
+
+  const { error: settingsError } = await supabase.from("settings").upsert({ key: KINGROON_MERGE_KEY, value: true }, { onConflict: "key" });
+  if (settingsError) throw settingsError;
   return true;
 }
 

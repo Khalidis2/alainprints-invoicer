@@ -17,6 +17,7 @@ import {
   updateCustomerRow,
   fetchFilaments,
   syncFilamentInventoryOnce,
+  makeAllFilamentKingroon,
   updateFilamentRow,
   receiveFilamentRow,
   fetchStoreOrders,
@@ -145,6 +146,7 @@ function Invoicer({ userEmail, onSignOut }) {
     (async () => {
       try {
         await syncFilamentInventoryOnce();
+        try { await makeAllFilamentKingroon(); } catch (e) { console.error("Kingroon tidy-up failed", e); }
         const [i, inv, n, savedCustomers, savedFilaments, savedStoreOrders] = await Promise.all([fetchItems(), fetchInvoices(), fetchInvoiceNo(), fetchCustomers(), fetchFilaments(), fetchStoreOrders()]);
         if (cancelled) return;
         setItems(i);
