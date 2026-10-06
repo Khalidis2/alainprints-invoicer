@@ -21,6 +21,7 @@ import {
   receiveFilamentRow,
   fetchStoreOrders,
   setStoreOrderStatus,
+  setTestSpool,
 } from "./lib/storage";
 import ItemsMenu from "./components/ItemsMenu";
 import InvoiceBuilder from "./components/InvoiceBuilder";
@@ -250,8 +251,16 @@ function Invoicer({ userEmail, onSignOut }) {
     refreshFilaments();
   };
   const handleStoreOrderStatus = async (id, status) => {
-    await setStoreOrderStatus(id, status);
-    await Promise.all([refreshStoreOrders(), refreshFilaments()]);
+    try {
+      await setStoreOrderStatus(id, status);
+    } finally {
+      // Also on failure: a reservation that timed out is now "expired", so show it that way.
+      await Promise.all([refreshStoreOrders(), refreshFilaments()]);
+    }
+  };
+  const handleTestSpool = async (on) => {
+    await setTestSpool(on);
+    await refreshFilaments();
   };
 
   const pendingOrders = storeOrders.filter((order) => order.status === "pending").length;
@@ -375,7 +384,7 @@ function Invoicer({ userEmail, onSignOut }) {
           />
         )}
         {tab === "store-orders" && (
-          <StoreOrders orders={storeOrders} onStatus={handleStoreOrderStatus} showToast={showToast} />
+          <StoreOrders orders={storeOrders} onStatus={handleStoreOrderStatus} onTestSpool={handleTestSpool} showToast={showToast} />
         )}
         {tab === "invoice" && (
           <InvoiceBuilder

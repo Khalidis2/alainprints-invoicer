@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 
-export default function StoreOrders({ orders, onStatus, showToast }) {
+export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }) {
   const [filter, setFilter] = useState("pending");
   const [busyId, setBusyId] = useState(null);
   const visible = useMemo(() => orders.filter((order) => filter === "all" || order.status === filter), [filter, orders]);
@@ -14,7 +14,7 @@ export default function StoreOrders({ orders, onStatus, showToast }) {
       await onStatus(order.id, status);
       showToast(status === "confirmed" ? "Order confirmed and stock deducted" : "Order cancelled and stock restored");
     } catch (error) {
-      showToast(error.message || "Couldn't update order");
+      showToast(/only pending/i.test(error.message || "") ? "That reservation had already expired, so its spools are back in stock." : error.message || "Couldn't update order");
     } finally {
       setBusyId(null);
     }
@@ -30,6 +30,16 @@ export default function StoreOrders({ orders, onStatus, showToast }) {
           ))}
         </div>
       </div>
+
+      {onTestSpool && (
+        <div style={s.testBox}>
+          <span><strong>Payment test:</strong> adds one AED 2 spool ("TEST") to the store. Order it by card (AED 22 with delivery), then remove it.</span>
+          <span style={{ display: "flex", gap: 8 }}>
+            <button style={s.filter} onClick={() => onTestSpool(true).then(() => showToast("AED 2 test spool added to the store")).catch((e) => showToast(e.message))}>Add test spool</button>
+            <button style={s.filter} onClick={() => onTestSpool(false).then(() => showToast("Test spool removed from the store")).catch((e) => showToast(e.message))}>Remove test spool</button>
+          </span>
+        </div>
+      )}
 
       <div style={s.grid}>
         {visible.map((order) => (
@@ -91,6 +101,7 @@ const s = {
   filters: { display: "flex", flexWrap: "wrap", gap: 6 },
   filter: { padding: "8px 11px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#6B6355", fontWeight: 700, textTransform: "capitalize", cursor: "pointer" },
   filterActive: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
+  testBox: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 14, padding: "10px 12px", border: "1px dashed #DCD5C6", borderRadius: 10, background: "#FFFDF8", color: "#6B6355", fontSize: 12 },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 12 },
   card: { padding: 16, border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff" },
   cardHead: { display: "flex", justifyContent: "space-between", gap: 12 },

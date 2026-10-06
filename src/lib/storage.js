@@ -335,6 +335,8 @@ function dbToFilament(row) {
 // ---------- store orders ----------
 
 export async function fetchStoreOrders() {
+  // Release reservations whose time ran out first, so the list never shows them as pending.
+  await supabase.rpc("expire_store_orders").catch(() => null);
   const { data, error } = await supabase
     .from("store_orders")
     .select("*, store_order_items(*)")
@@ -348,6 +350,17 @@ export async function setStoreOrderStatus(id, status) {
   const { data, error } = await supabase.rpc("set_store_order_status", { p_order_id: id, p_status: status });
   if (error) throw error;
   return Array.isArray(data) ? data[0] : data;
+}
+
+// Owner payment test: one AED 2 spool that shows in the store like any other product.
+const TEST_SPOOL_SKU = "TEST-2AED";
+
+export async function setTestSpool(on) {
+  const row = on
+    ? { sku: TEST_SPOOL_SKU, brand: "Test", material: "PLA Basic", color: "TEST", spool_weight_g: 1000, quantity_spools: 1, remaining_g: 1000, selling_price: 2, stock_status: "available", notes: "AED 2 payment test", updated_at: new Date().toISOString() }
+    : { sku: TEST_SPOOL_SKU, stock_status: "incoming", remaining_g: 0, quantity_spools: 0, updated_at: new Date().toISOString() };
+  const { error } = await supabase.from("filaments").upsert(row, { onConflict: "sku" });
+  if (error) throw error;
 }
 
 // ---------- invoices ----------
