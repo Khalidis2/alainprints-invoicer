@@ -33,7 +33,7 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
 
       {onTestSpool && (
         <div style={s.testBox}>
-          <span><strong>Payment test:</strong> adds one AED 2 spool ("TEST") to the store. Order it by card (AED 22 with delivery), then remove it.</span>
+          <span><strong>Payment test:</strong> adds an AED 2 "Card payment test" item to the store (no delivery fee, nothing ships). Order it by card, then remove it.</span>
           <span style={{ display: "flex", gap: 8 }}>
             <button style={s.filter} onClick={() => onTestSpool(true).then(() => showToast("AED 2 test spool added to the store")).catch((e) => showToast(e.message))}>Add test spool</button>
             <button style={s.filter} onClick={() => onTestSpool(false).then(() => showToast("Test spool removed from the store")).catch((e) => showToast(e.message))}>Remove test spool</button>

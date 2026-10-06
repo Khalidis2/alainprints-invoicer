@@ -34,7 +34,10 @@ export async function updateStoreOrder(id, patch) {
 export async function applyDeliveryRule(order) {
   if (!env("SUPABASE_SERVICE_ROLE_KEY")) return order;
   const subtotal = Number(order.subtotal);
-  const shipping = deliveryFor(subtotal);
+  // The owner's checkout test (only "Payment Test" items) has no delivery fee.
+  const lines = await supabaseFetch(`/rest/v1/store_order_items?order_id=eq.${encodeURIComponent(order.id)}&select=material`).catch(() => []);
+  const testOnly = Array.isArray(lines) && lines.length > 0 && lines.every((line) => line.material === "Payment Test");
+  const shipping = testOnly ? 0 : deliveryFor(subtotal);
   if (Number(order.shipping) === shipping) return order;
   const rows = await supabaseFetch(`/rest/v1/store_orders?id=eq.${encodeURIComponent(order.id)}`, {
     method: "PATCH",

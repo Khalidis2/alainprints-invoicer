@@ -357,7 +357,7 @@ const TEST_SPOOL_SKU = "TEST-2AED";
 
 export async function setTestSpool(on) {
   const row = on
-    ? { sku: TEST_SPOOL_SKU, brand: "Test", material: "PLA Basic", color: "TEST", spool_weight_g: 1000, quantity_spools: 1, remaining_g: 1000, selling_price: 2, stock_status: "available", notes: "AED 2 payment test", updated_at: new Date().toISOString() }
+    ? { sku: TEST_SPOOL_SKU, brand: "Test", material: "Payment Test", color: "AED 2 checkout", spool_weight_g: 1000, quantity_spools: 1, remaining_g: 1000, selling_price: 2, stock_status: "available", notes: "AED 2 payment test", updated_at: new Date().toISOString() }
     : { sku: TEST_SPOOL_SKU, stock_status: "incoming", remaining_g: 0, quantity_spools: 0, updated_at: new Date().toISOString() };
   const { error } = await supabase.from("filaments").upsert(row, { onConflict: "sku" });
   if (error) throw error;
