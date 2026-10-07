@@ -1,12 +1,19 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 
-const SETTINGS_KEY = "alain_profit_settings_v1";
-const defaults = { margin: 30, feePct: 2.9, feeFixed: 1, step: 1, includeFee: true };
+const SETTINGS_KEY = "alain_profit_settings_v2";
+const OLD_SETTINGS_KEY = "alain_profit_settings_v1";
+// Stripe's real card cost: 2.9% + AED 1.00 per payment, plus 5% VAT on that fee = 3.045% + AED 1.05.
+// Checked against 5 real payments: AED 623.56 paid, fees AED 24.23 (formula gives 24.24).
+const defaults = { margin: 30, feePct: 3.045, feeFixed: 1.05, step: 1, includeFee: true };
 
 function loadSettings() {
   try {
-    return { ...defaults, ...JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || "{}") };
+    const saved = window.localStorage.getItem(SETTINGS_KEY);
+    if (saved) return { ...defaults, ...JSON.parse(saved) };
+    // First time on the new fee: keep the old margin / rounding choices, but use the real fee.
+    const old = JSON.parse(window.localStorage.getItem(OLD_SETTINGS_KEY) || "{}");
+    return { ...defaults, margin: old.margin ?? defaults.margin, step: old.step ?? defaults.step, includeFee: old.includeFee ?? defaults.includeFee };
   } catch {
     return defaults;
   }
@@ -103,8 +110,8 @@ export default function ProfitPanel({ filaments, onUpdate, showToast }) {
 
       <div style={s.settings}>
         <label style={s.field}>Target margin %<input style={s.input} type="number" min="0" max="90" value={settings.margin} onChange={(e) => change({ margin: Number(e.target.value) || 0 })} /></label>
-        <label style={s.field}>Card fee %<input style={s.input} type="number" min="0" step="0.1" value={settings.feePct} onChange={(e) => change({ feePct: Number(e.target.value) || 0 })} /></label>
-        <label style={s.field}>Fixed fee AED<input style={s.input} type="number" min="0" step="0.1" value={settings.feeFixed} onChange={(e) => change({ feeFixed: Number(e.target.value) || 0 })} /></label>
+        <label style={s.field}>Card fee %<input style={s.input} type="number" min="0" step="0.001" value={settings.feePct} onChange={(e) => change({ feePct: Number(e.target.value) || 0 })} /></label>
+        <label style={s.field}>Fixed fee AED<input style={s.input} type="number" min="0" step="0.01" value={settings.feeFixed} onChange={(e) => change({ feeFixed: Number(e.target.value) || 0 })} /></label>
         <label style={s.field}>Round up to<select style={s.input} value={settings.step} onChange={(e) => change({ step: Number(e.target.value) })}><option value={1}>AED 1</option><option value={5}>AED 5</option><option value={0.5}>AED 0.5</option></select></label>
         <label style={{ ...s.field, flexDirection: "row", alignItems: "center", gap: 8 }}><input type="checkbox" checked={settings.includeFee} onChange={(e) => change({ includeFee: e.target.checked })} />Count card fee</label>
       </div>
