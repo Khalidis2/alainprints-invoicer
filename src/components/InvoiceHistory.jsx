@@ -65,6 +65,30 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
       .catch(() => {});
   }, [invoices, onRefresh, showToast]);
 
+  // Owner-supplied list: "these invoices were paid by Stripe link". Finds each payment in Stripe by amount and date.
+  const [manualList, setManualList] = useState("");
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualResult, setManualResult] = useState("");
+  const linkManual = async () => {
+    const numbers = [...new Set(manualList.split(/[^0-9]+/).filter(Boolean))];
+    if (!numbers.length) return;
+    setManualBusy(true);
+    setManualResult("");
+    try {
+      const result = await matchStripePayments(numbers);
+      const parts = [];
+      if (result.matched) parts.push(`${result.matched} linked to Stripe: ${result.details.map((d) => `INV-${d.number}`).join(", ")}`);
+      if (result.unmatched?.length) parts.push(`No single matching Stripe payment found for ${result.unmatched.map((n) => `INV-${n}`).join(", ")}`);
+      if (result.notPaid?.length) parts.push(`Skipped (not Paid, or already linked): ${result.notPaid.map((n) => `INV-${n}`).join(", ")}`);
+      setManualResult(parts.join(". ") + ".");
+      if (result.matched) onRefresh?.();
+    } catch (error) {
+      setManualResult(error.message || "Could not reach Stripe.");
+    } finally {
+      setManualBusy(false);
+    }
+  };
+
   const checkedOnce = useRef(false);
   useEffect(() => {
     if (checkedOnce.current) return;
@@ -188,6 +212,16 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
       </div>
 
       <FeeSummary label="Paid by card (Stripe)" payments={invoices.filter((invoice) => invoice.status === "Paid" && invoice.stripePaymentIntent).map((invoice) => ({ paymentIntent: invoice.stripePaymentIntent }))} />
+
+      <details style={{ margin: "0 0 12px", padding: "10px 12px", border: "1px solid #E4DFD3", borderRadius: 9, background: "#fff" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 800, color: "#16324F", minHeight: 28 }}>Link invoices paid by Stripe link</summary>
+        <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          <small style={{ color: "#6B6355", lineHeight: 1.5 }}>Type the invoice numbers that were paid through a Stripe link (for example 1001, 1005). Each is matched to its Stripe payment by amount and date so the exact fee shows. Only the payment id is saved.</small>
+          <input value={manualList} onChange={(event) => setManualList(event.target.value)} placeholder="1001, 1005, 1008" style={{ minHeight: 44, border: "1px solid #DCD5C6", borderRadius: 8, padding: "0 12px" }} />
+          <button type="button" disabled={manualBusy || !manualList.trim()} onClick={linkManual} style={{ minHeight: 44, border: 0, borderRadius: 8, background: "#16324F", color: "#fff", fontWeight: 800 }}>{manualBusy ? "Matching…" : "Match to Stripe"}</button>
+          {manualResult && <div role="status" style={{ color: "#16324F", fontSize: 13, lineHeight: 1.5 }}>{manualResult}</div>}
+        </div>
+      </details>
 
       {unlinked.length > 0 && (
         <div style={{ margin: "0 0 12px", padding: "10px 12px", border: "1px solid #E4DFD3", borderRadius: 9, background: "#FFF7ED", color: "#92400E", fontSize: 13, lineHeight: 1.5 }}>

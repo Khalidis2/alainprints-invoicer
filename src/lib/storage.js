@@ -672,8 +672,8 @@ export async function syncStripeRefunds() {
   return callStripeApi({ action: "refunds" });
 }
 
-export async function matchStripePayments() {
-  return callStripeApi({ action: "backfill" });
+export async function matchStripePayments(numbers = []) {
+  return callStripeApi({ action: "backfill", numbers });
 }
 
 export async function createPaymentLink(invoiceId) {
