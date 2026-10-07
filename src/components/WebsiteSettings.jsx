@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchWebsiteSettings, saveWebsiteSettings } from "../lib/storage";
 import LiveWebsiteStock from "./LiveWebsiteStock";
 import EmailTest from "./EmailTest";
+import ReviewsPanel from "./ReviewsPanel";
 
 export default function WebsiteSettings({ filaments, items }) {
   const [settings, setSettings] = useState({ storeOpen: true, announcement: "" });
@@ -59,6 +60,7 @@ export default function WebsiteSettings({ filaments, items }) {
         </div>
       </div>
 
+      <ReviewsPanel />
       <EmailTest />
       <LiveWebsiteStock refreshKey={availableSpools} />
 

@@ -650,6 +650,18 @@ export async function saveWebsiteSettings(settings) {
 }
 
 
+// Anonymous customer reviews shown on the website (stored as one settings row).
+export async function fetchReviews() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", "customer_reviews").maybeSingle();
+  if (error) throw error;
+  return Array.isArray(data?.value) ? data.value : [];
+}
+
+export async function saveReviews(reviews) {
+  const { error } = await supabase.from("settings").upsert({ key: "customer_reviews", value: reviews }, { onConflict: "key" });
+  if (error) throw error;
+}
+
 // ---------- Stripe payment link ----------
 // Asks our server (which holds the Stripe key) for a one-time payment link for this invoice.
 export async function checkStripePayment(invoiceId) {
