@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AED, today } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 import { StripeLinkButton, StripeLinkDetails, initialStripeUrl } from "./StripeLinkPanel";
-import { checkStripePayment, syncStripeRefunds } from "../lib/storage";
+import { checkStripePayment, matchStripePayments, syncStripeRefunds } from "../lib/storage";
 import { FeeLine, FeeSummary } from "./StripeFees";
 
 const STATUSES = ["Draft", "Unpaid", "Paid", "Refunded", "Cancelled"];
@@ -39,6 +39,26 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
       .then((result) => {
         if (result.changed) {
           showToast(`${result.changed} Stripe refund${result.changed === 1 ? "" : "s"} found: invoice updated, spools back in stock`);
+          onRefresh?.();
+        }
+      })
+      .catch(() => {});
+  }, [invoices, onRefresh, showToast]);
+
+  // Older card invoices were saved without Stripe's payment id, so their fee could not be read.
+  // Once per visit, attach the id (only the id) so every paid card invoice shows its exact Stripe fee.
+  const matchedOnce = useRef(false);
+  const [unlinked, setUnlinked] = useState([]);
+  useEffect(() => {
+    if (matchedOnce.current) return;
+    const needs = invoices.some((invoice) => invoice.status === "Paid" && !invoice.stripePaymentIntent && (invoice.stripeLinkId || /stripe|card/i.test(invoice.paymentMethod || "")));
+    if (!needs) return;
+    matchedOnce.current = true;
+    matchStripePayments()
+      .then((result) => {
+        setUnlinked(result.unmatched || []);
+        if (result.matched) {
+          showToast(`${result.matched} paid invoice${result.matched === 1 ? "" : "s"} matched to Stripe: exact fees now shown`);
           onRefresh?.();
         }
       })
@@ -168,6 +188,12 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
       </div>
 
       <FeeSummary label="Paid by card (Stripe)" payments={invoices.filter((invoice) => invoice.status === "Paid" && invoice.stripePaymentIntent).map((invoice) => ({ paymentIntent: invoice.stripePaymentIntent }))} />
+
+      {unlinked.length > 0 && (
+        <div style={{ margin: "0 0 12px", padding: "10px 12px", border: "1px solid #E4DFD3", borderRadius: 9, background: "#FFF7ED", color: "#92400E", fontSize: 13, lineHeight: 1.5 }}>
+          No Stripe payment could be found for invoice{unlinked.length === 1 ? "" : "s"} {unlinked.map((n) => `INV-${n}`).join(", ")}. If {unlinked.length === 1 ? "it was" : "they were"} paid by card, the fee cannot be calculated until the payment is linked in Stripe.
+        </div>
+      )}
 
       <div className="history-summary" style={s.summaryGrid}>
         <SummaryCard label="Total billed" value={AED(totals.billed)} accent="#16324F" />

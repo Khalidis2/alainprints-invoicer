@@ -28,6 +28,53 @@ export default async function handler(request, response) {
       return response.status(200).json({ changed: results.filter((result) => result.marked).length });
     }
 
+    // "Match payments": paid card invoices from before the payment id was saved get it attached,
+    // so their real Stripe fee can be read. Only the payment id is added; amounts and status are never changed.
+    if (body.action === "backfill") {
+      const rows = await supabaseFetch("/rest/v1/invoices?select=*&order=number.desc&limit=500", { token });
+      const candidates = (rows || []).filter((row) => {
+        const meta = readMeta(row);
+        return meta.status === "Paid" && !meta.stripePaymentIntent && (meta.stripeLinkId || /stripe|card/i.test(meta.paymentMethod || "") || /pi_[A-Za-z0-9]+/.test(meta.paymentReference || ""));
+      });
+      if (!candidates.length) return response.status(200).json({ checked: 0, matched: 0, unmatched: [] });
+
+      const paidSessions = [];
+      let after = "";
+      for (let page = 0; page < 3; page += 1) {
+        const list = await stripe(`/checkout/sessions?limit=100${after ? `&starting_after=${after}` : ""}`).catch(() => null);
+        if (!list?.data?.length) break;
+        paidSessions.push(...list.data.filter((entry) => entry.payment_status === "paid" && entry.payment_intent));
+        if (!list.has_more) break;
+        after = list.data[list.data.length - 1].id;
+      }
+
+      let matched = 0;
+      const unmatched = [];
+      for (const row of candidates) {
+        const meta = readMeta(row);
+        let intent = "";
+        const fromReference = String(meta.paymentReference || "").match(/pi_[A-Za-z0-9]+/);
+        if (fromReference) {
+          const found = await stripe(`/payment_intents/${fromReference[0]}`).catch(() => null);
+          if (found?.status === "succeeded") intent = found.id;
+        }
+        if (!intent && meta.stripeLinkId) {
+          const sessions = await stripe(`/checkout/sessions?payment_link=${encodeURIComponent(meta.stripeLinkId)}&limit=10`).catch(() => null);
+          intent = (sessions?.data || []).find((entry) => entry.payment_status === "paid" && entry.payment_intent)?.payment_intent || "";
+        }
+        if (!intent) {
+          intent = paidSessions.find((entry) => entry.metadata?.invoice_id === row.id || entry.metadata?.invoice_number === String(row.number))?.payment_intent || "";
+        }
+        if (!intent) {
+          unmatched.push(row.number);
+          continue;
+        }
+        await saveInvoiceMeta(row, { stripePaymentIntent: intent }, token);
+        matched += 1;
+      }
+      return response.status(200).json({ checked: candidates.length, matched, unmatched });
+    }
+
     const invoiceId = String(body.invoiceId || "");
     if (!invoiceId) return response.status(400).json({ error: "Missing invoice." });
 
