@@ -33,7 +33,13 @@ export default async function handler(request, response) {
     if (body.action === "backfill") {
       const rows = await supabaseFetch("/rest/v1/invoices?select=*&order=number.desc&limit=500", { token });
       // Invoice numbers the owner says were paid by Stripe link, even if the app never recorded the method.
-      const forced = new Set((Array.isArray(body.numbers) ? body.numbers : []).map((n) => String(n).replace(/\D/g, "")).filter(Boolean));
+      // Exact pairs: { "1008": "pi_..." }. Verified against Stripe (paid, same amount) before anything is saved.
+      const pairs = {};
+      for (const [number, id] of Object.entries(body.pairs && typeof body.pairs === "object" ? body.pairs : {})) {
+        const clean = String(number).replace(/\D/g, "");
+        if (clean && /^pi_[A-Za-z0-9]+$/.test(String(id))) pairs[clean] = String(id);
+      }
+      const forced = new Set([...(Array.isArray(body.numbers) ? body.numbers : []).map((n) => String(n).replace(/\D/g, "")).filter(Boolean), ...Object.keys(pairs)]);
       const candidates = (rows || []).filter((row) => {
         const meta = readMeta(row);
         if (meta.status !== "Paid" || meta.stripePaymentIntent) return false;
@@ -70,9 +76,21 @@ export default async function handler(request, response) {
       let matched = 0;
       const unmatched = [];
       const details = [];
+      const mismatched = [];
       for (const row of candidates) {
         const meta = readMeta(row);
         let intent = "";
+        const wrong = [];
+        if (pairs[String(row.number)]) {
+          const given = await stripe(`/payment_intents/${pairs[String(row.number)]}`).catch(() => null);
+          const paidCents = Number(given?.amount_received || given?.amount);
+          if (given?.status === "succeeded" && paidCents === Math.round(Number(row.total) * 100) && !used.has(given.id)) intent = given.id;
+          else {
+            unmatched.push(row.number);
+            mismatched.push({ number: row.number, reason: !given ? "Stripe could not find that payment id" : given.status !== "succeeded" ? "that payment did not succeed" : used.has(given.id) ? "that payment is already linked to another invoice" : `Stripe amount is ${(paidCents / 100).toFixed(2)} but the invoice total is ${Number(row.total).toFixed(2)}` });
+            continue;
+          }
+        }
         const fromReference = String(meta.paymentReference || "").match(/pi_[A-Za-z0-9]+/);
         if (fromReference) {
           const found = await stripe(`/payment_intents/${fromReference[0]}`).catch(() => null);
@@ -106,7 +124,7 @@ export default async function handler(request, response) {
         details.push({ number: row.number, paymentIntent: intent });
         matched += 1;
       }
-      return response.status(200).json({ checked: candidates.length, matched, unmatched, notPaid, details });
+      return response.status(200).json({ checked: candidates.length, matched, unmatched, notPaid, details, mismatched });
     }
 
     const invoiceId = String(body.invoiceId || "");
