@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { FeeSummary } from "./StripeFees";
 
 function money(value) {
   return new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED" }).format(Number(value || 0));
@@ -17,6 +18,12 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
     const pendingOrders = storeOrders.filter((order) => order.status === "pending").length;
     return { fullSpools, paidRevenue, pendingOrders };
   }, [filaments, invoices, storeOrders]);
+
+  // Every card payment Stripe has confirmed: website orders and invoices paid by link.
+  const cardPayments = useMemo(() => [
+    ...invoices.filter((invoice) => invoice.status === "Paid" && invoice.stripePaymentIntent).map((invoice) => ({ paymentIntent: invoice.stripePaymentIntent })),
+    ...storeOrders.filter((order) => order.payment_status === "paid" && order.stripe_payment_intent).map((order) => ({ paymentIntent: order.stripe_payment_intent })),
+  ], [invoices, storeOrders]);
 
   const sections = [
     { id: "filament", title: "Filament stock", value: `${metrics.fullSpools} spools`, text: "Update quantities, prices and incoming stock. Changes feed the PrintTools3D Store.", action: "Manage stock" },
@@ -37,6 +44,8 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
         </div>
         <a className="admin-site-link" href="https://www.printtools3d.com" target="_blank" rel="noreferrer">Open live website ↗</a>
       </div>
+
+      <FeeSummary label="Card payments: received after Stripe fees" payments={cardPayments} />
 
       <div className="admin-grid">
         {sections.map((section) => (
