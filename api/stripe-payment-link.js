@@ -1,4 +1,12 @@
-import { applyRefund, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
+import { META_ID, applyRefund, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
+
+// Adds fields to the invoice meta line only. Unlike save_invoice this never re-checks or moves stock,
+// so paid invoices from before can be linked to Stripe without touching the inventory.
+async function linkMetaOnly(row, patch, token) {
+  const lines = (row.lines || []).filter((line) => line.itemId !== META_ID);
+  const meta = { ...readMeta(row), ...patch, itemId: META_ID };
+  await supabaseFetch(`/rest/v1/invoices?id=eq.${encodeURIComponent(row.id)}`, { token, method: "PATCH", body: { lines: [...lines, meta] } });
+}
 
 // POST { invoiceId } with the logged-in admin's Supabase token.
 // Returns a Stripe Payment Link for exactly this invoice's total, payable once.
@@ -120,7 +128,7 @@ export default async function handler(request, response) {
         }
         const patch = { stripePaymentIntent: intent };
         if (forced.has(String(row.number)) && !/stripe/i.test(meta.paymentMethod || "")) patch.paymentMethod = "Card (Stripe)";
-        await saveInvoiceMeta(row, patch, token);
+        await linkMetaOnly(row, patch, token);
         details.push({ number: row.number, paymentIntent: intent });
         matched += 1;
       }
