@@ -36,6 +36,7 @@ import PrintCalculator from "./components/PrintCalculator";
 import Customers from "./components/Customers";
 import FilamentInventory from "./components/FilamentInventory";
 import StoreOrders from "./components/StoreOrders";
+import Sales from "./components/Sales";
 import AdminDashboard from "./components/AdminDashboard";
 import WebsiteSettings from "./components/WebsiteSettings";
 
@@ -291,6 +292,7 @@ function Invoicer({ userEmail, onSignOut }) {
       label: "Store admin",
       tabs: [
         { id: "dashboard", label: "Dashboard" },
+        { id: "sales", label: `All sales${pendingOrders ? ` (${pendingOrders})` : ""}` },
         { id: "filament", label: "Stock" },
         { id: "items", label: "Products" },
         { id: "store-orders", label: `Orders${pendingOrders ? ` (${pendingOrders})` : ""}` },
@@ -378,6 +380,7 @@ function Invoicer({ userEmail, onSignOut }) {
             onNavigate={setTab}
           />
         )}
+        {tab === "sales" && <Sales invoices={invoices} storeOrders={storeOrders} onOpen={setTab} />}
         {tab === "items" && (
           <ItemsMenu
             items={items}
