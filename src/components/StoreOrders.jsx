@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import { resendOrderEmail } from "../lib/storage";
 import { FeeLine, FeeSummary } from "./StripeFees";
+import DeliveryPin, { pinFromNotes, shipmentText, stripPinFromNotes } from "./DeliveryPin";
 
 export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }) {
   // Paid card orders are confirmed automatically, so "pending" alone would hide them. Start on All, newest first.
@@ -69,10 +70,8 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
               {order.paid_at ? <small style={{ fontWeight: 600, opacity: 0.8 }}> · {new Date(order.paid_at).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
             </div>
             {order.payment_status === "paid" && order.stripe_payment_intent ? <FeeLine paymentIntent={order.stripe_payment_intent} total={Number(order.total)} /> : null}
-            {mapsLinkOf(order.notes) && (
-              <a href={mapsLinkOf(order.notes)} target="_blank" rel="noreferrer" style={s.pin}>📍 Open delivery pin in Google Maps</a>
-            )}
-            {order.notes && <p style={s.notes}>{order.notes.replace(MAPS_URL, "").replace(/\s*\|\s*(?:Location pin:)?\s*$/, "").replace(/\s*Location pin:\s*/, " ")}</p>}
+            <DeliveryPin pin={pinFromNotes(order.notes)} address={order.address} emirate={order.emirate} name={order.customer_name} shipment={shipmentText({ reference: order.reference, name: order.customer_name, mobile: order.mobile, emirate: order.emirate, address: order.address, pin: pinFromNotes(order.notes), items: (order.store_order_items || []).map((item) => `${item.quantity} x ${item.material} ${item.color}`), total: order.total, paid: order.payment_status === "paid" })} />
+            {stripPinFromNotes(order.notes) && <p style={s.notes}>{stripPinFromNotes(order.notes)}</p>}
             <button style={s.resend} disabled={busyId === order.id} onClick={async () => {
               setBusyId(order.id);
               try { showToast(await resendOrderEmail(order.id)); } catch (error) { showToast(error.message || "Couldn't send"); } finally { setBusyId(null); }
@@ -96,8 +95,6 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
 }
 
 
-const MAPS_URL = /https:\/\/www\.google\.com\/maps\?q=-?\d+\.\d+,-?\d+\.\d+/;
-const mapsLinkOf = (notes) => (String(notes || "").match(MAPS_URL) || [""])[0];
 
 const paymentKey = (order) => (order.payment_status === "paid" ? "paid" : order.payment_status === "refunded" ? "refunded" : order.payment_method === "card" ? "awaiting" : "later");
 const paymentLabel = (order) => ({
@@ -114,7 +111,6 @@ const PAYMENT_STYLE = {
 };
 
 const s = {
-  pin: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: 44, margin: "10px 0 0", borderRadius: 9, background: "#047857", color: "#fff", fontWeight: 800, fontSize: 13.5, textDecoration: "none" },
   payment: { marginTop: 10, padding: "8px 10px", borderRadius: 8, border: "1px solid", fontSize: 12.5, fontWeight: 800 },
   heading: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "flex-end", marginBottom: 18 },
   title: { margin: 0, fontSize: 24 },

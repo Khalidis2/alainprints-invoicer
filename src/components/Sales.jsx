@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import { FeeLine, FeeSummary } from "./StripeFees";
+import DeliveryPin, { pinFromNotes, shipmentText } from "./DeliveryPin";
 
-const MAPS_URL = /https:\/\/www\.google\.com\/maps\?q=-?\d+\.\d+,-?\d+\.\d+/;
 const waNumber = (phone) => String(phone || "").replace(/[^\d]/g, "").replace(/^0(?=5)/, "971");
 const FILTERS = [
   ["all", "All"],
@@ -54,7 +54,11 @@ function buildEntries(invoices, storeOrders) {
       done: ["cancelled", "expired"].includes(order.status) || order.payment_status === "refunded",
       attention: order.status === "pending",
       intent: paid ? order.stripe_payment_intent : "",
-      pin: (String(order.notes || "").match(MAPS_URL) || [""])[0],
+      pin: pinFromNotes(order.notes),
+      address: order.address,
+      emirate: order.emirate,
+      mobile: order.mobile,
+      items: (order.store_order_items || []).map((item) => `${item.quantity} x ${item.material} ${item.color}`),
       tab: "store-orders",
     };
   });
@@ -115,9 +119,9 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
             </ul>
             <div style={s.totalRow}><span>Total</span><strong>{AED(entry.total)}</strong></div>
             {entry.intent ? <FeeLine paymentIntent={entry.intent} total={entry.total} /> : null}
+            {entry.kind === "order" ? <DeliveryPin pin={entry.pin} address={entry.address} emirate={entry.emirate} name={entry.name} shipment={shipmentText({ reference: entry.ref, name: entry.name, mobile: entry.mobile, emirate: entry.emirate, address: entry.address, pin: entry.pin, items: entry.items, total: entry.total, paid: entry.paid })} /> : null}
             <div style={s.actions}>
               <button type="button" style={s.open} onClick={() => onOpen(entry.tab)}>{entry.kind === "order" ? "Open in Orders" : "Open in Invoices"} →</button>
-              {entry.pin ? <a style={s.link} href={entry.pin} target="_blank" rel="noreferrer">📍 Pin</a> : null}
               {entry.phone ? <a style={s.link} href={`https://wa.me/${waNumber(entry.phone)}`} target="_blank" rel="noreferrer">WhatsApp</a> : null}
             </div>
           </article>
