@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
-import { FeeLine, FeeSummary } from "./StripeFees";
-import DeliveryPin, { pinFromNotes, shipmentText } from "./DeliveryPin";
+import { FeeLine, useStripeFees } from "./StripeFees";
+import DeliveryPin, { pinFromNotes } from "./DeliveryPin";
 
 const waNumber = (phone) => String(phone || "").replace(/[^\d]/g, "").replace(/^0(?=5)/, "971");
 const FILTERS = [
@@ -58,11 +58,67 @@ function buildEntries(invoices, storeOrders) {
       address: order.address,
       emirate: order.emirate,
       mobile: order.mobile,
+      notes: order.notes,
+      quantity: (order.store_order_items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
       items: (order.store_order_items || []).map((item) => `${item.quantity} x ${item.material} ${item.color}`),
       tab: "store-orders",
     };
   });
   return [...fromInvoices, ...fromOrders].sort((a, b) => b.when - a.when);
+}
+
+// Where the money went: everything customers paid, what Stripe kept, and what is really yours.
+function Breakdown({ entries, waiting, waitingTotal }) {
+  const paid = entries.filter((entry) => entry.paid);
+  const card = paid.filter((entry) => entry.intent);
+  const other = paid.filter((entry) => !entry.intent);
+  const ids = useMemo(() => card.map((entry) => entry.intent), [card]);
+  const { fees, status } = useStripeFees(ids);
+
+  const usable = (fee) => fee && !fee.pending && !fee.error && typeof fee.net === "number";
+  const confirmed = card.filter((entry) => usable(fees[entry.intent]));
+  const unconfirmed = card.filter((entry) => !usable(fees[entry.intent]));
+  const cardPaid = confirmed.reduce((sum, entry) => sum + fees[entry.intent].gross, 0);
+  const cardFees = confirmed.reduce((sum, entry) => sum + fees[entry.intent].fee, 0);
+  const cardNet = confirmed.reduce((sum, entry) => sum + fees[entry.intent].net, 0);
+  const otherPaid = other.reduce((sum, entry) => sum + entry.total, 0);
+  const unconfirmedPaid = unconfirmed.reduce((sum, entry) => sum + entry.total, 0);
+  const totalPaid = cardPaid + otherPaid + unconfirmedPaid;
+  const youKeep = cardNet + otherPaid + unconfirmedPaid;
+
+  return (
+    <div style={s.break}>
+      <div style={s.keep}>
+        <small>You keep, after Stripe fees</small>
+        <b style={{ fontSize: 28 }}>{AED(youKeep)}</b>
+        <span>{status === "loading" ? "Checking Stripe…" : `${paid.length} paid · ${AED(totalPaid)} paid by customers − ${AED(cardFees)} Stripe fees`}</span>
+      </div>
+      <div style={s.parts}>
+        <div style={s.part}>
+          <strong>💳 Card (Stripe)</strong>
+          <small>{confirmed.length} payment{confirmed.length === 1 ? "" : "s"}, fees taken by Stripe</small>
+          <div style={s.line}><span>Customers paid</span><b>{AED(cardPaid)}</b></div>
+          <div style={s.line}><span>Stripe fees</span><b style={{ color: "#B3451D" }}>− {AED(cardFees)}</b></div>
+          <div style={{ ...s.line, ...s.lineNet }}><span>You receive</span><b>{AED(cardNet)}</b></div>
+        </div>
+        <div style={s.part}>
+          <strong>💵 Cash, bank &amp; other</strong>
+          <small>{other.length} payment{other.length === 1 ? "" : "s"}, no Stripe fee</small>
+          <div style={s.line}><span>Customers paid</span><b>{AED(otherPaid)}</b></div>
+          <div style={s.line}><span>Fees</span><b>AED 0.00</b></div>
+          <div style={{ ...s.line, ...s.lineNet }}><span>You receive</span><b>{AED(otherPaid)}</b></div>
+        </div>
+        <div style={{ ...s.part, ...s.partWait }}>
+          <strong>⏳ Waiting</strong>
+          <small>{waiting.length} unpaid or pending</small>
+          <div style={{ ...s.line, ...s.lineNet, color: "#B45309" }}><span>Not received yet</span><b>{AED(waitingTotal)}</b></div>
+        </div>
+      </div>
+      {unconfirmed.length > 0 && status !== "loading" && (
+        <small style={s.warnNote}>{unconfirmed.length} card payment{unconfirmed.length === 1 ? " is" : "s are"} not confirmed by Stripe yet, so {unconfirmed.length === 1 ? "it is" : "they are"} counted without a fee ({AED(unconfirmedPaid)}).</small>
+      )}
+    </div>
+  );
 }
 
 export default function Sales({ invoices, storeOrders, onOpen }) {
@@ -75,10 +131,8 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
     if (filter === "invoices") return entry.kind === "invoice";
     return true;
   });
-  const paidTotal = entries.filter((entry) => entry.paid).reduce((sum, entry) => sum + entry.total, 0);
   const waiting = entries.filter((entry) => entry.attention);
   const waitingTotal = waiting.reduce((sum, entry) => sum + entry.total, 0);
-  const cardPayments = entries.filter((entry) => entry.intent).map((entry) => ({ paymentIntent: entry.intent }));
   const count = (id) => entries.filter((entry) => (id === "attention" ? entry.attention : id === "paid" ? entry.paid : id === "orders" ? entry.kind === "order" : id === "invoices" ? entry.kind === "invoice" : true)).length;
 
   return (
@@ -88,12 +142,7 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
         <p style={s.sub}>Website orders and invoices together, newest first. Tap a row to open it.</p>
       </div>
 
-      <div style={s.cards}>
-        <div style={s.stat}><small>Paid</small><b style={{ color: "#047857" }}>{AED(paidTotal)}</b></div>
-        <div style={s.stat}><small>Waiting ({waiting.length})</small><b style={{ color: "#B45309" }}>{AED(waitingTotal)}</b></div>
-      </div>
-
-      <FeeSummary label="Card payments: received after Stripe fees" payments={cardPayments} />
+      <Breakdown entries={entries} waiting={waiting} waitingTotal={waitingTotal} />
 
       <div style={s.filters} role="group" aria-label="Filter sales">
         {FILTERS.map(([id, label]) => (
@@ -119,7 +168,7 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
             </ul>
             <div style={s.totalRow}><span>Total</span><strong>{AED(entry.total)}</strong></div>
             {entry.intent ? <FeeLine paymentIntent={entry.intent} total={entry.total} /> : null}
-            {entry.kind === "order" ? <DeliveryPin pin={entry.pin} address={entry.address} emirate={entry.emirate} name={entry.name} shipment={shipmentText({ reference: entry.ref, name: entry.name, mobile: entry.mobile, emirate: entry.emirate, address: entry.address, pin: entry.pin, items: entry.items, total: entry.total, paid: entry.paid })} /> : null}
+            {entry.kind === "order" ? <DeliveryPin pin={entry.pin} address={entry.address} emirate={entry.emirate} name={entry.name} ship={{ reference: entry.ref, name: entry.name, mobile: entry.mobile, notes: entry.notes, emirate: entry.emirate, address: entry.address, pin: entry.pin, items: entry.items, quantity: entry.quantity, total: entry.total, paid: entry.paid }} /> : null}
             <div style={s.actions}>
               <button type="button" style={s.open} onClick={() => onOpen(entry.tab)}>{entry.kind === "order" ? "Open in Orders" : "Open in Invoices"} →</button>
               {entry.phone ? <a style={s.link} href={`https://wa.me/${waNumber(entry.phone)}`} target="_blank" rel="noreferrer">WhatsApp</a> : null}
@@ -133,6 +182,14 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
 }
 
 const s = {
+  break: { display: "grid", gap: 10, margin: "0 0 16px", padding: 14, border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff" },
+  keep: { display: "grid", gap: 3, padding: "12px 14px", border: "1px solid #A7D7C5", borderRadius: 10, background: "#F0FDF7", color: "#047857" },
+  parts: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 },
+  part: { display: "grid", gap: 5, padding: "12px 14px", border: "1px solid #EFEAE0", borderRadius: 10, background: "#FBFAF6", color: "#3F3A30", fontSize: 13 },
+  partWait: { background: "#FFF7ED", borderColor: "#FED7AA" },
+  line: { display: "flex", justifyContent: "space-between", gap: 10, color: "#6B6355" },
+  lineNet: { paddingTop: 5, borderTop: "1px dashed #DCD5C6", color: "#047857", fontWeight: 800 },
+  warnNote: { color: "#B45309", lineHeight: 1.45 },
   heading: { marginBottom: 14 },
   title: { margin: 0, fontSize: 24 },
   sub: { margin: "5px 0 0", color: "#8A7F6D", fontSize: 13 },

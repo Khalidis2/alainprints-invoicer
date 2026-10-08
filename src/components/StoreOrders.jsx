@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import { resendOrderEmail } from "../lib/storage";
 import { FeeLine, FeeSummary } from "./StripeFees";
-import DeliveryPin, { pinFromNotes, shipmentText, stripPinFromNotes } from "./DeliveryPin";
+import DeliveryPin, { pinFromNotes, stripPinFromNotes } from "./DeliveryPin";
 
 export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }) {
   // Paid card orders are confirmed automatically, so "pending" alone would hide them. Start on All, newest first.
@@ -70,7 +70,7 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
               {order.paid_at ? <small style={{ fontWeight: 600, opacity: 0.8 }}> · {new Date(order.paid_at).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
             </div>
             {order.payment_status === "paid" && order.stripe_payment_intent ? <FeeLine paymentIntent={order.stripe_payment_intent} total={Number(order.total)} /> : null}
-            <DeliveryPin pin={pinFromNotes(order.notes)} address={order.address} emirate={order.emirate} name={order.customer_name} shipment={shipmentText({ reference: order.reference, name: order.customer_name, mobile: order.mobile, emirate: order.emirate, address: order.address, pin: pinFromNotes(order.notes), items: (order.store_order_items || []).map((item) => `${item.quantity} x ${item.material} ${item.color}`), total: order.total, paid: order.payment_status === "paid" })} />
+            <DeliveryPin pin={pinFromNotes(order.notes)} address={order.address} emirate={order.emirate} name={order.customer_name} ship={{ reference: order.reference, name: order.customer_name, mobile: order.mobile, notes: order.notes, emirate: order.emirate, address: order.address, pin: pinFromNotes(order.notes), items: (order.store_order_items || []).map((item) => `${item.quantity} x ${item.material} ${item.color}`), quantity: (order.store_order_items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0), total: order.total, paid: order.payment_status === "paid" }} />
             {stripPinFromNotes(order.notes) && <p style={s.notes}>{stripPinFromNotes(order.notes)}</p>}
             <button style={s.resend} disabled={busyId === order.id} onClick={async () => {
               setBusyId(order.id);
