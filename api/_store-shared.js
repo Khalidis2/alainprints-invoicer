@@ -47,6 +47,12 @@ export async function applyDeliveryRule(order) {
 }
 
 const aed = (value) => `AED ${Number(value || 0).toFixed(2)}`;
+// The delivery pin saved in the order notes, if the customer shared one.
+export function mapsUrl(notes) {
+  const match = String(notes || "").match(/https:\/\/www\.google\.com\/maps\?q=-?\d+\.\d+,-?\d+\.\d+/);
+  return match ? match[0] : "";
+}
+
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // Email to the shop owner via Resend. Never throws: an email problem must not break an order.
@@ -71,6 +77,7 @@ export async function emailOrder(order, headline, note = "") {
     </table>
     <h3 style="margin:18px 0 6px">Customer</h3>
     <p style="margin:0;line-height:1.6">${escapeHtml(order.customer_name)}<br>${escapeHtml(order.mobile)}<br>${escapeHtml(order.emirate)} · ${escapeHtml(order.address)}${order.notes ? `<br>Notes: ${escapeHtml(order.notes)}` : ""}</p>
+    ${mapsUrl(order.notes) ? `<p style="margin:12px 0 0"><a href="${escapeHtml(mapsUrl(order.notes))}" style="display:inline-block;padding:10px 14px;background:#047857;color:#fff;border-radius:6px;text-decoration:none">📍 Open the customer's pin in Google Maps</a></p>` : ""}
     <p style="margin:18px 0 0"><a href="https://wa.me/${escapeHtml(String(order.mobile).replace(/[^\d]/g, "").replace(/^0(?=5)/, "971"))}" style="color:#047857">WhatsApp the customer</a> · <a href="https://alainprints-invoicer.vercel.app/" style="color:#1d4ed8">Open invoicer → Orders</a></p>
   </div>`;
   try {
@@ -97,6 +104,11 @@ export async function createStoreOrder(body) {
   const anonKey = env("VITE_SUPABASE_ANON_KEY") || env("SUPABASE_ANON_KEY");
   if (!url || !anonKey) throw Object.assign(new Error("Order service is not configured"), { status: 500 });
 
+  // Optional delivery pin "lat,lng,accuracy": only plain numbers inside the UAE area become a Google Maps link.
+  const pinParts = String(body.customer?.pin || "").split(",").map(Number);
+  const pinOk = pinParts.length >= 2 && Number.isFinite(pinParts[0]) && Number.isFinite(pinParts[1]) && pinParts[0] >= 22 && pinParts[0] <= 27 && pinParts[1] >= 51 && pinParts[1] <= 57;
+  const pinNote = pinOk ? `Location pin: https://www.google.com/maps?q=${pinParts[0].toFixed(6)},${pinParts[1].toFixed(6)}` : "";
+
   const result = await fetch(`${url}/rest/v1/rpc/create_store_order`, {
     method: "POST",
     headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
@@ -105,7 +117,7 @@ export async function createStoreOrder(body) {
       p_mobile: String(body.customer?.mobile || ""),
       p_emirate: String(body.customer?.emirate || ""),
       p_address: String(body.customer?.address || ""),
-      p_notes: [String(body.customer?.notes || ""), body.customer?.email ? `Email: ${String(body.customer.email).trim().slice(0, 120)}` : ""].filter(Boolean).join(" | "),
+      p_notes: [String(body.customer?.notes || ""), body.customer?.email ? `Email: ${String(body.customer.email).trim().slice(0, 120)}` : "", pinNote].filter(Boolean).join(" | "),
       p_items: items.map((item) => ({ material: String(item.material || ""), color: String(item.color || ""), quantity: Number(item.quantity || 0) })),
     }),
   });

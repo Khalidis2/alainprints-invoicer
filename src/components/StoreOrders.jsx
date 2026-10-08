@@ -4,9 +4,14 @@ import { resendOrderEmail } from "../lib/storage";
 import { FeeLine, FeeSummary } from "./StripeFees";
 
 export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }) {
-  const [filter, setFilter] = useState("pending");
+  // Paid card orders are confirmed automatically, so "pending" alone would hide them. Start on All, newest first.
+  const [filter, setFilter] = useState("all");
   const [busyId, setBusyId] = useState(null);
-  const visible = useMemo(() => orders.filter((order) => filter === "all" || order.status === filter), [filter, orders]);
+  const visible = useMemo(
+    () => orders.filter((order) => filter === "all" || order.status === filter).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+    [filter, orders],
+  );
+  const count = (status) => (status === "all" ? orders.length : orders.filter((order) => order.status === status).length);
   const pending = orders.filter((order) => order.status === "pending").length;
 
   const changeStatus = async (order, status) => {
@@ -27,8 +32,8 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
       <div style={s.heading}>
         <div><h2 style={s.title}>Store orders</h2><p style={s.sub}>{pending} pending reservation{pending === 1 ? "" : "s"}</p></div>
         <div style={s.filters}>
-          {["pending", "confirmed", "cancelled", "expired", "all"].map((status) => (
-            <button key={status} style={{ ...s.filter, ...(filter === status ? s.filterActive : {}) }} onClick={() => setFilter(status)}>{status}</button>
+          {["all", "pending", "confirmed", "cancelled", "expired"].map((status) => (
+            <button key={status} style={{ ...s.filter, ...(filter === status ? s.filterActive : {}) }} onClick={() => setFilter(status)}>{status} ({count(status)})</button>
           ))}
         </div>
       </div>
@@ -64,7 +69,10 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
               {order.paid_at ? <small style={{ fontWeight: 600, opacity: 0.8 }}> · {new Date(order.paid_at).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
             </div>
             {order.payment_status === "paid" && order.stripe_payment_intent ? <FeeLine paymentIntent={order.stripe_payment_intent} total={Number(order.total)} /> : null}
-            {order.notes && <p style={s.notes}>{order.notes}</p>}
+            {mapsLinkOf(order.notes) && (
+              <a href={mapsLinkOf(order.notes)} target="_blank" rel="noreferrer" style={s.pin}>📍 Open delivery pin in Google Maps</a>
+            )}
+            {order.notes && <p style={s.notes}>{order.notes.replace(MAPS_URL, "").replace(/\s*\|\s*(?:Location pin:)?\s*$/, "").replace(/\s*Location pin:\s*/, " ")}</p>}
             <button style={s.resend} disabled={busyId === order.id} onClick={async () => {
               setBusyId(order.id);
               try { showToast(await resendOrderEmail(order.id)); } catch (error) { showToast(error.message || "Couldn't send"); } finally { setBusyId(null); }
@@ -88,6 +96,9 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
 }
 
 
+const MAPS_URL = /https:\/\/www\.google\.com\/maps\?q=-?\d+\.\d+,-?\d+\.\d+/;
+const mapsLinkOf = (notes) => (String(notes || "").match(MAPS_URL) || [""])[0];
+
 const paymentKey = (order) => (order.payment_status === "paid" ? "paid" : order.payment_status === "refunded" ? "refunded" : order.payment_method === "card" ? "awaiting" : "later");
 const paymentLabel = (order) => ({
   paid: "Paid by card (Stripe)",
@@ -103,6 +114,7 @@ const PAYMENT_STYLE = {
 };
 
 const s = {
+  pin: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: 44, margin: "10px 0 0", borderRadius: 9, background: "#047857", color: "#fff", fontWeight: 800, fontSize: 13.5, textDecoration: "none" },
   payment: { marginTop: 10, padding: "8px 10px", borderRadius: 8, border: "1px solid", fontSize: 12.5, fontWeight: 800 },
   heading: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "flex-end", marginBottom: 18 },
   title: { margin: 0, fontSize: 24 },
