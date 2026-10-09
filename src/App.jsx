@@ -37,6 +37,7 @@ import Customers from "./components/Customers";
 import FilamentInventory from "./components/FilamentInventory";
 import StoreOrders from "./components/StoreOrders";
 import Sales from "./components/Sales";
+import PriceList from "./components/PriceList";
 import AdminDashboard from "./components/AdminDashboard";
 import WebsiteSettings from "./components/WebsiteSettings";
 
@@ -294,6 +295,7 @@ function Invoicer({ userEmail, onSignOut }) {
         { id: "dashboard", label: "Dashboard" },
         { id: "sales", label: `All sales${pendingOrders ? ` (${pendingOrders})` : ""}` },
         { id: "filament", label: "Stock" },
+        { id: "price-list", label: "Price list" },
         { id: "items", label: "Products" },
         { id: "store-orders", label: `Orders${pendingOrders ? ` (${pendingOrders})` : ""}` },
         { id: "settings", label: "Website" },
@@ -381,6 +383,7 @@ function Invoicer({ userEmail, onSignOut }) {
           />
         )}
         {tab === "sales" && <Sales invoices={invoices} storeOrders={storeOrders} onOpen={setTab} />}
+        {tab === "price-list" && <PriceList filaments={filaments} items={items} showToast={showToast} />}
         {tab === "items" && (
           <ItemsMenu
             items={items}
