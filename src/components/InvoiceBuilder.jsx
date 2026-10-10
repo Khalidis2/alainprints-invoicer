@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
+import { autoLinkLines } from "../lib/stockCheck";
 
 export default function InvoiceBuilder({ items, customers = [], filaments = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
@@ -24,7 +25,8 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setLines((prev) => {
       const existing = prev.find((l) => l.itemId === item.id);
       if (existing) return prev.map((l) => (l.itemId === item.id ? { ...l, qty: l.qty + 1 } : l));
-      return [...prev, { itemId: item.id, name: item.name, price: item.price, qty: 1, filamentId: item.filamentId || null, gramsPerUnit: Number(item.gramsPerUnit || 0) }];
+      const base = { itemId: item.id, name: item.name, price: item.price, qty: 1, filamentId: item.filamentId || null, gramsPerUnit: Number(item.gramsPerUnit || 0) };
+      return [...prev, autoLinkLines([base], filaments).lines[0]];
     });
   };
   const availableFilaments = filaments
@@ -75,6 +77,11 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     if (!f) return;
     setLines((prev) => prev.map((l) => (l.itemId === itemId ? { ...l, filamentId: f.id, gramsPerUnit: Number(f.spoolWeightG || 1000) } : l)));
   };
+  useEffect(() => {
+    if (editing) return;
+    const { lines: linkedLines, linked } = autoLinkLines(lines, filaments);
+    if (linked) setLines(linkedLines);
+  }, [filaments]); // eslint-disable-line react-hooks/exhaustive-deps
   const removeLine = (itemId) => setLines((prev) => prev.filter((l) => l.itemId !== itemId));
 
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
