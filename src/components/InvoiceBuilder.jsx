@@ -70,6 +70,11 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           : line
       )
     );
+  const linkLine = (itemId, filamentId) => {
+    const f = availableFilaments.find((x) => x.id === filamentId);
+    if (!f) return;
+    setLines((prev) => prev.map((l) => (l.itemId === itemId ? { ...l, filamentId: f.id, gramsPerUnit: Number(f.spoolWeightG || 1000) } : l)));
+  };
   const removeLine = (itemId) => setLines((prev) => prev.filter((l) => l.itemId !== itemId));
 
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
@@ -322,6 +327,17 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
                     <input aria-label="Unit price" type="number" inputMode="decimal" min="0" step="0.01" style={s.priceInput} value={l.price} onChange={(e) => setLine(l.itemId, "price", e.target.value)} />
                     each
                   </label>
+                  {l.filamentId ? (
+                    <div style={{ fontSize: 12, color: "#15803d", marginTop: 4 }}>📦 Takes {l.qty} spool(s) from stock</div>
+                  ) : (
+                    <div style={{ fontSize: 12, marginTop: 4, color: "#b45309" }}>
+                      ⚠ Not linked to stock — will NOT deduct.{" "}
+                      <select aria-label="Take from stock" value="" onChange={(e) => linkLine(l.itemId, e.target.value)} style={{ fontSize: 12, maxWidth: "100%" }}>
+                        <option value="">Link to a spool…</option>
+                        {availableFilaments.map((f) => <option key={f.id} value={f.id}>{f.material} {f.color} ({f.availableSpools} left)</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <div style={s.stepper}>
                   <button type="button" style={s.stepBtn} aria-label="One less" onClick={() => changeQty(l.itemId, -1)}>−</button>
