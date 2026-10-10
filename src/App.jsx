@@ -39,6 +39,7 @@ import StoreOrders from "./components/StoreOrders";
 import Sales from "./components/Sales";
 import PriceList from "./components/PriceList";
 import AdminDashboard from "./components/AdminDashboard";
+import { describeStockChange } from "./lib/stockCheck";
 import WebsiteSettings from "./components/WebsiteSettings";
 
 export default function App() {
@@ -204,7 +205,15 @@ function Invoicer({ userEmail, onSignOut }) {
   // --- invoice actions ---
   const handleGenerateInvoice = async (draft) => {
     const number = Number(draft.number);
+    const before = ["Unpaid", "Paid"].includes(draft.status) && (draft.lines || []).some((line) => line.filamentId) ? await fetchFilaments().catch(() => null) : null;
     const saved = await insertInvoice({ ...draft, number });
+    if (before) {
+      // Read the stock again and show what really happened, instead of assuming it worked.
+      fetchFilaments().then((after) => {
+        const result = describeStockChange(draft.lines, before, after);
+        if (result.moved) showToast(result.text);
+      }).catch(() => {});
+    }
     try {
       await upsertCustomer(draft.customer);
       refreshCustomers();

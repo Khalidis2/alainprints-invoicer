@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import { FeeLine, useStripeFees } from "./StripeFees";
+import StockNote from "./StockNote";
 import DeliveryPin, { pinFromNotes } from "./DeliveryPin";
 
 const waNumber = (phone) => String(phone || "").replace(/[^\d]/g, "").replace(/^0(?=5)/, "971");
@@ -54,6 +55,7 @@ export function buildEntries(invoices, storeOrders) {
       done: ["cancelled", "expired"].includes(order.status) || order.payment_status === "refunded",
       attention: order.status === "pending",
       intent: paid ? order.stripe_payment_intent : "",
+      order,
       pin: pinFromNotes(order.notes),
       address: order.address,
       emirate: order.emirate,
@@ -167,6 +169,7 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
               {entry.summary.map((line, index) => <li key={index}>{line}</li>)}
             </ul>
             <div style={s.totalRow}><span>Total</span><strong>{AED(entry.total)}</strong></div>
+            {entry.kind === "order" && entry.order ? <StockNote order={entry.order} /> : null}
             {entry.intent ? <FeeLine paymentIntent={entry.intent} total={entry.total} /> : null}
             {entry.kind === "order" ? <DeliveryPin pin={entry.pin} address={entry.address} emirate={entry.emirate} name={entry.name} ship={{ reference: entry.ref, name: entry.name, mobile: entry.mobile, notes: entry.notes, emirate: entry.emirate, address: entry.address, pin: entry.pin, items: entry.items, quantity: entry.quantity, total: entry.total, paid: entry.paid }} /> : null}
             <div style={s.actions}>

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AED } from "../lib/helpers";
 import { resendOrderEmail } from "../lib/storage";
 import { FeeLine, FeeSummary } from "./StripeFees";
+import StockNote from "./StockNote";
 import DeliveryPin, { pinFromNotes, stripPinFromNotes } from "./DeliveryPin";
 
 export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }) {
@@ -65,6 +66,7 @@ export default function StoreOrders({ orders, onStatus, onTestSpool, showToast }
               ))}
             </ul>
             <div style={s.total}><span>Total</span><strong>{AED(Number(order.total))}</strong></div>
+            <StockNote order={order} />
             <div style={{ ...s.payment, ...(PAYMENT_STYLE[paymentKey(order)] || {}) }}>
               {paymentLabel(order)}
               {order.paid_at ? <small style={{ fontWeight: 600, opacity: 0.8 }}> · {new Date(order.paid_at).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
