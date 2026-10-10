@@ -15,7 +15,7 @@ const FILTERS = [
 // One list for everything that was sold: website orders and invoices, newest first.
 // Nothing is copied between them (an order already took its stock, an invoice would take it again),
 // so each row opens the full Orders or Invoices screen when you need to change something.
-function buildEntries(invoices, storeOrders) {
+export function buildEntries(invoices, storeOrders) {
   const fromInvoices = invoices.map((invoice) => {
     const status = invoice.status || "Unpaid";
     return {
@@ -68,7 +68,7 @@ function buildEntries(invoices, storeOrders) {
 }
 
 // Where the money went: everything customers paid, what Stripe kept, and what is really yours.
-function Breakdown({ entries, waiting, waitingTotal }) {
+export function Breakdown({ entries, waiting, waitingTotal }) {
   const paid = entries.filter((entry) => entry.paid);
   const card = paid.filter((entry) => entry.intent);
   const other = paid.filter((entry) => !entry.intent);

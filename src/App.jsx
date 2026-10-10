@@ -288,12 +288,14 @@ function Invoicer({ userEmail, onSignOut }) {
   };
 
   const pendingOrders = storeOrders.filter((order) => order.status === "pending").length;
+  // "All sales" counts everything waiting: pending website orders and unpaid invoices.
+  const needsAttention = pendingOrders + invoices.filter((invoice) => ["Unpaid", "Draft"].includes(invoice.status || "Unpaid")).length;
   const tabGroups = [
     {
       label: "Store admin",
       tabs: [
         { id: "dashboard", label: "Dashboard" },
-        { id: "sales", label: `All sales${pendingOrders ? ` (${pendingOrders})` : ""}` },
+        { id: "sales", label: `All sales${needsAttention ? ` (${needsAttention})` : ""}` },
         { id: "filament", label: "Stock" },
         { id: "price-list", label: "Price list" },
         { id: "items", label: "Products" },

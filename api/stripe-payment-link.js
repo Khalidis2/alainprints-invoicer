@@ -88,7 +88,6 @@ export default async function handler(request, response) {
       for (const row of candidates) {
         const meta = readMeta(row);
         let intent = "";
-        const wrong = [];
         if (pairs[String(row.number)]) {
           const given = await stripe(`/payment_intents/${pairs[String(row.number)]}`).catch(() => null);
           const paidCents = Number(given?.amount_received || given?.amount);

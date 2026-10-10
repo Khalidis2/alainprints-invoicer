@@ -3,7 +3,7 @@ import { AED } from "../lib/helpers";
 
 const SITE = "printtools3d.com/store";
 const BRAND = "Alain Prints";
-const PHONE = "+971 56 776 6717";
+const PHONE = "+971 52 244 4690";
 const DELIVERY = "Delivery across the UAE: AED 20, free on orders of AED 500 or more.";
 
 const num = (value) => {
@@ -39,7 +39,7 @@ function buildTypes(filaments) {
 const priceLabel = (group) => (!group.min ? "price on request" : group.min === group.max ? `AED ${num(group.min)}` : `AED ${num(group.min)} - ${num(group.max)}`);
 
 function typeLines(group, withColours) {
-  const lines = [`*${group.type}* - ${priceLabel(group)} per spool`];
+  const lines = [`*${group.type}* - ${priceLabel(group)}`];
   if (withColours) {
     if (group.inStock.length) lines.push(`In stock: ${group.inStock.map((colour) => colour.color).join(", ")}`);
     else lines.push("Out of stock right now");
@@ -48,10 +48,12 @@ function typeLines(group, withColours) {
 }
 
 function filamentText(types, withColours) {
-  const lines = [`*Filament price list - ${BRAND}*`, "_1 kg spools, 1.75 mm · prices in AED_", ""];
+  const lines = [`*Filament price list - ${BRAND}*`, "_Price per 1 kg spool, 1.75 mm_", ""];
   for (const group of types) {
-    lines.push(...typeLines(group, withColours), "");
+    lines.push(...typeLines(group, withColours));
+    if (withColours) lines.push("");
   }
+  if (!withColours) lines.push("");
   lines.push(DELIVERY, `Order online: ${SITE} · WhatsApp ${PHONE}`);
   return lines.join("\n");
 }
@@ -64,7 +66,7 @@ function productsText(items) {
 }
 
 export default function PriceList({ filaments, items, showToast }) {
-  const [withColours, setWithColours] = useState(true);
+  const [withColours, setWithColours] = useState(false);
   const [onlyPublished, setOnlyPublished] = useState(false);
   const types = useMemo(() => buildTypes(filaments), [filaments]);
   const products = useMemo(
@@ -98,7 +100,7 @@ export default function PriceList({ filaments, items, showToast }) {
         <a style={s.secondary} href={whatsapp(everything)} target="_blank" rel="noreferrer">Send on WhatsApp</a>
       </div>
       <div style={s.options}>
-        <label style={s.opt}><input type="checkbox" checked={withColours} onChange={(event) => setWithColours(event.target.checked)} /> Show colours in stock</label>
+        <label style={s.opt}><input type="checkbox" checked={withColours} onChange={(event) => setWithColours(event.target.checked)} /> Also list the colours in stock</label>
         <label style={s.opt}><input type="checkbox" checked={onlyPublished} onChange={(event) => setOnlyPublished(event.target.checked)} /> Only products published on the website</label>
       </div>
 
@@ -115,11 +117,11 @@ export default function PriceList({ filaments, items, showToast }) {
           <div key={group.type} style={s.item}>
             <div style={{ minWidth: 0 }}>
               <strong>{group.type}</strong>
-              <div style={s.meta}>{group.inStock.length ? `${group.inStock.length} colour${group.inStock.length === 1 ? "" : "s"} in stock: ${group.inStock.map((colour) => colour.color).join(", ")}` : "Out of stock"}</div>
+              {!group.inStock.length && <div style={s.meta}>Out of stock right now</div>}
             </div>
             <div style={s.right}>
               <b style={{ color: group.min ? "#16324F" : "#B45309" }}>{group.min ? `${priceLabel(group)} / spool` : "No price"}</b>
-              <button type="button" style={s.copy} onClick={() => copy(typeLines(group, true).join("\n"), `${group.type} copied`)}>Copy</button>
+              <button type="button" style={s.copy} onClick={() => copy(typeLines(group, withColours).join("\n"), `${group.type} copied`)}>Copy</button>
             </div>
           </div>
         ))}

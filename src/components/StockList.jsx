@@ -72,7 +72,7 @@ function printHtml(groups, totalSpools) {
   <h1>Available filament · ${BRAND}</h1>
   <p>Updated ${today()} · ${totalSpools} spools in stock · 1 kg spools, 1.75 mm</p>
   <table><thead><tr><th>Colour</th><th class="n">Spools</th><th class="n">Price</th></tr></thead><tbody>${body}</tbody></table>
-  <footer>Order online: ${SITE} · WhatsApp +971 56 776 6717</footer>
+  <footer>Order online: ${SITE} · WhatsApp +971 52 244 4690</footer>
   <script>window.onload=function(){setTimeout(function(){window.print()},250)}</script></body></html>`;
 }
 
