@@ -50,7 +50,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
     await translateName();
   };
   const shareItem = async (item) => {
-    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @_alainprints to order`;
+    const caption = `${item.name} — ${AED(item.price)}${item.description ? `\n${item.description}` : ""}\nDM @alainprints.ae to order`;
     const safeName = item.name.replace(/[^\w-]+/g, "_") || "item";
     setSharingId(item.id);
     try {

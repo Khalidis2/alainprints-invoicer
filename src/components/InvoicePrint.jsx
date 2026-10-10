@@ -147,10 +147,13 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
 
       <article className="invoice-sheet" style={s.sheet}>
         <header className="invoice-hero" style={s.hero}>
-          <div>
-            <div style={s.brand}>ALAINPRINTS</div>
-            <div style={s.brandSub}>3D FILAMENT HANDICRAFTS</div>
-            <div style={s.legal}>Abu Dhabi, U.A.E. | Trade Licence No.: CN-6362373</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <img src="/logo-round.png" alt="" width="76" height="76" style={{ borderRadius: "50%", flex: "0 0 auto" }} />
+            <div>
+              <div style={s.brand}>ALAINPRINTS</div>
+              <div style={s.brandSub}>3D FILAMENT HANDICRAFTS</div>
+              <div style={s.legal}>Abu Dhabi, U.A.E. | Trade Licence No.: CN-6362373</div>
+            </div>
           </div>
           <div className="invoice-meta" style={s.invoiceMeta}>
             <div style={s.documentTitle}>{receiptMode ? "RECEIPT" : "INVOICE"}</div>

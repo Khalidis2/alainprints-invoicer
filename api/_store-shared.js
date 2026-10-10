@@ -53,6 +53,9 @@ export function mapsUrl(notes) {
   return match ? match[0] : "";
 }
 
+// Logo block at the top of every shop email. The image is served by the website.
+const emailLogo = () => `<div style="margin:0 0 18px"><img src="${SITE_URL}/logo-round.png" width="56" height="56" alt="Alain Prints" style="border-radius:50%;vertical-align:middle"><span style="margin-left:12px;font-size:18px;font-weight:bold;letter-spacing:3px;color:#0f6b64;vertical-align:middle">ALAIN PRINTS</span></div>`;
+
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // Email to the shop owner via Resend. Never throws: an email problem must not break an order.
@@ -68,6 +71,7 @@ export async function emailOrder(order, headline, note = "") {
   const paid = order.payment_status === "paid";
   const html = `
   <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#1f2937">
+    ${emailLogo()}
     <h2 style="margin:0 0 4px">${escapeHtml(headline)}</h2>
     <p style="margin:0 0 14px;color:#555">Order <b>${escapeHtml(order.reference)}</b> · ${paid ? "<b style=\"color:#047857\">PAID BY CARD</b>" : "<b style=\"color:#b45309\">NOT PAID YET (WhatsApp order)</b>"}</p>
     ${note ? `<p style="padding:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px">${escapeHtml(note)}</p>` : ""}
@@ -140,6 +144,7 @@ export async function emailCustomer(order, to) {
     `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(item.material)} · ${escapeHtml(item.color)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${escapeHtml(item.quantity)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${aed(item.unit_price * item.quantity)}</td></tr>`).join("");
   const html = `
   <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#1f2937">
+    ${emailLogo()}
     <h2 style="margin:0 0 4px">Thank you, your order is confirmed</h2>
     <p style="margin:0 0 14px;color:#555">Order <b>${escapeHtml(order.reference)}</b> · <b style="color:#047857">PAID BY CARD</b></p>
     <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}

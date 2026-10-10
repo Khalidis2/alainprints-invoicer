@@ -87,6 +87,7 @@ function Login() {
   return (
     <main style={authStyles.page}>
       <form style={authStyles.card} onSubmit={signIn}>
+        <img src="/logo-round.png" alt="Alain Prints" width="72" height="72" style={{ display: "block", margin: "0 0 12px", borderRadius: "50%" }} />
         <div style={authStyles.brand}>ALAINPRINTS</div>
         <h1 style={authStyles.title}>PrintTools3D admin</h1>
         <p style={authStyles.sub}>Sign in to manage stock, products, orders, customers and invoices.</p>
@@ -340,7 +341,7 @@ function Invoicer({ userEmail, onSignOut }) {
     <div className="app-shell" style={s.app}>
       <div className="no-print app-header" style={s.header}>
         <div className="brand-row" style={s.brandRow}>
-          <Spool />
+          <img src="/logo-round.png" alt="Alain Prints" width="48" height="48" style={{ borderRadius: "50%", flex: "0 0 auto" }} />
           <div>
             <div style={s.brandName}>alainprints</div>
             <div style={s.brandSub}>PrintTools3D business admin · synced</div>
@@ -452,17 +453,6 @@ function Invoicer({ userEmail, onSignOut }) {
 
       {toast && <div style={s.toast}>{toast}</div>}
     </div>
-  );
-}
-
-function Spool() {
-  return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <circle cx="17" cy="17" r="15" stroke="#E8792D" strokeWidth="2.5" />
-      <circle cx="17" cy="17" r="15" stroke="#E8792D" strokeWidth="2.5" strokeDasharray="1.5 4.2" />
-      <circle cx="17" cy="17" r="6" fill="#1B2A3D" />
-      <circle cx="17" cy="17" r="2" fill="#FAF8F4" />
-    </svg>
   );
 }
 
