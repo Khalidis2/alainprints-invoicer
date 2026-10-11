@@ -4,7 +4,7 @@ import { AED } from "../lib/helpers";
 const SITE = "printtools3d.com/store";
 const BRAND = "Alain Prints";
 const PHONE = "+971 52 244 4690";
-const DELIVERY = "Delivery across the UAE: AED 20, free on orders of AED 500 or more.";
+const DELIVERY = "Delivery across the UAE: AED 25, free on orders of AED 500 or more.";
 
 const num = (value) => {
   const n = Number(value);

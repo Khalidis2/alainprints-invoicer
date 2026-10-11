@@ -12,9 +12,9 @@ export function cors(request, response, methods = "POST, OPTIONS") {
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-// Same rule the website shows: free UAE delivery from AED 500, otherwise AED 20.
+// Same rule the website shows: free UAE delivery from AED 500, otherwise AED 25.
 export function deliveryFor(subtotal) {
-  return Number(subtotal) >= 500 ? 0 : 20;
+  return Number(subtotal) >= 500 ? 0 : 25;
 }
 
 export async function getStoreOrder(filter) {
