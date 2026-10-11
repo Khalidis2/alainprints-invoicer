@@ -12,9 +12,9 @@ export function cors(request, response, methods = "POST, OPTIONS") {
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-// Same rule the website shows: free UAE delivery from AED 500, otherwise AED 25.
-export function deliveryFor(subtotal) {
-  return Number(subtotal) >= 500 ? 0 : 25;
+// Same rule the website shows: free UAE delivery above 10 spools, otherwise AED 25.
+export function deliveryFor(spools) {
+  return Number(spools) > 10 ? 0 : 25;
 }
 
 export async function getStoreOrder(filter) {
@@ -35,9 +35,9 @@ export async function applyDeliveryRule(order) {
   if (!env("SUPABASE_SERVICE_ROLE_KEY")) return order;
   const subtotal = Number(order.subtotal);
   // The owner's checkout test (only "Payment Test" items) has no delivery fee.
-  const lines = await supabaseFetch(`/rest/v1/store_order_items?order_id=eq.${encodeURIComponent(order.id)}&select=material`).catch(() => []);
+  const lines = await supabaseFetch(`/rest/v1/store_order_items?order_id=eq.${encodeURIComponent(order.id)}&select=material,quantity`).catch(() => []);
   const testOnly = Array.isArray(lines) && lines.length > 0 && lines.every((line) => line.material === "Payment Test");
-  const shipping = testOnly ? 0 : deliveryFor(subtotal);
+  const shipping = testOnly ? 0 : deliveryFor((Array.isArray(lines) ? lines : []).reduce((sum, line) => sum + Number(line.quantity || 0), 0));
   if (Number(order.shipping) === shipping) return order;
   const rows = await supabaseFetch(`/rest/v1/store_orders?id=eq.${encodeURIComponent(order.id)}`, {
     method: "PATCH",
