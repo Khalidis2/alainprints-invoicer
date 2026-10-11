@@ -201,7 +201,7 @@ begin
   end loop;
 
   if v_total_quantity = 0 then raise exception 'At least one valid item is required'; end if;
-  v_shipping := case when v_total_quantity <= 10 then 25 else 0 end;
+  v_shipping := case when v_total_quantity < 10 then 25 else 0 end;
 
   update store_orders
   set subtotal = v_subtotal, shipping = v_shipping, total = v_subtotal + v_shipping, updated_at = now()
