@@ -62,7 +62,7 @@ export default async function handler(request, response) {
         customer_email: email,
         expires_at: expiresAt,
         success_url: `${SITE_URL}/store/order-success?ref=${encodeURIComponent(order.reference)}&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${SITE_URL}/store?payment=cancelled#build-order`,
+        cancel_url: `${SITE_URL}/checkout?payment=cancelled`,
       },
     });
     await updateStoreOrder(order.id, { stripe_session_id: session.id });
