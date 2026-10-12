@@ -79,7 +79,7 @@ export function FeeSummary({ payments, label = "Card payments" }) {
 
 const s = {
   line: { marginTop: 10, color: "#6B6355", fontSize: 12.5 },
-  muted: { color: "#8A7F6D", fontSize: 12 },
+  muted: { color: "#746A59", fontSize: 12 },
   warn: { color: "#B45309", fontSize: 12 },
   box: { display: "grid", gap: 4, marginTop: 10, padding: "10px 12px", border: "1px solid #E4DFD3", borderRadius: 10, background: "#FBFAF6", fontSize: 13 },
   row: { display: "flex", justifyContent: "space-between", gap: 10, color: "#6B6355" },

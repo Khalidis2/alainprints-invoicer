@@ -147,7 +147,7 @@ const s = {
   shipToggle: { minHeight: 46, border: "1.5px solid #16324F", borderRadius: 9, background: "#16324F", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" },
   shipBody: { display: "grid", gap: 6, padding: 10, border: "1px solid #DCD5C6", borderRadius: 9, background: "#fff" },
   field: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid #EFEAE0" },
-  fieldLabel: { display: "block", color: "#8A7F6D", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" },
+  fieldLabel: { display: "block", color: "#746A59", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" },
   fieldValue: { color: "#1B2A3D", fontSize: 14, lineHeight: 1.35, overflowWrap: "anywhere" },
   copyBtn: { flex: "0 0 auto", minWidth: 64, minHeight: 40, border: "1px solid #16324F", borderRadius: 8, background: "#fff", color: "#16324F", fontWeight: 800, cursor: "pointer" },
   box: { display: "grid", gap: 8, marginTop: 10, padding: 10, border: "1px solid #A7D7C5", borderRadius: 10, background: "#F0FDF7" },

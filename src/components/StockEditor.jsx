@@ -170,7 +170,7 @@ const s = {
   close: { width: 38, height: 38, border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", fontSize: 16, cursor: "pointer" },
   field: { display: "grid", gap: 6 },
   label: { color: "#6B6355", fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".04em" },
-  hint: { color: "#8A7F6D", fontSize: 12 },
+  hint: { color: "#746A59", fontSize: 12 },
   input: { width: "100%", minHeight: 46, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 10, fontSize: 16, background: "#fff", boxSizing: "border-box" },
   inputBad: { borderColor: "#DC2626" },
   two: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "start" },

@@ -47,12 +47,11 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
 
       <div className="admin-grid">
         {sections.map((section) => (
-          <article className="admin-card" key={section.id}>
+          <button type="button" className="admin-card admin-tile" key={section.id} title={section.text} onClick={() => onNavigate(section.id)}>
             <span>{section.title}</span>
             <strong>{section.value}</strong>
-            <p>{section.text}</p>
-            <button type="button" onClick={() => onNavigate(section.id)}>{section.action} →</button>
-          </article>
+            <em>{section.action} →</em>
+          </button>
         ))}
       </div>
     </section>

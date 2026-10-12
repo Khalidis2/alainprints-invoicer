@@ -273,7 +273,7 @@ function Field({ label, type = "text", value, onChange }) {
 const s = {
   card: { maxWidth: 760, margin: "0 auto", padding: 24, background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 14 },
   h2: { margin: 0, fontSize: 24 },
-  sub: { margin: "6px 0 22px", color: "#8A7F6D", fontSize: 13.5 },
+  sub: { margin: "6px 0 22px", color: "#746A59", fontSize: 13.5 },
   drop: { display: "grid", gap: 7, marginTop: 18, padding: 22, border: "1.5px dashed #DCD5C6", borderRadius: 10, textAlign: "center", cursor: "pointer" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12, marginTop: 18 },
   field: { display: "grid", gap: 5, color: "#6B6355", fontSize: 12, fontWeight: 700 },
@@ -285,5 +285,5 @@ const s = {
   levels: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 14 },
   level: { display: "grid", gap: 5, padding: 14, border: "1.5px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#1B2A3D", cursor: "pointer", textAlign: "left" },
   levelActive: { borderColor: "#E8792D", background: "#FFF5ED", boxShadow: "0 0 0 1px #E8792D" },
-  button: { width: "100%", marginTop: 14, padding: 13, border: 0, borderRadius: 8, background: "#E8792D", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" },
+  button: { width: "100%", marginTop: 14, padding: 13, border: 0, borderRadius: 8, background: "#B9531A", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" },
 };

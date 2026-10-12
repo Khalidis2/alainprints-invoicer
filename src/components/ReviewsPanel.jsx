@@ -38,7 +38,7 @@ export default function ReviewsPanel() {
     <div className="website-control-panel reviews-panel">
       <div>
         <strong>Customer reviews</strong>
-        <small style={{ display: "block", color: "#8A7F6D", marginTop: 3 }}>Paste real feedback from customers. It appears on the website without any name.</small>
+        <small style={{ display: "block", color: "#746A59", marginTop: 3 }}>Paste real feedback from customers. It appears on the website without any name.</small>
       </div>
       <label className="website-announcement">
         <span>Review text</span>
@@ -63,7 +63,7 @@ export default function ReviewsPanel() {
         <div style={{ display: "grid", gap: 8 }}>
           {reviews.map((review) => (
             <div key={review.id} style={{ display: "grid", gap: 6, padding: 12, border: "1px solid #E4DFD3", borderRadius: 9, opacity: review.visible === false ? 0.55 : 1 }}>
-              <div style={{ color: "#B45309", fontWeight: 800 }}>{"★".repeat(review.rating || 5)} <span style={{ color: "#8A7F6D", fontWeight: 600 }}>{review.item}{review.item ? " · " : ""}{review.date}</span></div>
+              <div style={{ color: "#B45309", fontWeight: 800 }}>{"★".repeat(review.rating || 5)} <span style={{ color: "#746A59", fontWeight: 600 }}>{review.item}{review.item ? " · " : ""}{review.date}</span></div>
               <div style={{ lineHeight: 1.45 }}>{review.text}</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button type="button" disabled={busy} onClick={() => toggle(review.id)} style={{ minHeight: 40, padding: "0 12px", border: "1px solid #16324F", borderRadius: 8, background: "#fff", color: "#16324F", fontWeight: 800 }}>{review.visible === false ? "Show on website" : "Hide"}</button>

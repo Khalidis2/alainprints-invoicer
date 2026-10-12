@@ -164,7 +164,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               <div style={s.desc}>{item.description}</div>
               <div style={s.actions}>
                 <button
-                  style={{ ...s.link, color: "#E8792D", opacity: sharingId === item.id ? 0.6 : 1 }}
+                  style={{ ...s.link, color: "#B9531A", opacity: sharingId === item.id ? 0.6 : 1 }}
                   onClick={() => shareItem(item)}
                   disabled={sharingId === item.id}
                 >
@@ -192,7 +192,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
               <img src={editing.imageUrl} alt="" style={{ ...s.thumb, marginBottom: 8 }} />
             )}
             <input type="file" accept="image/*" onChange={handleImagePick} disabled={uploading} style={{ marginBottom: 4 }} />
-            {uploading && <div style={{ fontSize: 12, color: "#8A7F6D" }}>Uploading…</div>}
+            {uploading && <div style={{ fontSize: 12, color: "#746A59" }}>Uploading…</div>}
 
             <label style={s.label}>Name</label>
             <input
@@ -387,11 +387,11 @@ function wrapText(ctx, text, maxWidth, maxLines) {
 const s = {
   head: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, flexWrap: "wrap", gap: 12 },
   h2: { fontSize: 22, fontWeight: 800, margin: 0 },
-  sub: { fontSize: 13, color: "#8A7F6D", marginTop: 4 },
-  primaryBtn: { background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
+  sub: { fontSize: 13, color: "#746A59", marginTop: 4 },
+  primaryBtn: { background: "#B9531A", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   filterRow: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" },
-  chip: { fontSize: 11.5, padding: "6px 12px", borderRadius: 20, border: "1.5px solid #DCD5C6", background: "#fff", color: "#8A7F6D", cursor: "pointer" },
+  chip: { fontSize: 11.5, padding: "6px 12px", borderRadius: 20, border: "1.5px solid #DCD5C6", background: "#fff", color: "#746A59", cursor: "pointer" },
   chipActive: { borderColor: "#1B2A3D", color: "#1B2A3D", background: "#EFEAE0" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 },
   card: { background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 8 },
@@ -404,12 +404,12 @@ const s = {
   desc: { fontSize: 12.5, color: "#6B6355", lineHeight: 1.5, flex: 1 },
   actions: { display: "flex", gap: 14, marginTop: 4 },
   link: { background: "none", border: "none", color: "#2E7D8C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 },
-  empty: { padding: "30px 16px", textAlign: "center", color: "#8A7F6D", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff", marginBottom: 14 },
+  empty: { padding: "30px 16px", textAlign: "center", color: "#746A59", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff", marginBottom: 14 },
   overlay: { position: "fixed", inset: 0, background: "rgba(27,42,61,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 },
   modal: { background: "#FAF8F4", borderRadius: 14, padding: 22, width: "100%", maxWidth: 420, maxHeight: "85vh", overflowY: "auto" },
   modalTitle: { fontWeight: 800, fontSize: 17, marginBottom: 14 },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 },
-  label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#8A7F6D", marginTop: 12, marginBottom: 5 },
+  label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#746A59", marginTop: 12, marginBottom: 5 },
   labelRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, marginBottom: 5 },
   input: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, border: "1.5px solid #DCD5C6", fontSize: 14, background: "#fff", color: "#1B2A3D" },
 };

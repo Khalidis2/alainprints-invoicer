@@ -136,7 +136,7 @@ export default function ProfitPanel({ filaments, onUpdate, showToast }) {
                     {hasCost && <div style={s.hint}>now {AED(group.cost)}</div>}
                   </td>
                   <td style={s.num}>{AED(group.price)}</td>
-                  <td style={{ ...s.num, color: hasCost ? (group.profit >= 0 ? "#047857" : "#B91C1C") : "#8A7F6D", fontWeight: 800 }}>{hasCost ? AED(group.profit) : "-"}</td>
+                  <td style={{ ...s.num, color: hasCost ? (group.profit >= 0 ? "#047857" : "#B91C1C") : "#746A59", fontWeight: 800 }}>{hasCost ? AED(group.profit) : "-"}</td>
                   <td style={s.num}>{hasCost ? `${group.margin.toFixed(0)}%` : "-"}</td>
                   <td style={s.num}>
                     {hasCost && group.suggested ? (
@@ -184,7 +184,7 @@ const s = {
   th: { padding: "9px 12px", background: "#F8F5EE", fontSize: 11, letterSpacing: ".05em", textTransform: "uppercase", color: "#6B6355", whiteSpace: "nowrap" },
   td: { padding: "9px 12px", borderTop: "1px solid #EFEAE0" },
   num: { padding: "9px 12px", borderTop: "1px solid #EFEAE0", textAlign: "right", whiteSpace: "nowrap" },
-  hint: { marginTop: 3, color: "#8A7F6D", fontSize: 11 },
+  hint: { marginTop: 3, color: "#746A59", fontSize: 11 },
   small: { padding: "6px 10px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 12, cursor: "pointer" },
   note: { margin: "10px 0 0", color: "#6B6355", fontSize: 12.5, lineHeight: 1.5 },
 };

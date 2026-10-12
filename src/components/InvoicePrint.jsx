@@ -245,7 +245,7 @@ const s = {
   bar: { display: "flex", justifyContent: "space-between", margin: "0 auto 16px", maxWidth: 794 },
   toolbarButtons: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" },
   receiptBtn: { background: "#fff", color: "#047857", border: "1px solid #047857", borderRadius: 8, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" },
-  shareBtn: { background: "#E8792D", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
+  shareBtn: { background: "#B9531A", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   primaryBtn: { background: "#16324f", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   secondaryBtn: { background: "#fff", color: "#16324f", border: "1px solid #CBD5E1", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   sheet: { width: "210mm", minHeight: "297mm", margin: "0 auto", background: "#fff", color: "#1F2937", boxShadow: "0 4px 24px rgba(15,23,42,0.12)", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" },

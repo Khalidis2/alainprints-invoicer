@@ -105,11 +105,11 @@ function Login() {
 
 const authStyles = {
   page: { minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "#FAF8F4" },
-  center: { minHeight: "100vh", display: "grid", placeItems: "center", color: "#8A7F6D" },
+  center: { minHeight: "100vh", display: "grid", placeItems: "center", color: "#746A59" },
   card: { width: "100%", maxWidth: 390, background: "#fff", border: "1px solid #E4DFD3", borderRadius: 16, padding: 28, boxShadow: "0 10px 35px rgba(27,42,61,.08)" },
   brand: { color: "#16324F", fontWeight: 900, letterSpacing: 4, fontSize: 18 },
   title: { margin: "18px 0 4px", color: "#1B2A3D", fontSize: 24 },
-  sub: { margin: "0 0 22px", color: "#8A7F6D", fontSize: 13 },
+  sub: { margin: "0 0 22px", color: "#746A59", fontSize: 13 },
   label: { display: "block", margin: "13px 0 5px", color: "#6B6355", fontWeight: 700, fontSize: 12 },
   input: { width: "100%", padding: "11px 12px", border: "1px solid #DCD5C6", borderRadius: 8, fontSize: 15 },
   error: { marginTop: 12, color: "#B3451D", fontSize: 12 },
@@ -327,7 +327,7 @@ function Invoicer({ userEmail, onSignOut }) {
   if (loading) {
     return (
       <div style={{ ...s.app, display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-        <div style={{ color: "#8A7F6D" }}>Loading…</div>
+        <div style={{ color: "#746A59" }}>Loading…</div>
       </div>
     );
   }
@@ -336,8 +336,8 @@ function Invoicer({ userEmail, onSignOut }) {
     return (
       <div style={{ ...s.app, maxWidth: 520, margin: "60px auto", textAlign: "center" }}>
         <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>Couldn't connect to Supabase</div>
-        <div style={{ color: "#8A7F6D", fontSize: 13.5, marginBottom: 12 }}>{loadError}</div>
-        <div style={{ color: "#8A7F6D", fontSize: 13 }}>
+        <div style={{ color: "#746A59", fontSize: 13.5, marginBottom: 12 }}>{loadError}</div>
+        <div style={{ color: "#746A59", fontSize: 13 }}>
           Check that <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> are set in <code>.env</code>
           (or in your Vercel project's Environment Variables), and that the schema in{" "}
           <code>supabase/schema.sql</code> has been run. See the README.
@@ -356,8 +356,8 @@ function Invoicer({ userEmail, onSignOut }) {
             <div style={s.brandSub}>PrintTools3D business admin · synced</div>
           </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -50, marginBottom: 20 }}>
-          <span style={{ fontSize: 11, color: "#8A7F6D", marginRight: 10 }}>{userEmail}</span>
+        <div className="user-row" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: -50, marginBottom: 20 }}>
+          <span style={{ fontSize: 11, color: "#746A59", marginRight: 10 }}>{userEmail}</span>
           <button style={s.signOutBtn} onClick={onSignOut}>Sign out</button>
         </div>
         <nav className="tab-groups" aria-label="Admin sections">
@@ -368,6 +368,7 @@ function Invoicer({ userEmail, onSignOut }) {
                 {group.tabs.map((t) => (
                   <button
                     key={t.id}
+                    className={tab === t.id ? "is-active" : undefined}
                     onClick={() => {
                       setTab(t.id);
                       if (t.id !== "invoice") setEditingInvoice(null);
@@ -477,10 +478,10 @@ const s = {
   header: { maxWidth: 980, margin: "0 auto 24px" },
   brandRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 18 },
   brandName: { fontSize: 20, fontWeight: 800 },
-  brandSub: { fontSize: 11.5, color: "#8A7F6D", marginTop: 2 },
+  brandSub: { fontSize: 11.5, color: "#746A59", marginTop: 2 },
   tabRow: { display: "flex", gap: 6, borderBottom: "2px solid #E4DFD3" },
-  tabBtn: { fontWeight: 700, fontSize: 13.5, padding: "9px 16px", background: "transparent", border: "none", borderBottom: "2px solid transparent", marginBottom: -2, cursor: "pointer", color: "#8A7F6D" },
-  tabBtnActive: { color: "#E8792D", borderBottom: "2px solid #E8792D" },
+  tabBtn: { fontWeight: 700, fontSize: 13.5, padding: "9px 16px", background: "transparent", border: "none", borderBottom: "2px solid transparent", marginBottom: -2, cursor: "pointer", color: "#746A59" },
+  tabBtnActive: { color: "#B9531A", borderBottom: "2px solid #E8792D" },
   body: { maxWidth: 980, margin: "0 auto" },
   signOutBtn: { background: "#fff", color: "#1B2A3D", border: "1px solid #DCD5C6", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" },
   toast: { position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#1B2A3D", color: "#fff", padding: "10px 18px", borderRadius: 30, fontSize: 13, fontWeight: 600, boxShadow: "0 6px 20px rgba(0,0,0,0.2)" },
