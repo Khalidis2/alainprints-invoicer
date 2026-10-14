@@ -152,6 +152,7 @@ export async function emailCustomer(order, to) {
       <tr><td style="padding:6px 8px"><b>Total paid</b></td><td></td><td style="padding:6px 8px;text-align:right"><b>${aed(order.total)}</b></td></tr>
     </table>
     <p style="margin:18px 0 0;line-height:1.6">Delivery to: ${escapeHtml(order.emirate)} · ${escapeHtml(order.address)}<br>We will contact you on ${escapeHtml(order.mobile)} to arrange delivery. Reply to this email or message us on WhatsApp if you need anything.</p>
+    <p style="margin:14px 0 0;font-size:14px">Check your order any time: <a href="${SITE_URL}/track?ref=${encodeURIComponent(order.reference)}" style="color:#8c491a;font-weight:bold">Track my order</a> (you will need the last 4 digits of your mobile).</p>
     <p style="margin:18px 0 0;color:#6b7280;font-size:12px">printtools3d.com</p>
   </div>`;
   try {
