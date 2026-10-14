@@ -26,6 +26,7 @@ import {
   updateFilamentRow,
   receiveFilamentRow,
   fetchStoreOrders,
+  fetchPendingReviews,
   setStoreOrderStatus,
   setTestSpool,
 } from "./lib/storage";
@@ -123,6 +124,7 @@ function Invoicer({ userEmail, onSignOut }) {
   const [customers, setCustomers] = useState([]);
   const [filaments, setFilaments] = useState([]);
   const [storeOrders, setStoreOrders] = useState([]);
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [invoiceNo, setInvoiceNo] = useState(1000);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -167,6 +169,7 @@ function Invoicer({ userEmail, onSignOut }) {
         setCustomers(savedCustomers);
         setFilaments(savedFilaments);
         setStoreOrders(savedStoreOrders);
+        fetchPendingReviews().then((list) => !cancelled && setPendingReviewCount(list.length)).catch(() => {});
       } catch (e) {
         if (!cancelled) setLoadError(e.message);
       } finally {
@@ -310,7 +313,7 @@ function Invoicer({ userEmail, onSignOut }) {
         { id: "price-list", label: "Price list" },
         { id: "items", label: "Products" },
         { id: "store-orders", label: `Orders${pendingOrders ? ` (${pendingOrders})` : ""}` },
-        { id: "settings", label: "Website" },
+        { id: "settings", label: `Website${pendingReviewCount ? ` (${pendingReviewCount})` : ""}` },
       ],
     },
     {

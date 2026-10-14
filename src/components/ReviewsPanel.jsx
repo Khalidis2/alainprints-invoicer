@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
-import { fetchReviews, saveReviews } from "../lib/storage";
+import { fetchPendingReviews, fetchReviews, savePendingReviews, saveReviews } from "../lib/storage";
 
 const blank = { text: "", rating: 5, item: "" };
 
 // Reviews you paste in from WhatsApp / Instagram. The website shows them without any name.
 export default function ReviewsPanel() {
   const [reviews, setReviews] = useState([]);
+  const [pending, setPending] = useState([]);
   const [draft, setDraft] = useState(blank);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
-  useEffect(() => { fetchReviews().then(setReviews).catch(() => setMessage("Could not load reviews.")); }, []);
+  useEffect(() => {
+    fetchReviews().then(setReviews).catch(() => setMessage("Could not load reviews."));
+    fetchPendingReviews().then(setPending).catch(() => {});
+  }, []);
 
   async function persist(next, done) {
     setBusy(true);
@@ -30,6 +34,37 @@ export default function ReviewsPanel() {
     if (!draft.text.trim()) return;
     const review = { id: String(Date.now()), text: draft.text.trim().slice(0, 400), rating: Number(draft.rating) || 5, item: draft.item.trim(), date: new Date().toISOString().slice(0, 10), visible: true };
     persist([review, ...reviews], "Review added. It shows on the website within a minute.").then(() => setDraft(blank));
+  };
+  // Reviews customers sent from the website: approve to show them, or delete.
+  const approve = async (review) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const approved = { id: review.id, text: review.text, rating: review.rating, item: review.item || "", date: review.date, visible: true };
+      await saveReviews([approved, ...reviews]);
+      setReviews([approved, ...reviews]);
+      const rest = pending.filter((entry) => entry.id !== review.id);
+      await savePendingReviews(rest);
+      setPending(rest);
+      setMessage("Approved. It shows on the website within a minute.");
+    } catch {
+      setMessage("Could not approve. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const dismiss = async (review) => {
+    if (!window.confirm("Delete this review?")) return;
+    setBusy(true);
+    try {
+      const rest = pending.filter((entry) => entry.id !== review.id);
+      await savePendingReviews(rest);
+      setPending(rest);
+    } catch {
+      setMessage("Could not delete. Try again.");
+    } finally {
+      setBusy(false);
+    }
   };
   const toggle = (id) => persist(reviews.map((review) => (review.id === id ? { ...review, visible: review.visible === false } : review)), "Saved.");
   const remove = (id) => { if (window.confirm("Delete this review?")) persist(reviews.filter((review) => review.id !== id), "Deleted."); };
@@ -59,6 +94,21 @@ export default function ReviewsPanel() {
         <span role="status">{message}</span>
         <button type="button" onClick={add} disabled={busy || !draft.text.trim()}>{busy ? "Saving…" : "Add review"}</button>
       </div>
+      {pending.length > 0 && (
+        <div style={{ display: "grid", gap: 8, padding: 12, background: "#FFF5ED", border: "1px solid #E8792D", borderRadius: 10 }}>
+          <strong style={{ color: "#B9531A" }}>Waiting for your approval ({pending.length})</strong>
+          {pending.map((review) => (
+            <div key={review.id} style={{ display: "grid", gap: 6, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid #E4DFD3" }}>
+              <div style={{ color: "#B45309", fontWeight: 800 }}>{"★".repeat(review.rating || 5)}<span style={{ color: "#746A59", fontWeight: 600 }}> {review.item}{review.item ? " · " : ""}{review.date}</span></div>
+              <div style={{ lineHeight: 1.45 }}>{review.text}</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" disabled={busy} onClick={() => approve(review)} style={{ minHeight: 40, padding: "0 14px", border: "none", borderRadius: 8, background: "#B9531A", color: "#fff", fontWeight: 800, cursor: "pointer" }}>Approve and show</button>
+                <button type="button" disabled={busy} onClick={() => dismiss(review)} style={{ minHeight: 40, padding: "0 12px", border: "1px solid #B91C1C", borderRadius: 8, background: "#fff", color: "#B91C1C", fontWeight: 700, cursor: "pointer" }}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {reviews.length > 0 && (
         <div style={{ display: "grid", gap: 8 }}>
           {reviews.map((review) => (

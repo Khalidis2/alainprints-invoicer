@@ -662,6 +662,18 @@ export async function saveReviews(reviews) {
   if (error) throw error;
 }
 
+// Reviews customers sent from the website, waiting for approval.
+export async function fetchPendingReviews() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", "customer_reviews_pending").maybeSingle();
+  if (error) throw error;
+  return Array.isArray(data?.value) ? data.value : [];
+}
+
+export async function savePendingReviews(reviews) {
+  const { error } = await supabase.from("settings").upsert({ key: "customer_reviews_pending", value: reviews }, { onConflict: "key" });
+  if (error) throw error;
+}
+
 // ---------- Stripe payment link ----------
 // Asks our server (which holds the Stripe key) for a one-time payment link for this invoice.
 export async function checkStripePayment(invoiceId) {
