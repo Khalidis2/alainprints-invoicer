@@ -40,7 +40,7 @@ import StoreOrders from "./components/StoreOrders";
 import Sales from "./components/Sales";
 import PriceList from "./components/PriceList";
 import AdminDashboard from "./components/AdminDashboard";
-import { describeStockChange } from "./lib/stockCheck";
+import { describeStockChange, describeStockEdit } from "./lib/stockCheck";
 import WebsiteSettings from "./components/WebsiteSettings";
 
 export default function App() {
@@ -231,7 +231,17 @@ function Invoicer({ userEmail, onSignOut }) {
     return saved;
   };
   const handleUpdateInvoice = async (draft) => {
+    // Edits can add, remove or change spools: show the real stock before and after.
+    const oldLines = invoices.find((invoice) => invoice.id === draft.id)?.lines || [];
+    const touchesStock = [...oldLines, ...(draft.lines || [])].some((line) => line.filamentId);
+    const before = touchesStock ? await fetchFilaments().catch(() => null) : null;
     const saved = await updateInvoiceRow(draft);
+    if (before) {
+      fetchFilaments().then((after) => {
+        const text = describeStockEdit(oldLines, draft.lines, before, after);
+        if (text) showToast(text);
+      }).catch(() => {});
+    }
     try {
       await upsertCustomer(draft.customer);
       refreshCustomers();
@@ -299,6 +309,24 @@ function Invoicer({ userEmail, onSignOut }) {
     await setTestSpool(on);
     await refreshFilaments();
   };
+
+  // Changes made on another device (phone, laptop) show up when you come back to this tab.
+  useEffect(() => {
+    let last = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || Date.now() - last < 20000) return;
+      last = Date.now();
+      refreshInvoices();
+      refreshFilaments();
+      fetchStoreOrders().then(setStoreOrders).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [refreshInvoices, refreshFilaments]);
 
   const pendingOrders = storeOrders.filter((order) => order.status === "pending").length;
   // "All sales" counts everything waiting: pending website orders and unpaid invoices.

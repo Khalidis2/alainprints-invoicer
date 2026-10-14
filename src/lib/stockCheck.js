@@ -60,3 +60,21 @@ export function autoLinkLines(lines, filaments) {
   });
   return { lines: out, linked };
 }
+
+// After an invoice EDIT: what happened to the spools the old and new lines touch. Reports the real
+// before/after instead of judging it, because an edit can add, remove or change status.
+export function describeStockEdit(oldLines, newLines, before, after) {
+  const ids = new Set([...(oldLines || []), ...(newLines || [])].map((line) => line.filamentId).filter(Boolean));
+  if (!ids.size) return "";
+  const parts = [];
+  for (const id of ids) {
+    const was = before.find((row) => row.id === id);
+    const now = after.find((row) => row.id === id);
+    if (!was || !now) continue;
+    const a = spools(now, was.remainingG);
+    const b = spools(now, now.remainingG);
+    const moved = Math.abs(Number(was.remainingG) - Number(now.remainingG)) > 0.5;
+    parts.push(moved ? `${label(now)}: ${a} → ${b} spools` : `${label(now)}: ${b} spools (unchanged)`);
+  }
+  return parts.length ? `Stock after this edit · ${parts.join(" · ")}` : "";
+}
