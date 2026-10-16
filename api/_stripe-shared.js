@@ -49,8 +49,65 @@ export async function getInvoiceRow(id, token) {
   return rows?.[0] || null;
 }
 
+// Payment details live in real columns on the invoice row. Rows read before the
+// invoice_columns.sql migration has run still carry them in the old meta line, so fall back to that.
 export function readMeta(row) {
+  if (row && "status" in row) {
+    return {
+      itemId: META_ID,
+      status: row.status || "Unpaid",
+      dueDate: row.due_date || "",
+      discount: Number(row.discount) || 0,
+      paymentMethod: row.payment_method || "",
+      paidDate: row.paid_date || "",
+      paymentReference: row.payment_reference || "",
+      stripeLinkId: row.stripe_link_id || "",
+      stripeLinkUrl: row.stripe_link_url || "",
+      stripeLinkAmount: Number(row.stripe_link_amount) || 0,
+      stripePaymentIntent: row.stripe_payment_intent || "",
+      stripeRefundedAmount: Number(row.stripe_refunded_amount) || 0,
+      refundedDate: row.refunded_date || "",
+    };
+  }
   return (row.lines || []).find((line) => line.itemId === META_ID) || { itemId: META_ID };
+}
+
+// Column values for a meta object (used for direct updates that must not touch stock).
+export function metaToColumns(meta) {
+  const date = (value) => (/^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : null);
+  return {
+    status: meta.status || "Unpaid",
+    due_date: date(meta.dueDate),
+    discount: Number(meta.discount) || 0,
+    payment_method: meta.paymentMethod || "",
+    paid_date: date(meta.paidDate),
+    payment_reference: meta.paymentReference || "",
+    stripe_link_id: meta.stripeLinkId || "",
+    stripe_link_url: meta.stripeLinkUrl || "",
+    stripe_link_amount: Number(meta.stripeLinkAmount) || 0,
+    stripe_payment_intent: meta.stripePaymentIntent || "",
+    stripe_refunded_amount: Number(meta.stripeRefundedAmount) || 0,
+    refunded_date: date(meta.refundedDate),
+  };
+}
+
+// True once invoice_columns.sql has been run in Supabase.
+export function hasInvoiceColumns(row) {
+  return Boolean(row) && "status" in row;
+}
+
+// Finds an invoice whose column equals value; before the migration, searches the old meta line instead.
+export async function findInvoiceBy(column, jsonKey, value, token) {
+  if (!value) return null;
+  try {
+    const rows = await supabaseFetch(`/rest/v1/invoices?${column}=eq.${encodeURIComponent(value)}&select=*`, { token });
+    return rows?.[0] || null;
+  } catch (error) {
+    if (error.status !== 400) throw error; // 400 = column does not exist yet
+    const filter = encodeURIComponent(JSON.stringify([{ [jsonKey]: value }]));
+    const rows = await supabaseFetch(`/rest/v1/invoices?lines=cs.${filter}&select=*`, { token });
+    return rows?.[0] || null;
+  }
 }
 
 // Saves through save_invoice so stock is reconciled exactly like a save from the app.
@@ -113,12 +170,8 @@ export function uaeDate(unixSeconds) {
 // ---------- refunds ----------
 export async function findInvoiceByPaymentIntent(paymentIntent, token) {
   if (!paymentIntent) return null;
-  for (const field of ["stripePaymentIntent", "paymentReference"]) {
-    const filter = encodeURIComponent(JSON.stringify([{ [field]: paymentIntent }]));
-    const rows = await supabaseFetch(`/rest/v1/invoices?lines=cs.${filter}&select=*`, { token });
-    if (rows?.[0]) return rows[0];
-  }
-  return null;
+  return (await findInvoiceBy("stripe_payment_intent", "stripePaymentIntent", paymentIntent, token))
+    || (await findInvoiceBy("payment_reference", "paymentReference", paymentIntent, token));
 }
 
 // Full refund -> "Refunded" (save_invoice puts spools back in stock). Partial refund -> stays Paid, amount noted.

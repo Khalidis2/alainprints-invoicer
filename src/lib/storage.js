@@ -542,27 +542,45 @@ export async function deleteInvoiceRow(id) {
 
 function dbToInvoice(row) {
   const storedLines = row.lines ?? [];
-  const invoiceMeta = storedLines.find((line) => line.itemId === "__invoice_meta__");
+  // Payment details are real columns. Rows read before invoice_columns.sql has run still carry them
+  // in the old meta line, so fall back to that.
+  const legacyMeta = storedLines.find((line) => line.itemId === "__invoice_meta__");
+  const hasColumns = "status" in row;
   const discountMeta = storedLines.find((line) => line.itemId === "__invoice_discount__");
-  const discount = Math.max(0, Number(invoiceMeta?.discount ?? discountMeta?.amount) || 0);
+  const discount = Math.max(0, Number(hasColumns ? row.discount : legacyMeta?.discount ?? discountMeta?.amount) || 0);
   const total = Number(row.total);
+  const meta = hasColumns
+    ? {
+        dueDate: row.due_date ?? "",
+        status: row.status,
+        paymentMethod: row.payment_method,
+        paidDate: row.paid_date ?? "",
+        paymentReference: row.payment_reference,
+        stripeLinkId: row.stripe_link_id,
+        stripeLinkUrl: row.stripe_link_url,
+        stripeLinkAmount: row.stripe_link_amount,
+        stripePaymentIntent: row.stripe_payment_intent,
+        stripeRefundedAmount: row.stripe_refunded_amount,
+        refundedDate: row.refunded_date ?? "",
+      }
+    : legacyMeta || {};
   return {
     id: row.id,
     number: row.number,
     date: row.date,
     customer: { name: row.customer_name ?? "", phone: row.customer_phone ?? "" },
     notes: row.notes ?? "",
-    dueDate: invoiceMeta?.dueDate ?? "",
-    status: invoiceMeta?.status ?? "Unpaid",
-    paymentMethod: invoiceMeta?.paymentMethod ?? "",
-    paidDate: invoiceMeta?.paidDate ?? "",
-    paymentReference: invoiceMeta?.paymentReference ?? "",
-    stripeLinkId: invoiceMeta?.stripeLinkId ?? "",
-    stripeLinkUrl: invoiceMeta?.stripeLinkUrl ?? "",
-    stripeLinkAmount: Number(invoiceMeta?.stripeLinkAmount) || 0,
-    stripePaymentIntent: invoiceMeta?.stripePaymentIntent ?? "",
-    stripeRefundedAmount: Number(invoiceMeta?.stripeRefundedAmount) || 0,
-    refundedDate: invoiceMeta?.refundedDate ?? "",
+    dueDate: meta.dueDate ?? "",
+    status: meta.status || "Unpaid",
+    paymentMethod: meta.paymentMethod ?? "",
+    paidDate: meta.paidDate ?? "",
+    paymentReference: meta.paymentReference ?? "",
+    stripeLinkId: meta.stripeLinkId ?? "",
+    stripeLinkUrl: meta.stripeLinkUrl ?? "",
+    stripeLinkAmount: Number(meta.stripeLinkAmount) || 0,
+    stripePaymentIntent: meta.stripePaymentIntent ?? "",
+    stripeRefundedAmount: Number(meta.stripeRefundedAmount) || 0,
+    refundedDate: meta.refundedDate ?? "",
     subtotal: total + discount,
     discount,
     total,
@@ -599,19 +617,16 @@ function invoiceToDb(invoice) {
 }
 
 // ---------- invoice counter ----------
-// Read-then-write. Fine for two people on the same small team; if two
-// invoices could ever be finalized in the exact same instant, this is
-// the place to replace with a Postgres RPC that increments atomically.
+// The database owns the counter: save_invoice raises it atomically on every save, and
+// next_invoice_no() also looks at the highest saved number. The browser only ever reads it.
 
 export async function fetchInvoiceNo() {
-  const { data, error } = await supabase.from("settings").select("value").eq("key", "invoice_no").single();
-  if (error) throw error;
-  return Number(data.value);
-}
-
-export async function persistInvoiceNo(n) {
-  const { error } = await supabase.from("settings").update({ value: n }).eq("key", "invoice_no");
-  if (error) throw error;
+  const { data, error } = await supabase.rpc("next_invoice_no");
+  if (!error && Number.isInteger(Number(data))) return Number(data);
+  // next_invoice_no() is not installed yet (invoice_columns.sql not run): read the stored counter.
+  const stored = await supabase.from("settings").select("value").eq("key", "invoice_no").single();
+  if (stored.error) throw stored.error;
+  return Number(stored.data.value);
 }
 
 // ---------- realtime ----------

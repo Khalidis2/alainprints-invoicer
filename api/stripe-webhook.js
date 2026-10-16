@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder } from "./_store-shared.js";
 import { savePayout } from "./_payouts.js";
-import { applyRefund, env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
+import { applyRefund, env, findInvoiceBy, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // Stripe calls this when a payment link is paid. It marks the matching invoice Paid.
 export const config = { api: { bodyParser: false } };
@@ -82,9 +82,7 @@ async function findInvoice(session) {
     if (row) return row;
   }
   if (!session.payment_link) return null;
-  const filter = encodeURIComponent(JSON.stringify([{ stripeLinkId: session.payment_link }]));
-  const rows = await supabaseFetch(`/rest/v1/invoices?lines=cs.${filter}&select=*`);
-  return rows?.[0] || null;
+  return findInvoiceBy("stripe_link_id", "stripeLinkId", session.payment_link);
 }
 
 function verifySignature(raw, header) {

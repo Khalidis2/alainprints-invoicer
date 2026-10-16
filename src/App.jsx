@@ -10,7 +10,6 @@ import {
   updateInvoiceRow,
   deleteInvoiceRow,
   fetchInvoiceNo,
-  persistInvoiceNo,
   subscribeToChanges,
   fetchCustomers,
   upsertCustomer,
@@ -224,9 +223,7 @@ function Invoicer({ userEmail, onSignOut }) {
     } catch (error) {
       if (error.code !== "42P01") showToast("Invoice saved, but customer couldn't be updated");
     }
-    const next = Math.max(invoiceNo + 1, number + 1);
-    await persistInvoiceNo(next);
-    setInvoiceNo(next);
+    fetchInvoiceNo().then(setInvoiceNo).catch(() => setInvoiceNo(Math.max(invoiceNo + 1, number + 1)));
     refreshInvoices();
     refreshFilaments();
     return saved;
@@ -249,9 +246,7 @@ function Invoicer({ userEmail, onSignOut }) {
     } catch (error) {
       if (error.code !== "42P01") showToast("Invoice updated, but customer couldn't be updated");
     }
-    const next = Math.max(invoiceNo, Number(draft.number) + 1);
-    await persistInvoiceNo(next);
-    setInvoiceNo(next);
+    fetchInvoiceNo().then(setInvoiceNo).catch(() => {});
     refreshInvoices();
     refreshFilaments();
     return saved;
