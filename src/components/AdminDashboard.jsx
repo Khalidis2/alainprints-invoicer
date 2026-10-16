@@ -5,6 +5,95 @@ function money(value) {
   return new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED" }).format(Number(value || 0));
 }
 
+const DAY = 86400000;
+const dayLabel = (time) => new Date(time).toLocaleDateString("en-AE", { day: "numeric", month: "short" });
+
+// Money that actually came in, newest first. Uses the day it was paid, not the day it was created.
+function buildPayments(invoices, storeOrders) {
+  const fromInvoices = invoices.filter((invoice) => invoice.status === "Paid").map((invoice) => ({
+    key: `inv-${invoice.id}`,
+    when: new Date(invoice.paidDate || invoice.date || 0).getTime() || 0,
+    name: invoice.customer?.name || "No name",
+    ref: `INV-${invoice.number}`,
+    amount: Number(invoice.total) || 0,
+  }));
+  const fromOrders = storeOrders.filter((order) => order.payment_status === "paid").map((order) => ({
+    key: `ord-${order.id}`,
+    when: new Date(order.paid_at || order.created_at || 0).getTime() || 0,
+    name: order.customer_name || "Website order",
+    ref: order.reference,
+    amount: Number(order.total) || 0,
+  }));
+  return [...fromInvoices, ...fromOrders].sort((a, b) => b.when - a.when);
+}
+
+function DashboardCards({ invoices, storeOrders, filaments, onNavigate }) {
+  const payments = useMemo(() => buildPayments(invoices, storeOrders), [invoices, storeOrders]);
+  const now = Date.now();
+  const sumSince = (days) => payments.filter((payment) => payment.when >= now - days * DAY).reduce((sum, payment) => sum + payment.amount, 0);
+  const allTime = payments.reduce((sum, payment) => sum + payment.amount, 0);
+
+  const unpaid = useMemo(
+    () => invoices.filter((invoice) => (invoice.status || "Unpaid") === "Unpaid").sort((a, b) => String(a.date).localeCompare(String(b.date))),
+    [invoices],
+  );
+  const owed = unpaid.reduce((sum, invoice) => sum + (Number(invoice.total) || 0), 0);
+
+  // Less than one full spool left of a colour you sell.
+  const low = useMemo(
+    () => filaments
+      .filter((item) => item.stockStatus === "available" && Number(item.remainingG || 0) < Number(item.spoolWeightG || 1000))
+      .sort((a, b) => Number(a.remainingG || 0) - Number(b.remainingG || 0)),
+    [filaments],
+  );
+
+  return (
+    <div className="dash-cards">
+      <article className="admin-card dash-wide">
+        <span>Money received</span>
+        <div className="dash-stats">
+          <div><small>Last 7 days</small><strong>{money(sumSince(7))}</strong></div>
+          <div><small>Last 30 days</small><strong>{money(sumSince(30))}</strong></div>
+          <div><small>All time</small><strong>{money(allTime)}</strong></div>
+        </div>
+      </article>
+
+      <article className="admin-card">
+        <span>Recent payments</span>
+        {payments.length === 0 && <p className="dash-empty">No payments yet.</p>}
+        <ul className="dash-list">
+          {payments.slice(0, 6).map((payment) => (
+            <li key={payment.key}><b>{payment.name}</b><small>{dayLabel(payment.when)} · {payment.ref}</small><strong>{money(payment.amount)}</strong></li>
+          ))}
+        </ul>
+      </article>
+
+      <article className="admin-card">
+        <span>Waiting to be paid</span>
+        <strong className="dash-total">{money(owed)}</strong>
+        {unpaid.length === 0 && <p className="dash-empty">Nothing unpaid.</p>}
+        <ul className="dash-list">
+          {unpaid.slice(0, 4).map((invoice) => (
+            <li key={invoice.id}><b>{invoice.customer?.name || "No name"}</b><small>{invoice.date} · INV-{invoice.number}</small><strong>{money(invoice.total)}</strong></li>
+          ))}
+        </ul>
+        {unpaid.length > 4 && <button type="button" className="dash-link" onClick={() => onNavigate("history")}>All {unpaid.length} unpaid →</button>}
+      </article>
+
+      <article className="admin-card">
+        <span>Low filament</span>
+        {low.length === 0 && <p className="dash-empty">Every colour has a full spool.</p>}
+        <ul className="dash-list">
+          {low.slice(0, 6).map((item) => (
+            <li key={item.id}><b>{`${item.material} ${item.color}`.trim()}</b><small>{Math.round(Number(item.remainingG || 0))} g left</small><strong>{Number(item.remainingG || 0) <= 0 ? "Out" : "Low"}</strong></li>
+          ))}
+        </ul>
+        {low.length > 6 && <button type="button" className="dash-link" onClick={() => onNavigate("filament")}>All {low.length} low →</button>}
+      </article>
+    </div>
+  );
+}
+
 export default function AdminDashboard({ items, invoices, customers, filaments, storeOrders, onNavigate }) {
   const metrics = useMemo(() => {
     const available = filaments.filter((item) => item.stockStatus === "available");
@@ -42,6 +131,8 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
         </div>
         <a className="admin-site-link" href="https://www.printtools3d.com" target="_blank" rel="noreferrer">Open live website ↗</a>
       </div>
+
+      <DashboardCards invoices={invoices} storeOrders={storeOrders} filaments={filaments} onNavigate={onNavigate} />
 
       <Breakdown entries={entries} waiting={waiting} waitingTotal={waitingTotal} />
 
