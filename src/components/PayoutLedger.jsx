@@ -95,9 +95,10 @@ export default function PayoutLedger({ showToast }) {
     setSyncing(true);
     try {
       const { data } = await supabase.auth.getSession();
-      const response = await fetch("/api/payouts-sync", {
+      const response = await fetch("/api/stripe-fees", {
         method: "POST",
-        headers: { Authorization: `Bearer ${data?.session?.access_token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${data?.session?.access_token}` },
+        body: JSON.stringify({ sync: "payouts" }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Sync failed");

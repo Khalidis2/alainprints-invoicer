@@ -1,4 +1,5 @@
 import { stripe, supabaseFetch } from "./_stripe-shared.js";
+import { syncPayouts } from "./_payouts.js";
 
 // Admin-only: the REAL Stripe fee and net amount for card payments, read from Stripe's balance transaction.
 // POST { paymentIntents: ["pi_..."] } with the signed-in admin's token.
@@ -16,6 +17,14 @@ export default async function handler(request, response) {
   }
 
   const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+  if (body.sync === "payouts") {
+    try {
+      return response.status(200).json(await syncPayouts());
+    } catch (error) {
+      return response.status(500).json({ error: error.message || "Sync failed" });
+    }
+  }
+
   const ids = [...new Set((Array.isArray(body.paymentIntents) ? body.paymentIntents : []).map(String))].filter((id) => /^pi_[A-Za-z0-9]+$/.test(id)).slice(0, 40);
   const fees = {};
 
