@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder } from "./_store-shared.js";
+import { savePayout } from "./_payouts.js";
 import { applyRefund, env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // Stripe calls this when a payment link is paid. It marks the matching invoice Paid.
@@ -34,6 +35,10 @@ export default async function handler(request, response) {
         return response.status(200).json({ storeOrder: storeOrder.reference, refunded: full });
       }
       return response.status(200).json(await applyRefund(charge));
+    }
+
+    if (event.type.startsWith("payout.")) {
+      return response.status(200).json(await savePayout(event.data.object));
     }
 
     const paidEvents = ["checkout.session.completed", "checkout.session.async_payment_succeeded"];

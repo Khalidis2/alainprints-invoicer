@@ -42,6 +42,7 @@ import PriceList from "./components/PriceList";
 import AdminDashboard from "./components/AdminDashboard";
 import { describeStockChange, describeStockEdit } from "./lib/stockCheck";
 import WebsiteSettings from "./components/WebsiteSettings";
+import PayoutLedger from "./components/PayoutLedger";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -350,6 +351,7 @@ function Invoicer({ userEmail, onSignOut }) {
         { id: "invoice", label: "New invoice" },
         { id: "history", label: "Invoices" },
         { id: "customers", label: "Customers" },
+        { id: "payouts", label: "Payouts" },
         { id: "calculator", label: "Slice & price" },
       ],
     },
@@ -487,6 +489,7 @@ function Invoicer({ userEmail, onSignOut }) {
         {tab === "history" && (
           <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} onRefresh={refreshInvoices} showToast={showToast} />
         )}
+        {tab === "payouts" && <PayoutLedger showToast={showToast} />}
         {tab === "settings" && (
           <WebsiteSettings filaments={filaments} items={items} />
         )}
