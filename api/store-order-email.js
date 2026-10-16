@@ -1,5 +1,6 @@
 import { supabaseFetch } from "./_stripe-shared.js";
 import { emailOrder, getStoreOrder } from "./_store-shared.js";
+import { sendTestEmail } from "./_email-test.js";
 
 // Admin-only: sends the order email for one store order again and returns Resend's exact answer.
 export default async function handler(request, response) {
@@ -13,6 +14,7 @@ export default async function handler(request, response) {
 
   try {
     const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+    if (body.test) return await sendTestEmail(response);
     const id = String(body.id || "");
     if (!/^[0-9a-f-]{36}$/i.test(id)) return response.status(400).json({ error: "Missing order" });
     const order = await getStoreOrder(`id=eq.${id}`);

@@ -1,15 +1,7 @@
-import { env, supabaseFetch } from "./_stripe-shared.js";
+import { env } from "./_stripe-shared.js";
 
 // Admin-only: sends a test email through Resend and returns Resend's exact answer.
-export default async function handler(request, response) {
-  if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
-  const token = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  try {
-    await supabaseFetch("/auth/v1/user", { token });
-  } catch {
-    return response.status(401).json({ error: "Please sign in again." });
-  }
-
+export async function sendTestEmail(response) {
   const key = env("RESEND_API_KEY");
   const to = env("ORDER_EMAIL_TO") || "itsalainprints@gmail.com";
   const from = env("ORDER_EMAIL_FROM") || "printtools3d orders <onboarding@resend.dev>";

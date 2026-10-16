@@ -1,0 +1,3 @@
+{
+  "functions": { "api/print-doctor.js": { "maxDuration": 60 } }
+}
