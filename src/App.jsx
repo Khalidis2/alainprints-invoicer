@@ -43,7 +43,6 @@ import AdminDashboard from "./components/AdminDashboard";
 import { describeStockChange, describeStockEdit } from "./lib/stockCheck";
 import WebsiteSettings from "./components/WebsiteSettings";
 import PayoutLedger from "./components/PayoutLedger";
-import PrintDoctor from "./components/PrintDoctor";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -354,7 +353,6 @@ function Invoicer({ userEmail, onSignOut }) {
         { id: "customers", label: "Customers" },
         { id: "payouts", label: "Payouts" },
         { id: "calculator", label: "Slice & price" },
-        { id: "printdoctor", label: "Print Doctor" },
       ],
     },
   ];
@@ -492,7 +490,6 @@ function Invoicer({ userEmail, onSignOut }) {
           <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} onRefresh={refreshInvoices} showToast={showToast} />
         )}
         {tab === "payouts" && <PayoutLedger showToast={showToast} />}
-        {tab === "printdoctor" && <PrintDoctor />}
         {tab === "settings" && (
           <WebsiteSettings filaments={filaments} items={items} />
         )}

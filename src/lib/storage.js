@@ -710,7 +710,7 @@ export async function sendTestEmail() {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
   if (!token) throw new Error("Please sign in again.");
-  const response = await fetch("/api/store-order-email", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ test: true }) });
+  const response = await fetch("/api/email-test", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   return response.json();
 }
 
