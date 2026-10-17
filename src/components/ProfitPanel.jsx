@@ -39,6 +39,7 @@ const profitOf = (price, cost, settings) =>
 export default function ProfitPanel({ filaments, onUpdate, showToast }) {
   const [settings, setSettings] = useState(loadSettings);
   const [costDraft, setCostDraft] = useState({});
+  const [priceDraft, setPriceDraft] = useState({});
   const [busy, setBusy] = useState(false);
 
   const change = (patch) => {
@@ -102,6 +103,12 @@ export default function ProfitPanel({ filaments, onUpdate, showToast }) {
     if (!(value >= 0) || costDraft[group.type] === undefined || costDraft[group.type] === "") return;
     applyToType(group, { purchaseCost: value }, `${group.type}: cost set to ${AED(value)} per spool`).then(() => setCostDraft((d) => ({ ...d, [group.type]: undefined })));
   };
+  const saveSellPrice = (group) => {
+    const value = Number(priceDraft[group.type]);
+    if (!(value > 0) || priceDraft[group.type] === undefined || priceDraft[group.type] === "") return;
+    if (!window.confirm(`Set the selling price of every ${group.type} spool to ${AED(value)}?`)) return;
+    applyToType(group, { sellingPrice: value }, `${group.type}: price set to ${AED(value)}`).then(() => setPriceDraft((d) => ({ ...d, [group.type]: undefined })));
+  };
   const applyPrice = (group) => {
     if (!group.suggested || !window.confirm(`Set the selling price of every ${group.type} spool to ${AED(group.suggested)}?`)) return;
     applyToType(group, { sellingPrice: group.suggested }, `${group.type}: price set to ${AED(group.suggested)}`);
@@ -147,7 +154,13 @@ export default function ProfitPanel({ filaments, onUpdate, showToast }) {
                     </span>
                     {hasCost && <div style={s.hint}>now {AED(group.cost)}{group.uncosted > 0 ? ` (${group.uncosted} spool${group.uncosted === 1 ? "" : "s"} have no cost)` : ""}</div>}
                   </td>
-                  <td style={s.num}>{AED(group.price)}</td>
+                  <td style={s.num}>
+                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                      <input style={{ ...s.input, width: 74 }} type="number" min="0" step="0.5" inputMode="decimal" placeholder={group.price.toFixed(2)} value={priceDraft[group.type] ?? ""} onChange={(e) => setPriceDraft({ ...priceDraft, [group.type]: e.target.value })} />
+                      <button style={s.small} disabled={busy || (priceDraft[group.type] ?? "") === ""} onClick={() => saveSellPrice(group)}>Save</button>
+                    </span>
+                    <div style={s.hint}>now {AED(group.price)}</div>
+                  </td>
                   <td style={{ ...s.num, color: hasCost ? (group.profit >= 0 ? "#047857" : "#B91C1C") : "#746A59", fontWeight: 800 }}>{hasCost ? AED(group.profit) : "-"}</td>
                   <td style={s.num}>{hasCost ? `${group.margin.toFixed(0)}%` : "-"}</td>
                   <td style={s.num}>
