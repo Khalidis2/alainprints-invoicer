@@ -247,7 +247,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
 
             <label className="publish-control">
               <input type="checkbox" checked={Boolean(editing.publicVisible)} onChange={(e) => setEditing({ ...editing, publicVisible: e.target.checked })} />
-              <span><strong>Publish on PrintTools3D</strong><small>Only enable this when the image, name, description and price are ready.</small></span>
+              <span><strong>Publish on Alain Prints</strong><small>Only enable this when the image, name, description and price are ready.</small></span>
             </label>
 
             <label style={s.label}>Feature</label>

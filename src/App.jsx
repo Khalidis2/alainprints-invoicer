@@ -92,7 +92,7 @@ function Login() {
       <form style={authStyles.card} onSubmit={signIn}>
         <img src="/logo-round.png" alt="Alain Prints" width="72" height="72" style={{ display: "block", margin: "0 0 12px", borderRadius: "50%" }} />
         <div style={authStyles.brand}>ALAINPRINTS</div>
-        <h1 style={authStyles.title}>PrintTools3D admin</h1>
+        <h1 style={authStyles.title}>Alain Prints admin</h1>
         <p style={authStyles.sub}>Sign in to manage stock, products, orders, customers and invoices.</p>
         <label style={authStyles.label}>Email</label>
         <input style={authStyles.input} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -386,7 +386,7 @@ function Invoicer({ userEmail, onSignOut }) {
           <img src="/logo-round.png" alt="Alain Prints" width="48" height="48" style={{ borderRadius: "50%", flex: "0 0 auto" }} />
           <div>
             <div style={s.brandName}>alainprints</div>
-            <div style={s.brandSub}>PrintTools3D business admin · synced</div>
+            <div style={s.brandSub}>Alain Prints business admin · synced</div>
           </div>
         </div>
         <div className="user-row" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: -50, marginBottom: 20 }}>
