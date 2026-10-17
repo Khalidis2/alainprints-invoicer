@@ -16,6 +16,8 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const [paidDate, setPaidDate] = useState(initialInvoice?.paidDate ?? "");
   const [paymentReference, setPaymentReference] = useState(initialInvoice?.paymentReference ?? "");
   const [discountInput, setDiscountInput] = useState(initialInvoice?.discount ? String(initialInvoice.discount) : "");
+  // The discount is typed either as an amount (AED) or as a percentage of the subtotal. Only the AED amount is saved.
+  const [discountMode, setDiscountMode] = useState("amount");
   const [finalized, setFinalized] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [search, setSearch] = useState("");
@@ -85,7 +87,10 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const removeLine = (itemId) => setLines((prev) => prev.filter((l) => l.itemId !== itemId));
 
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
-  const discount = Math.min(Math.max(0, Number(discountInput) || 0), subtotal);
+  const typedDiscount = Math.max(0, Number(discountInput) || 0);
+  const discount = discountMode === "percent"
+    ? Math.round(subtotal * Math.min(typedDiscount, 100)) / 100
+    : Math.min(typedDiscount, subtotal);
   const total = subtotal - discount;
   const parsedInvoiceNo = Number(customInvoiceNo);
   const invoiceNumberIsValid = Number.isInteger(parsedInvoiceNo) && parsedInvoiceNo > 0;
@@ -138,6 +143,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setLines([]);
     setNotes("");
     setDiscountInput("");
+    setDiscountMode("amount");
     setCustomInvoiceNo(String(invoiceNo));
     setInvoiceDate(today());
     setDueDate("");
@@ -360,8 +366,16 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
         <div className="two-column-fields" style={{ ...s.fieldGrid, marginTop: 6 }}>
           <div>
-            <label style={s.label}>Discount (AED)</label>
-            <input type="number" inputMode="decimal" min="0" max={subtotal} step="0.01" style={s.input} value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} placeholder="0" />
+            <label style={s.label}>
+              Discount
+              <span style={{ display: "inline-flex", marginLeft: 8, border: "1px solid #DCD5C6", borderRadius: 7, overflow: "hidden", verticalAlign: "middle" }}>
+                {[["amount", "AED"], ["percent", "%"]].map(([mode, label]) => (
+                  <button key={mode} type="button" onClick={() => { setDiscountMode(mode); setDiscountInput(""); }} style={{ padding: "3px 10px", border: 0, cursor: "pointer", fontSize: 12, fontWeight: 800, background: discountMode === mode ? "#0F6B64" : "#fff", color: discountMode === mode ? "#fff" : "#746A59" }}>{label}</button>
+                ))}
+              </span>
+            </label>
+            <input type="number" inputMode="decimal" min="0" max={discountMode === "percent" ? 100 : subtotal} step={discountMode === "percent" ? "0.5" : "0.01"} style={s.input} value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} placeholder={discountMode === "percent" ? "e.g. 10" : "0"} />
+            {discountMode === "percent" && discount > 0 && <div style={{ marginTop: 4, fontSize: 12, color: "#746A59" }}>= {AED(discount)} off</div>}
           </div>
           <div>
             <label style={s.label}>Note (optional)</label>
@@ -370,7 +384,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         </div>
 
         <div style={s.summaryRow}><span>Subtotal</span><span>{AED(subtotal)}</span></div>
-        {discount > 0 && <div style={s.summaryRow}><span>Discount</span><span>− {AED(discount)}</span></div>}
+        {discount > 0 && <div style={s.summaryRow}><span>Discount{discountMode === "percent" ? ` (${typedDiscount}%)` : ""}</span><span>− {AED(discount)}</span></div>}
         <div style={s.totalRow}><span>Total</span><span style={s.totalAmt}>{AED(total)}</span></div>
 
         <div style={s.step}>3 · Payment</div>
