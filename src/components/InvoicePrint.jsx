@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { AED } from "../lib/helpers";
+import { emailInvoicePdf } from "../lib/storage";
 import StripeLinkPanel from "./StripeLinkPanel";
 
 const statusColor = {
@@ -23,6 +24,7 @@ const statusBg = {
 export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = false, autoShare = false, showPaymentLink = false, showToast }) {
   const [payUrl, setPayUrl] = useState(invoice.stripeLinkUrl && Number(invoice.stripeLinkAmount) === Math.round(Number(invoice.total) * 100) ? invoice.stripeLinkUrl : "");
   const [sharing, setSharing] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   const [receiptMode, setReceiptMode] = useState(false);
   // iPhone Safari only allows the share sheet straight from a tap, and building the PDF takes a moment.
   // So the PDF is prepared ahead of time and the tap shares the finished file immediately.
@@ -92,6 +94,17 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
     return () => window.clearTimeout(timer);
   }, [invoice, receiptMode, payUrl]);
 
+  const emailPdf = async () => {
+    if (emailing) return;
+    const typed = window.prompt("Send this invoice as a PDF to which email?", invoice.customer?.email || "");
+    const email = String(typed || "").trim();
+    if (!email) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast?.("That email does not look right"); return; }
+    setEmailing(true);
+    try { showToast?.(await emailInvoicePdf(invoice.id, email)); } catch (error) { showToast?.(error.message || "Email not sent"); }
+    setEmailing(false);
+  };
+
   const download = (file) => {
     const url = URL.createObjectURL(file);
     const link = document.createElement("a");
@@ -136,6 +149,7 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
         <div style={s.toolbarButtons}>
           {status === "Paid" && <button style={s.receiptBtn} onClick={() => setReceiptMode((value) => !value)}>{receiptMode ? "Invoice view" : "Receipt view"}</button>}
           <button style={s.shareBtn} disabled={sharing} onClick={pdfError && !pdfFile ? () => { building.current = null; setSharing(true); prepare().catch(() => {}).finally(() => setSharing(false)); } : sharePdf}>{sharing || (!pdfFile && !pdfError) ? "Preparing PDF…" : pdfFile ? "Share PDF" : "Retry PDF"}</button>
+          {invoice.id && <button style={s.receiptBtn} disabled={emailing} onClick={emailPdf}>{emailing ? "Sending…" : "Email PDF"}</button>}
           <button style={s.primaryBtn} onClick={() => window.print()}>Print / Save PDF</button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { SITE_URL, getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder, emailInvoicePaid } from "./_store-shared.js";
+import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder, emailInvoicePaid } from "./_store-shared.js";
 import { savePayout } from "./_payouts.js";
-import { buildInvoicePdf } from "./_invoice-pdf.js";
+import { invoicePdfFromRow } from "./_invoice-pdf.js";
 import { applyRefund, env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // Stripe calls this when a payment link is paid. It marks the matching invoice Paid.
@@ -72,7 +72,7 @@ export default async function handler(request, response) {
     // Receipt to the customer (Stripe collected their email, Apple Pay included) and a copy to the owner.
     // The PDF invoice is attached to both emails. If building it fails, the emails still go out without it.
     const pdf = await invoicePdf(row, meta, { paidDate: uaeDate(session.created || event.created), paymentReference: session.payment_intent || session.id });
-    const emails = await emailInvoicePaid(row, { customerEmail: session.customer_details?.email || session.customer_email, paymentIntent: session.payment_intent, pdf });
+    const emails = await emailInvoicePaid(row, { customerEmail: session.customer_details?.email || session.customer_email || meta.customerEmail, paymentIntent: session.payment_intent, pdf });
     if (emails.customer?.failed || emails.owner?.failed) console.error("Invoice paid email problem", row.number, JSON.stringify(emails));
     return response.status(200).json({ marked: "Paid", invoice: row.number, emails });
   } catch (error) {
@@ -83,25 +83,7 @@ export default async function handler(request, response) {
 
 async function invoicePdf(row, meta, paid) {
   try {
-    let logo = null;
-    try {
-      const image = await fetch(`${SITE_URL}/logo-round.png`, { signal: AbortSignal.timeout(4000) });
-      if (image.ok) logo = Buffer.from(await image.arrayBuffer());
-    } catch { /* the PDF works without the logo */ }
-    return await buildInvoicePdf({
-      number: row.number,
-      date: row.date,
-      customerName: row.customer_name,
-      customerPhone: row.customer_phone,
-      notes: row.notes,
-      total: row.total,
-      discount: meta.discount,
-      lines: (row.lines || []).filter((line) => line && line.itemId !== "__invoice_meta__" && line.itemId !== "__invoice_discount__"),
-      status: "Paid",
-      paidDate: paid.paidDate,
-      paymentMethod: "Card (Stripe)",
-      paymentReference: paid.paymentReference,
-    }, { logo });
+    return await invoicePdfFromRow(row, meta, { status: "Paid", paidDate: paid.paidDate, paymentMethod: "Card (Stripe)", paymentReference: paid.paymentReference, payUrl: "" });
   } catch (error) {
     console.error("Invoice PDF failed", row.number, error.message);
     return null;

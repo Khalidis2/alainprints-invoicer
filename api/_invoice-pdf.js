@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { SITE_URL } from "./_store-shared.js";
 
 // Builds the invoice PDF on the server (used for the receipt email after a Stripe-link payment).
 // Same look as the PDF in the app: teal + orange, status pill, items table, totals box.
@@ -113,6 +114,7 @@ export async function buildInvoicePdf(invoice, { logo } = {}) {
 
   // ---------- info cards ----------
   const details = [["Currency", "AED"], ["VAT", "Not VAT registered"]];
+  if (String(invoice.status || "Paid") !== "Paid" && invoice.dueDate) details.push(["Payment terms", `Due ${invoice.dueDate}`]);
   if (String(invoice.status || "Paid") === "Paid") {
     details.push(["Paid on", invoice.paidDate || "Not recorded"], ["Method", invoice.paymentMethod || "Not recorded"]);
     if (invoice.paymentReference) details.push(["Reference", String(invoice.paymentReference)]);
@@ -179,7 +181,18 @@ export async function buildInvoicePdf(invoice, { logo } = {}) {
   text("TOTAL", bx + 26, totalY + 10, { size: 10.5, font: bold, color: rgb(1, 1, 1), spacing: 1.5 });
   text(aed(invoice.total), bx + boxW - 26, totalY + 10, { size: 12, font: bold, color: rgb(1, 1, 1), align: "right" });
   if (status === "Paid") text(`Paid in full${invoice.paidDate ? ` on ${invoice.paidDate}` : ""}`, bx + boxW - 16, totalY - 16, { size: 8.5, font: bold, color: GREEN, align: "right" });
+  else if (status === "Unpaid") text(`Amount due: ${aed(invoice.total)}`, bx + boxW - 16, totalY - 16, { size: 8.5, font: bold, color: ORANGE, align: "right" });
   y = y - boxH - 24;
+
+  if (status === "Unpaid" && invoice.payUrl) {
+    const urlLines = wrap(invoice.payUrl, regular, 8.5, W - 2 * M - 28);
+    const blockH = 34 + urlLines.length * 11;
+    if (y - blockH < 80) newPage();
+    page.drawRectangle({ x: M, y: y - blockH, width: W - 2 * M, height: blockH, color: rgb(0.945, 0.973, 0.965), borderColor: TEAL, borderWidth: 0.8, borderDashArray: [3, 3] });
+    text("PAY ONLINE BY CARD", M + 14, y - 18, { size: 7.5, font: bold, color: TEAL, spacing: 2 });
+    urlLines.forEach((part, i) => text(part, M + 14, y - 32 - i * 11, { size: 8.5, color: TEAL }));
+    y -= blockH + 18;
+  }
 
   if (invoice.notes) {
     const noteLines = wrap(invoice.notes, regular, 9.5, W - 2 * M);
@@ -189,4 +202,30 @@ export async function buildInvoicePdf(invoice, { logo } = {}) {
   }
 
   return Buffer.from(await pdf.save());
+}
+
+// Builds the PDF for a saved invoice row (as stored in the database). `overrides` can set status / paid details.
+export async function invoicePdfFromRow(row, meta, overrides = {}) {
+  let logo = null;
+  try {
+    const image = await fetch(`${SITE_URL}/logo-round.png`, { signal: AbortSignal.timeout(4000) });
+    if (image.ok) logo = Buffer.from(await image.arrayBuffer());
+  } catch { /* the PDF works without the logo */ }
+  return buildInvoicePdf({
+    number: row.number,
+    date: row.date,
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone,
+    notes: row.notes,
+    total: row.total,
+    discount: meta.discount,
+    dueDate: meta.dueDate,
+    payUrl: meta.stripeLinkUrl,
+    lines: (row.lines || []).filter((line) => line && line.itemId !== "__invoice_meta__" && line.itemId !== "__invoice_discount__"),
+    status: meta.status || "Unpaid",
+    paidDate: meta.paidDate,
+    paymentMethod: meta.paymentMethod,
+    paymentReference: meta.paymentReference,
+    ...overrides,
+  }, { logo });
 }

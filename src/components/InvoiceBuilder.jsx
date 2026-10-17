@@ -5,7 +5,7 @@ import { autoLinkLines } from "../lib/stockCheck";
 
 export default function InvoiceBuilder({ items, customers = [], filaments = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
-  const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "" });
+  const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "", email: "" });
   const [lines, setLines] = useState(initialInvoice?.lines ?? []);
   const [notes, setNotes] = useState(initialInvoice?.notes ?? "");
   const [customInvoiceNo, setCustomInvoiceNo] = useState(String(initialInvoice?.number ?? invoiceNo));
@@ -139,7 +139,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
   const startOver = () => {
     setFinalized(null);
-    setCustomer({ name: "", phone: "" });
+    setCustomer({ name: "", phone: "", email: "" });
     setLines([]);
     setNotes("");
     setDiscountInput("");
@@ -196,7 +196,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
   const pickCustomerByName = (name) => {
     const saved = customers.find((entry) => entry.name.toLowerCase() === name.trim().toLowerCase());
-    setCustomer(saved ? { name: saved.name, phone: saved.phone || customer.phone } : { ...customer, name });
+    setCustomer(saved ? { name: saved.name, phone: saved.phone || customer.phone, email: customer.email || "" } : { ...customer, name });
   };
 
   const sections = [
@@ -324,6 +324,14 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
           placeholder="Phone or Instagram (optional)"
           aria-label="Phone or Instagram"
+        />
+        <input
+          type="email"
+          style={{ ...s.input, marginTop: 8 }}
+          value={customer.email || ""}
+          onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+          placeholder="Customer email (optional, to send the PDF)"
+          aria-label="Customer email"
         />
 
         <div style={s.step}>2 · Items</div>

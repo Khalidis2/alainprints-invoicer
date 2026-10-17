@@ -212,6 +212,44 @@ export async function emailInvoicePaid(row, { customerEmail, paymentIntent, pdf 
   return result;
 }
 
+// Invoice PDF emailed to a customer by the shop owner (the "Email PDF" button). Never throws.
+export async function emailInvoiceToCustomer(row, meta, to, pdf) {
+  const key = env("RESEND_API_KEY");
+  if (!key) return { skipped: "RESEND_API_KEY not set" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(to || ""))) return { skipped: "No customer email" };
+  const from = env("ORDER_EMAIL_FROM") || "printtools3d orders <onboarding@resend.dev>";
+  const replyTo = env("ORDER_EMAIL_REPLY_TO") || env("ORDER_EMAIL_TO") || "itsalainprints@gmail.com";
+  const number = `INV-${row.number}`;
+  const paid = (meta.status || "Unpaid") === "Paid";
+  const lines = (row.lines || []).filter((line) => line && line.itemId !== "__invoice_meta__" && line.itemId !== "__invoice_discount__" && line.name);
+  const rows = lines.map((line) =>
+    `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(line.name)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${escapeHtml(line.qty)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${aed(Number(line.price) * Number(line.qty))}</td></tr>`).join("");
+  const payButton = !paid && meta.stripeLinkUrl ? `<p style="margin:16px 0 0"><a href="${escapeHtml(meta.stripeLinkUrl)}" style="display:inline-block;padding:12px 18px;background:#0f6b64;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold">Pay ${aed(row.total)} by card</a></p>` : "";
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#1f2937">
+    ${emailLogo()}
+    <h2 style="margin:0 0 4px">${paid ? "Your receipt" : "Your invoice"} from Alain Prints</h2>
+    <p style="margin:0 0 14px;color:#555">Invoice <b>${escapeHtml(number)}</b> · ${paid ? "<b style=\"color:#047857\">PAID</b>" : "<b style=\"color:#b45309\">UNPAID</b>"}</p>
+    <p style="margin:0 0 14px;line-height:1.6">Hi ${escapeHtml(row.customer_name || "there")}, your invoice is attached as a PDF.</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}
+      <tr><td style="padding:6px 8px"><b>${paid ? "Total paid" : "Total due"}</b></td><td></td><td style="padding:6px 8px;text-align:right"><b>${aed(row.total)}</b></td></tr>
+    </table>
+    ${payButton}
+    <p style="margin:18px 0 0;line-height:1.6">Questions? Just reply to this email or message us on WhatsApp.</p>
+    <p style="margin:18px 0 0;color:#6b7280;font-size:12px">Alain Prints · printtools3d.com</p>
+  </div>`;
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key.trim()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], reply_to: replyTo, subject: `${paid ? "Receipt" : "Invoice"} ${number} · ${aed(row.total)}`, html, ...(pdf ? { attachments: [{ filename: `Alainprints_${number}.pdf`, content: Buffer.from(pdf).toString("base64") }] } : {}) }),
+    });
+    return response.ok ? { sent: true, pdf: Boolean(pdf) } : { failed: response.status, detail: await response.text() };
+  } catch (error) {
+    return { failed: error.message };
+  }
+}
+
 export async function markStoreOrderPaid(order, { paymentIntent, sessionId, amount, customerEmail } = {}) {
   if (order.payment_status === "paid") return { already: true, reference: order.reference };
   const wasPending = order.status === "pending";

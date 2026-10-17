@@ -550,7 +550,7 @@ function dbToInvoice(row) {
     id: row.id,
     number: row.number,
     date: row.date,
-    customer: { name: row.customer_name ?? "", phone: row.customer_phone ?? "" },
+    customer: { name: row.customer_name ?? "", phone: row.customer_phone ?? "", email: invoiceMeta?.customerEmail ?? "" },
     notes: row.notes ?? "",
     dueDate: invoiceMeta?.dueDate ?? "",
     status: invoiceMeta?.status ?? "Unpaid",
@@ -581,6 +581,7 @@ function invoiceToDb(invoice) {
       paymentMethod: invoice.paymentMethod ?? "",
       paidDate: invoice.paidDate ?? "",
       paymentReference: invoice.paymentReference ?? "",
+      ...(invoice.customer?.email ? { customerEmail: String(invoice.customer.email).trim() } : {}),
       // Keep the Stripe link attached when the invoice is edited or its status changes.
       ...(invoice.stripeLinkId ? { stripeLinkId: invoice.stripeLinkId, stripeLinkUrl: invoice.stripeLinkUrl, stripeLinkAmount: invoice.stripeLinkAmount } : {}),
       ...(invoice.stripePaymentIntent ? { stripePaymentIntent: invoice.stripePaymentIntent } : {}),
@@ -712,6 +713,20 @@ export async function sendTestEmail() {
   if (!token) throw new Error("Please sign in again.");
   const response = await fetch("/api/email-test", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   return response.json();
+}
+
+// Email the invoice PDF to a customer (admin only). The server builds the PDF and sends it through Resend.
+export async function emailInvoicePdf(invoiceId, email) {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const response = await fetch("/api/store-order-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ invoiceId, email }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (result.ok) return `Invoice emailed to ${email}. Check spam if it does not arrive.`;
+  throw new Error(result.error || (result.result?.failed ? `Email not sent (${result.result.failed})` : "Email not sent"));
 }
 
 // Re-send the email for one website order; resolves with a short message for the toast.
