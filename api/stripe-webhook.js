@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder } from "./_store-shared.js";
+import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder, emailInvoicePaid } from "./_store-shared.js";
 import { savePayout } from "./_payouts.js";
 import { applyRefund, env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
@@ -68,7 +68,10 @@ export default async function handler(request, response) {
       paymentReference: `${session.payment_intent || session.id}${Number(session.amount_total) !== Math.round(Number(row.total) * 100) ? ` (paid AED ${(Number(session.amount_total) / 100).toFixed(2)}, check amount)` : ""}`,
       stripePaidAmount: session.amount_total,
     });
-    return response.status(200).json({ marked: "Paid", invoice: row.number });
+    // Receipt to the customer (Stripe collected their email, Apple Pay included) and a copy to the owner.
+    const emails = await emailInvoicePaid(row, { customerEmail: session.customer_details?.email || session.customer_email, paymentIntent: session.payment_intent });
+    if (emails.customer?.failed || emails.owner?.failed) console.error("Invoice paid email problem", row.number, JSON.stringify(emails));
+    return response.status(200).json({ marked: "Paid", invoice: row.number, emails });
   } catch (error) {
     // 500 makes Stripe retry later (e.g. a brief Supabase hiccup).
     return response.status(500).json({ error: error.message || "Webhook failed" });

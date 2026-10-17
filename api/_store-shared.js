@@ -167,6 +167,50 @@ export async function emailCustomer(order, to) {
   }
 }
 
+// "Payment received" email for an invoice paid through its Stripe payment link: one to the customer
+// (the email they typed on Stripe's page, Apple Pay included) and one copy to the shop owner. Never throws.
+export async function emailInvoicePaid(row, { customerEmail, paymentIntent } = {}) {
+  const key = env("RESEND_API_KEY");
+  if (!key) return { skipped: "RESEND_API_KEY not set" };
+  const from = env("ORDER_EMAIL_FROM") || "printtools3d orders <onboarding@resend.dev>";
+  const owner = env("ORDER_EMAIL_TO") || "itsalainprints@gmail.com";
+  const replyTo = env("ORDER_EMAIL_REPLY_TO") || owner;
+  const lines = (row.lines || []).filter((line) => line && line.itemId !== "__invoice_meta__" && line.name);
+  const rows = lines.map((line) =>
+    `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${escapeHtml(line.name)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${escapeHtml(line.qty)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${aed(Number(line.price) * Number(line.qty))}</td></tr>`).join("");
+  const number = `INV-${row.number}`;
+  const body = (headline, intro) => `
+  <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#1f2937">
+    ${emailLogo()}
+    <h2 style="margin:0 0 4px">${escapeHtml(headline)}</h2>
+    <p style="margin:0 0 14px;color:#555">Invoice <b>${escapeHtml(number)}</b> · <b style="color:#047857">PAID BY CARD</b></p>
+    ${intro}
+    <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}
+      <tr><td style="padding:6px 8px"><b>Total paid</b></td><td></td><td style="padding:6px 8px;text-align:right"><b>${aed(row.total)}</b></td></tr>
+    </table>
+    <p style="margin:18px 0 0;color:#6b7280;font-size:12px">Alain Prints · printtools3d.com</p>
+  </div>`;
+  const send = async (to, subject, html) => {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key.trim()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [to], reply_to: replyTo, subject, html }),
+      });
+      return response.ok ? { sent: true } : { failed: response.status, detail: await response.text() };
+    } catch (error) {
+      return { failed: error.message };
+    }
+  };
+  const result = {};
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(customerEmail || ""));
+  result.customer = valid
+    ? await send(customerEmail, `Payment received · ${number} · ${aed(row.total)}`, body("Thank you, payment received", `<p style="margin:0 0 14px;line-height:1.6">Hi ${escapeHtml(row.customer_name || "there")}, we received your payment. This email is your receipt. Reply to it or message us on WhatsApp if you need anything.</p>`))
+    : { skipped: "No customer email" };
+  result.owner = await send(owner, `Invoice ${number} PAID · ${aed(row.total)}`, body(`Invoice ${number} was paid`, `<p style="margin:0 0 14px;line-height:1.6">${escapeHtml(row.customer_name || "Customer")} paid by Stripe link${paymentIntent ? ` (${escapeHtml(paymentIntent)})` : ""}. ${valid ? "A receipt was emailed to the customer." : "No customer email was available, so no receipt was sent."}</p>`));
+  return result;
+}
+
 export async function markStoreOrderPaid(order, { paymentIntent, sessionId, amount, customerEmail } = {}) {
   if (order.payment_status === "paid") return { already: true, reference: order.reference };
   const wasPending = order.status === "pending";
