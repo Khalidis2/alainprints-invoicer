@@ -14,6 +14,11 @@ body {
 button, input, textarea, select { font-family: inherit; }
 
 @media print {
+  .invoice-sheet, .invoice-sheet * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   @page {
     size: A4 portrait;
     margin: 0;
@@ -117,6 +122,9 @@ button, input, textarea, select { font-family: inherit; }
   .invoice-info { grid-template-columns: minmax(0, 1fr) !important; gap: 18px !important; padding: 24px 18px !important; }
   .invoice-table { width: calc(100% - 36px) !important; margin: 0 18px !important; font-size: 10px !important; table-layout: fixed; }
   .invoice-table th, .invoice-table td { padding: 7px 4px !important; overflow-wrap: anywhere; }
+  .invoice-table th:nth-child(3) { width: 44px !important; }
+  .invoice-table th:nth-child(4) { width: 72px !important; }
+  .invoice-table th:nth-child(5) { width: 80px !important; }
   .invoice-summary { justify-content: stretch !important; padding: 24px 18px 0 !important; }
   .invoice-summary-box { width: 100% !important; }
   .invoice-notes { margin: 24px 18px 0 !important; overflow-wrap: anywhere; }
@@ -213,8 +221,7 @@ button, input, textarea, select { font-family: inherit; }
   overflow: visible !important;
 }
 .invoice-sheet.pdf-exporting .invoice-hero {
-  min-height: 150px !important;
-  padding: 35px 42px !important;
+  padding: 30px 42px 26px !important;
   flex-direction: row !important;
   justify-content: space-between !important;
   align-items: flex-start !important;
@@ -225,8 +232,8 @@ button, input, textarea, select { font-family: inherit; }
 }
 .invoice-sheet.pdf-exporting .invoice-info {
   grid-template-columns: 1.25fr .9fr !important;
-  gap: 46px !important;
-  padding: 42px 42px 38px !important;
+  gap: 20px !important;
+  padding: 28px 42px 26px !important;
 }
 .invoice-sheet.pdf-exporting .invoice-table {
   width: calc(100% - 84px) !important;
@@ -234,13 +241,13 @@ button, input, textarea, select { font-family: inherit; }
   font-size: inherit !important;
   table-layout: auto !important;
 }
-.invoice-sheet.pdf-exporting .invoice-table th { padding: 14px 12px !important; }
-.invoice-sheet.pdf-exporting .invoice-table td { padding: 16px 12px !important; }
+.invoice-sheet.pdf-exporting .invoice-table th { padding: 12px 12px !important; }
+.invoice-sheet.pdf-exporting .invoice-table td { padding: 14px 12px !important; }
 .invoice-sheet.pdf-exporting .invoice-table th:first-child,
 .invoice-sheet.pdf-exporting .invoice-table td:first-child { display: table-cell !important; }
-.invoice-sheet.pdf-exporting .invoice-summary { padding: 38px 42px 0 !important; justify-content: flex-end !important; }
+.invoice-sheet.pdf-exporting .invoice-summary { padding: 26px 42px 0 !important; justify-content: flex-end !important; }
 .invoice-sheet.pdf-exporting .invoice-summary-box { width: 300px !important; }
-.invoice-sheet.pdf-exporting .invoice-notes { margin: 42px 42px 0 !important; }
+.invoice-sheet.pdf-exporting .invoice-notes { margin: 26px 42px 0 !important; }
 .invoice-sheet.pdf-exporting .invoice-footer {
   margin: auto 42px 0 !important;
   flex-direction: row !important;
