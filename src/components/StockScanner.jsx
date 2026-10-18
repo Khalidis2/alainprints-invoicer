@@ -53,6 +53,8 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
   const loggedRef = useRef(false);
   const [editing, setEditing] = useState(null);
   const [detail, setDetail] = useState("");
+  const [torchOk, setTorchOk] = useState(false); // the phone lets web pages switch the flash on
+  const [torchOn, setTorchOn] = useState(false);
   const [liveNote, setLiveNote] = useState("");
   const liveRef = useRef({ timer: null, tries: 0, busy: false, seenCode: "" });
   const [adjusting, setAdjusting] = useState(false);
@@ -71,6 +73,8 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   const stopCamera = useCallback(() => {
+    setTorchOn(false);
+    setTorchOk(false);
     clearInterval(liveRef.current.timer);
     liveRef.current.timer = null;
     try { controlsRef.current?.stop(); } catch { /* already stopped */ }
@@ -212,6 +216,7 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
       });
       controlsRef.current = controls;
       if (foundRef.current) { controls.stop(); return; }
+      try { setTorchOk(Boolean(videoRef.current?.srcObject?.getVideoTracks?.()[0]?.getCapabilities?.().torch)); } catch { setTorchOk(false); }
       setPhase("scanning");
       setLiveNote("Point the camera at the label…");
       liveRef.current.timer = setInterval(liveTick, 2600);
@@ -303,6 +308,20 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
     setPhase("result");
   };
 
+  // The phone's flash, to light up the label. Android Chrome supports it; iPhone Safari does not let web pages use it.
+  const toggleTorch = async () => {
+    const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setTorchOn(next);
+    } catch {
+      setTorchOk(false);
+      showToast?.("This phone won't let the page use the flash.");
+    }
+  };
+
   const close = () => { stopCamera(); onClose(); };
 
   return (
@@ -335,7 +354,7 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
           <div style={s.frame} aria-hidden="true" />
           <div style={s.hint}>{phase === "starting" ? "Starting camera…" : liveNote || "Point the camera at the label"}</div>
         </div>
-        {(phase === "starting" || phase === "scanning") && <div style={s.actions}>{phase === "scanning" && <button type="button" style={s.primary} onClick={liveTick}>📸 Read now</button>}<button type="button" style={s.secondary} onClick={reset}>Back</button></div>}
+        {(phase === "starting" || phase === "scanning") && <div style={s.actions}>{phase === "scanning" && <button type="button" style={s.primary} onClick={liveTick}>📸 Read now</button>}{phase === "scanning" && torchOk && <button type="button" style={torchOn ? s.torchOn : s.secondary} onClick={toggleTorch} aria-pressed={torchOn}>🔦 Flash {torchOn ? "on" : "off"}</button>}<button type="button" style={s.secondary} onClick={reset}>Back</button></div>}
 
         {phase === "history" && (
           <div style={s.body}>
@@ -453,6 +472,7 @@ const s = {
   actions: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 10 },
   primary: { minHeight: 46, padding: "0 20px", border: 0, borderRadius: 12, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   secondary: { minHeight: 46, padding: "0 16px", border: "1px solid #DCD5C6", borderRadius: 12, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 14, cursor: "pointer" },
+  torchOn: { minHeight: 46, padding: "0 16px", border: "1px solid #F5C451", borderRadius: 12, background: "#FFF6D6", color: "#8A5A00", fontWeight: 900, fontSize: 14, cursor: "pointer" },
   minus: { minHeight: 46, padding: "0 18px", border: "1px solid #F0B9B3", borderRadius: 12, background: "#FFF5F3", color: "#B91C1C", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   plus: { minHeight: 46, padding: "0 18px", border: "1px solid #9FD9C0", borderRadius: 12, background: "#F0FAF5", color: "#047857", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   histList: { display: "grid", gap: 6, maxHeight: "52dvh", overflowY: "auto", margin: "4px 0 8px" },
