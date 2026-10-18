@@ -819,7 +819,11 @@ export async function readLabelPhoto(file, options, known) {
     body: JSON.stringify({ labelPhoto: { image, options, known } }),
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || "The AI could not read that photo.");
+  if (!response.ok) {
+    const failure = new Error(result.error || "The AI could not read that photo.");
+    failure.detail = result.detail || "";
+    throw failure;
+  }
   return result;
 }
 

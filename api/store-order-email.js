@@ -19,7 +19,7 @@ export default async function handler(request, response) {
       try {
         return response.status(200).json(await readLabel(body.labelPhoto));
       } catch (error) {
-        return response.status(error instanceof LabelError ? error.status : 502).json({ error: error.message || "The AI could not read that photo." });
+        return response.status(error instanceof LabelError ? error.status : 502).json({ error: error.message || "The AI could not read that photo.", detail: error.detail || "" });
       }
     }
     if (body.invoiceId) {

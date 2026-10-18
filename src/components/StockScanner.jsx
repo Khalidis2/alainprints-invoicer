@@ -52,6 +52,9 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
   const [source, setSource] = useState("");
   const loggedRef = useRef(false);
   const [editing, setEditing] = useState(null);
+  const [detail, setDetail] = useState("");
+  const [liveNote, setLiveNote] = useState("");
+  const liveRef = useRef({ timer: null, tries: 0, busy: false, seenCode: "" });
   const [adjusting, setAdjusting] = useState(false);
 
   const options = useMemo(() => {
@@ -68,6 +71,8 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   const stopCamera = useCallback(() => {
+    clearInterval(liveRef.current.timer);
+    liveRef.current.timer = null;
     try { controlsRef.current?.stop(); } catch { /* already stopped */ }
     controlsRef.current = null;
     const stream = videoRef.current?.srcObject;
@@ -77,46 +82,111 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
 
   const reset = () => {
     stopCamera();
-    setError(""); setCode(""); setTarget(null); setRead(null); setTyped(""); setChoosing(false);
+    setError(""); setDetail(""); setLiveNote(""); setCode(""); setTarget(null); setRead(null); setTyped(""); setChoosing(false);
     setPickMaterial(""); setPickColor(""); setPreview(""); setSource("");
     loggedRef.current = false;
     setPhase("choose");
   };
 
-  // ---------- way 1: photo + AI ----------
+  // ---------- AI reading (still photo or live camera) ----------
+  const applyAiResult = (result, seenCode = "") => {
+    loggedRef.current = false;
+    setSource("photo");
+    setRead(result);
+    const found = clean(result.code) || seenCode;
+    setCode(found);
+    const learned = found ? codes[found] : null;
+    if (result.matched && result.confidence >= 0.55) {
+      setTarget({ material: result.material, color: result.color });
+      // A barcode seen next to the text is linked to this filament, so the next scan is instant.
+      if (found && !codes[found]) saveScanCode(found, { material: result.material, color: result.color }).then(setCodes).catch(() => { /* optional */ });
+    } else if (learned) setTarget(learned);
+    else {
+      setTarget(null);
+      if (materials.includes(result.material)) setPickMaterial(result.material);
+      const guess = options.find((option) => option.material === result.material && norm(option.color) === norm(result.color));
+      if (guess) setPickColor(guess.color);
+    }
+    setPhase("result");
+  };
+
   const onPhoto = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setError("");
+    setError(""); setDetail("");
     setPreview(URL.createObjectURL(file));
     setPhase("reading");
     try {
-      const result = await readLabelPhoto(file, options, codes);
-      loggedRef.current = false;
-      setSource("photo");
-      setRead(result);
-      setCode(clean(result.code));
-      const learned = result.code ? codes[clean(result.code)] : null;
-      if (result.matched && result.confidence >= 0.55) setTarget({ material: result.material, color: result.color });
-      else if (learned) setTarget(learned);
-      else {
-        setTarget(null);
-        if (materials.includes(result.material)) setPickMaterial(result.material);
-        const guess = options.find((option) => option.material === result.material && norm(option.color) === norm(result.color));
-        if (guess) setPickColor(guess.color);
-      }
-      setPhase("result");
+      applyAiResult(await readLabelPhoto(file, options, codes));
     } catch (cause) {
       setError(cause?.message || "The AI could not read that photo.");
+      setDetail(cause?.detail || "");
       setPhase("result");
     }
   };
 
-  // ---------- way 2: barcode / QR ----------
-  const handleCode = useCallback((raw) => {
+  // ---------- live camera: reads the label by itself, no button needed ----------
+  const frameBlob = (video) => new Promise((resolve) => {
+    const scale = Math.min(1, 1100 / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(resolve, "image/jpeg", 0.85);
+  });
+
+  const MAX_TRIES = 8;
+  const liveTick = async () => {
+    const live = liveRef.current;
+    const video = videoRef.current;
+    if (live.busy || foundRef.current || !video || !video.videoWidth) return;
+    live.busy = true;
+    live.tries += 1;
+    setLiveNote(`Reading the label… (${live.tries}/${MAX_TRIES})`);
+    let finished = false;
+    try {
+      const blob = await frameBlob(video);
+      const result = await readLabelPhoto(blob, options, codes);
+      if (foundRef.current) return;
+      if (result.matched && result.confidence >= 0.7) {
+        foundRef.current = true;
+        finished = true;
+        stopCamera();
+        setPreview(URL.createObjectURL(blob));
+        applyAiResult(result, live.seenCode);
+        return;
+      }
+      setLiveNote(result.text ? `I see "${result.text}". Hold steady, closer to the label…` : "Can't see a label yet. Move closer and hold steady…");
+    } catch (cause) {
+      // A bad key, a limit or a sign-out will not fix itself: stop and show why.
+      if (!foundRef.current) {
+        foundRef.current = true;
+        finished = true;
+        stopCamera();
+        setError(cause?.message || "The AI could not read the label.");
+        setDetail(cause?.detail || "");
+        setPhase("result");
+      }
+    } finally {
+      live.busy = false;
+    }
+    if (!finished && live.tries >= MAX_TRIES && !foundRef.current) {
+      foundRef.current = true;
+      stopCamera();
+      if (live.seenCode) { setCode(live.seenCode); setRead(null); loggedRef.current = false; setSource("barcode"); setPhase("result"); return; }
+      setPhase("choose");
+      setError("I couldn't read that label. Try again closer, take a still photo, or type the code.");
+    }
+  };
+
+  // ---------- barcode / QR (also runs during the live camera) ----------
+  // force = true when the code was typed or is the last resort; otherwise only labels already linked finish instantly.
+  const handleCode = useCallback((raw, force = true) => {
     const value = clean(raw);
     if (!value) return;
+    const isKnown = Boolean(codes[value]) || filaments.some((entry) => clean(entry.sku) === value);
+    if (!force && !isKnown) { liveRef.current.seenCode = value; return; } // unknown: let the AI read the text, then link this code
     foundRef.current = true;
     loggedRef.current = false;
     setSource("barcode");
@@ -126,27 +196,33 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
     setRead(null);
     setChoosing(false);
     setPhase("result");
-  }, [stopCamera]);
+  }, [stopCamera, codes, filaments]);
 
   const startCamera = useCallback(async () => {
-    setError("");
+    setError(""); setDetail(""); setLiveNote("");
     foundRef.current = false;
+    liveRef.current = { timer: null, tries: 0, busy: false, seenCode: "" };
     setPhase("starting");
     try {
-      // The barcode library is only downloaded if you use this way.
+      // The barcode library is only downloaded when you use the live camera.
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
-      const reader = new BrowserMultiFormatReader(undefined, { delayBetweenScanAttempts: 150 });
-      const controls = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: "environment" } } }, videoRef.current, (result) => {
-        if (result) handleCode(result.getText());
+      const reader = new BrowserMultiFormatReader(undefined, { delayBetweenScanAttempts: 200 });
+      const controls = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } }, videoRef.current, (result) => {
+        if (result) handleCode(result.getText(), false);
       });
       controlsRef.current = controls;
       if (foundRef.current) { controls.stop(); return; }
       setPhase("scanning");
+      setLiveNote("Point the camera at the label…");
+      liveRef.current.timer = setInterval(liveTick, 2600);
+      setTimeout(liveTick, 1200);
     } catch (cause) {
       setPhase("choose");
       setError(cause?.name === "NotAllowedError" ? "Camera is blocked. Allow the camera for this site in your browser settings." : "Couldn't start the camera.");
     }
-  }, [handleCode]);
+    // liveTick reads the latest state through refs and closures created per render, so it is restarted with a fresh copy on every start
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleCode, options, codes]);
 
   // A barcode that was linked before (or matches a SKU) shows its filament straight away.
   const linked = code && !read ? codes[code] : null;
@@ -239,13 +315,13 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
         </div>
         <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} aria-label="Photo of the label" />
 
-        {error && <div style={s.error}>{error}</div>}
+        {error && <div style={s.error}>{error}{detail ? <div style={{ fontSize: 11, opacity: 0.75, marginTop: 4, wordBreak: "break-word" }}>{detail}</div> : null}</div>}
 
         {phase === "choose" && (
           <div style={s.body}>
-            <button type="button" style={s.bigBtn} onClick={() => fileRef.current?.click()}>📷 Take a photo of the label</button>
-            <div style={s.meta}>The AI reads the label and tells you which filament it is and how many you have.</div>
-            <button type="button" style={s.secondary} onClick={startCamera}>Scan a barcode instead</button>
+            <button type="button" style={s.bigBtn} onClick={startCamera}>🎥 Live scan: point at the label</button>
+            <div style={s.meta}>The AI reads the label by itself and shows how many you have. Barcodes you scanned before are recognised instantly.</div>
+            <button type="button" style={s.secondary} onClick={() => fileRef.current?.click()}>📷 Take a still photo</button>
             <button type="button" style={{ ...s.secondary, marginLeft: 8 }} onClick={openHistory}>🕘 History</button>
             <form style={s.manual} onSubmit={(event) => { event.preventDefault(); handleCode(typed); }}>
               <input style={s.input} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Or type the code on the label" aria-label="Label code" />
@@ -257,9 +333,9 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
         <div style={{ ...s.cameraBox, display: phase === "starting" || phase === "scanning" ? "block" : "none" }}>
           <video ref={videoRef} style={s.video} playsInline muted autoPlay />
           <div style={s.frame} aria-hidden="true" />
-          <div style={s.hint}>{phase === "starting" ? "Starting camera…" : "Point at the barcode or QR code"}</div>
+          <div style={s.hint}>{phase === "starting" ? "Starting camera…" : liveNote || "Point the camera at the label"}</div>
         </div>
-        {(phase === "starting" || phase === "scanning") && <div style={s.actions}><button type="button" style={s.secondary} onClick={reset}>Back</button></div>}
+        {(phase === "starting" || phase === "scanning") && <div style={s.actions}>{phase === "scanning" && <button type="button" style={s.primary} onClick={liveTick}>📸 Read now</button>}<button type="button" style={s.secondary} onClick={reset}>Back</button></div>}
 
         {phase === "history" && (
           <div style={s.body}>
