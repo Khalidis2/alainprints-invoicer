@@ -766,3 +766,31 @@ export async function fetchStripeFees(paymentIntents) {
   }
   return Object.fromEntries(wanted.map((id) => [id, feeCache.get(id)]));
 }
+
+// ---------- label scanner ----------
+// Box label code -> filament (material + colour). Saved once per box type in settings, no extra table needed.
+const SCAN_CODES_KEY = "scan_codes";
+
+export async function fetchScanCodes() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", SCAN_CODES_KEY).maybeSingle();
+  if (error) throw error;
+  return data?.value && typeof data.value === "object" ? data.value : {};
+}
+
+export async function saveScanCode(code, target) {
+  const current = await fetchScanCodes();
+  const next = { ...current, [code]: { material: target.material, color: target.color } };
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_CODES_KEY, value: next }, { onConflict: "key" });
+  if (error) throw error;
+  return next;
+}
+
+export async function forgetScanCode(code) {
+  const current = await fetchScanCodes();
+  if (!(code in current)) return current;
+  const next = { ...current };
+  delete next[code];
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_CODES_KEY, value: next }, { onConflict: "key" });
+  if (error) throw error;
+  return next;
+}

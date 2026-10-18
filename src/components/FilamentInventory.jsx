@@ -3,6 +3,7 @@ import { AED } from "../lib/helpers";
 import StockList from "./StockList";
 import ProfitPanel from "./ProfitPanel";
 import { AddFilamentModal, EditFilamentModal } from "./StockEditor";
+import StockScanner from "./StockScanner";
 
 const spoolsOf = (entry) => entry.remainingG / Number(entry.spoolWeightG || 1000);
 const fmt = (value) => (Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : value.toFixed(1));
@@ -13,6 +14,7 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, onAd
   const [material, setMaterial] = useState("all");
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [removed, setRemoved] = useState([]);
   const [removedTick, setRemovedTick] = useState(0);
@@ -94,8 +96,12 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, onAd
     <section>
       <div style={s.titleRow}>
         <h2 style={s.title}>Filament stock</h2>
-        <button type="button" style={s.addBtn} onClick={() => setAdding(true)}>＋ Add filament</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" style={s.scanBtn} onClick={() => setScanning(true)}>📷 Scan label</button>
+          <button type="button" style={s.addBtn} onClick={() => setAdding(true)}>＋ Add filament</button>
+        </div>
       </div>
+      {scanning && <StockScanner filaments={filaments} onClose={() => setScanning(false)} showToast={showToast} />}
       <div className="filament-summary" style={s.summary}>
         <Summary label="In stock" value={`${fmt(totals.availableSpools)} spools`} />
         <Summary label="Weight" value={`${totals.availableKg.toFixed(1)} kg`} />
@@ -187,6 +193,7 @@ function Summary({ label, value }) {
 const s = {
   titleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" },
   title: { margin: 0, fontSize: 24 },
+  scanBtn: { minHeight: 46, padding: "0 18px", border: "2px solid #047857", borderRadius: 12, background: "#fff", color: "#047857", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   addBtn: { minHeight: 46, padding: "0 20px", border: 0, borderRadius: 12, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   summary: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, margin: "18px 0" },
   summaryCard: { display: "grid", gap: 5, padding: 14, border: "1px solid #E4DFD3", borderRadius: 10, background: "#fff" },
