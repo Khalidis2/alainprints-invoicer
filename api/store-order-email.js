@@ -1,6 +1,7 @@
 import { getInvoiceRow, readMeta, supabaseFetch } from "./_stripe-shared.js";
 import { emailOrder, emailInvoiceToCustomer, getStoreOrder } from "./_store-shared.js";
 import { invoicePdfFromRow } from "./_invoice-pdf.js";
+import { LabelError, readLabel } from "./_label-ai.js";
 
 // Admin-only: sends the order email for one store order again and returns Resend's exact answer.
 export default async function handler(request, response) {
@@ -14,6 +15,13 @@ export default async function handler(request, response) {
 
   try {
     const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+    if (body.labelPhoto) {
+      try {
+        return response.status(200).json(await readLabel(body.labelPhoto));
+      } catch (error) {
+        return response.status(error instanceof LabelError ? error.status : 502).json({ error: error.message || "The AI could not read that photo." });
+      }
+    }
     if (body.invoiceId) {
       const row = await getInvoiceRow(String(body.invoiceId));
       if (!row) return response.status(404).json({ error: "Invoice not found" });

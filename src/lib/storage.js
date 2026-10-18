@@ -795,8 +795,7 @@ export async function forgetScanCode(code) {
   return next;
 }
 
-// Photo of a box label -> the website's AI reader (uses the shop's Gemini key) -> which filament it is.
-const LABEL_API = import.meta.env.VITE_LABEL_API || "https://www.printtools3d.com";
+// Photo of a box label -> AI (Groq, key stored in this invoicer's Vercel settings) -> which filament it is.
 
 async function shrinkPhoto(file) {
   const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -814,10 +813,10 @@ export async function readLabelPhoto(file, options, known) {
   const token = data?.session?.access_token;
   if (!token) throw new Error("Please sign in again.");
   const image = await shrinkPhoto(file);
-  const response = await fetch(`${LABEL_API}/api/label-read`, {
+  const response = await fetch("/api/store-order-email", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ image, options, known }),
+    body: JSON.stringify({ labelPhoto: { image, options, known } }),
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || "The AI could not read that photo.");
