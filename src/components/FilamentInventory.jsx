@@ -101,7 +101,7 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, onAd
           <button type="button" style={s.addBtn} onClick={() => setAdding(true)}>＋ Add filament</button>
         </div>
       </div>
-      {scanning && <StockScanner filaments={filaments} onClose={() => setScanning(false)} showToast={showToast} />}
+      {scanning && <StockScanner filaments={filaments} onUpdate={onUpdate} onArchive={onArchive} onClose={() => setScanning(false)} showToast={showToast} />}
       <div className="filament-summary" style={s.summary}>
         <Summary label="In stock" value={`${fmt(totals.availableSpools)} spools`} />
         <Summary label="Weight" value={`${totals.availableKg.toFixed(1)} kg`} />

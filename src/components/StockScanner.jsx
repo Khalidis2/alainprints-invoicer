@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AED } from "../lib/helpers";
+import { EditFilamentModal } from "./StockEditor";
 import { addScanHistory, clearScanHistory, fetchScanCodes, fetchScanHistory, forgetScanCode, readLabelPhoto, saveScanCode } from "../lib/storage";
 
 // Photo of a filament box label -> AI reads it -> how many spools are in stock.
@@ -24,7 +25,13 @@ function typeTotal(filaments, material) {
 
 const sure = (confidence) => (confidence >= 0.8 ? "sure" : confidence >= 0.55 ? "fairly sure" : "not sure");
 
-export default function StockScanner({ filaments, onClose, showToast }) {
+// The row to edit for a filament: the one with the most stock, or any row of that colour if it is sold out.
+function rowFor(filaments, material, color) {
+  const rows = filaments.filter((entry) => entry.stockStatus !== "removed" && entry.material === material && norm(entry.color) === norm(color));
+  return rows.filter((entry) => entry.stockStatus === "available").sort((a, b) => Number(b.remainingG) - Number(a.remainingG))[0] || rows[0] || null;
+}
+
+export default function StockScanner({ filaments, onUpdate, onArchive, onClose, showToast }) {
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
   const fileRef = useRef(null);
@@ -44,6 +51,8 @@ export default function StockScanner({ filaments, onClose, showToast }) {
   const [history, setHistory] = useState([]);
   const [source, setSource] = useState("");
   const loggedRef = useRef(false);
+  const [editing, setEditing] = useState(null);
+  const [adjusting, setAdjusting] = useState(false);
 
   const options = useMemo(() => {
     const seen = new Map();
@@ -191,9 +200,37 @@ export default function StockScanner({ filaments, onClose, showToast }) {
     setTarget(null); setChoosing(true);
   };
 
+  // Quick stock change: same rule as the Stock tab (whole spools of 1 kg). It is saved to the shop's database,
+  // so the website shows it right away.
+  const adjust = async (delta) => {
+    const entry = known && rowFor(filaments, known.material, known.color);
+    if (!entry || adjusting) return;
+    const weight = Number(entry.spoolWeightG || 1000);
+    const remainingG = Math.max(0, Number(entry.remainingG || 0) + delta * weight);
+    setAdjusting(true);
+    try {
+      await onUpdate({ ...entry, remainingG, quantitySpools: remainingG / weight });
+      showToast?.(`${entry.material} · ${entry.color}: ${Math.floor(remainingG / weight)} in stock. The website is updated.`);
+    } catch {
+      showToast?.("Couldn't change the stock. Try again.");
+    } finally {
+      setAdjusting(false);
+    }
+  };
+
+  // Tapping a row in the history opens that filament, ready to edit.
+  const openFromHistory = (entry) => {
+    loggedRef.current = true;
+    setCode(""); setRead(null); setPreview(""); setChoosing(false); setError("");
+    setTarget({ material: entry.material, color: entry.color });
+    setSource("history");
+    setPhase("result");
+  };
+
   const close = () => { stopCamera(); onClose(); };
 
   return (
+    <>
     <div style={s.overlay} role="dialog" aria-label="Scan a filament label">
       <div style={s.sheet}>
         <div style={s.head}>
@@ -227,11 +264,12 @@ export default function StockScanner({ filaments, onClose, showToast }) {
         {phase === "history" && (
           <div style={s.body}>
             {history.length === 0 && !error && <div style={s.meta}>No scans yet. Scanned labels will show up here.</div>}
+            {history.length > 0 && <div style={s.small}>Tap a label to see its stock and edit it.</div>}
             <div style={s.histList}>
               {history.map((entry, index) => {
                 const now = stockFor(filaments, entry.material, entry.color).spools;
                 return (
-                  <div key={`${entry.at}-${index}`} style={s.histRow}>
+                  <button type="button" key={`${entry.at}-${index}`} style={s.histRow} onClick={() => openFromHistory(entry)} aria-label={`Open ${entry.material} ${entry.color}`}>
                     <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
                       <div style={s.histTitle}>{entry.material} · {entry.color}</div>
                       <div style={s.small}>{new Date(entry.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {entry.source === "photo" ? "photo" : "barcode"}{entry.code ? ` · ${entry.code}` : ""}</div>
@@ -240,7 +278,7 @@ export default function StockScanner({ filaments, onClose, showToast }) {
                       <div style={{ ...s.histTitle, color: entry.spools > 0 ? "#047857" : "#B91C1C" }}>{entry.spools} then</div>
                       <div style={s.small}>{now} now</div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -273,6 +311,13 @@ export default function StockScanner({ filaments, onClose, showToast }) {
                   {read && <><br /><span style={s.small}>AI read: "{read.text || `${read.material} ${read.color}`}" · {sure(read.confidence)}</span></>}
                 </div>
                 {!info.rows && <div style={s.meta}>No stock row for this colour yet. Add it with "Add filament".</div>}
+                {info.rows > 0 && (
+                  <div style={s.actions}>
+                    <button type="button" style={s.minus} disabled={adjusting || info.grams <= 0} onClick={() => adjust(-1)}>− 1 spool</button>
+                    <button type="button" style={s.plus} disabled={adjusting} onClick={() => adjust(1)}>+ 1 spool</button>
+                    <button type="button" style={s.secondary} onClick={() => setEditing(rowFor(filaments, known.material, known.color))}>✏️ Edit price / stock…</button>
+                  </div>
+                )}
               </>
             )}
             {showPickers && (
@@ -302,6 +347,8 @@ export default function StockScanner({ filaments, onClose, showToast }) {
         )}
       </div>
     </div>
+    {editing && <EditFilamentModal entry={{ ...editing }} onSave={onUpdate} onRemove={async (id) => { await onArchive(id); }} onClose={() => setEditing(null)} showToast={showToast || (() => {})} />}
+    </>
   );
 }
 
@@ -330,8 +377,10 @@ const s = {
   actions: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 10 },
   primary: { minHeight: 46, padding: "0 20px", border: 0, borderRadius: 12, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   secondary: { minHeight: 46, padding: "0 16px", border: "1px solid #DCD5C6", borderRadius: 12, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 14, cursor: "pointer" },
+  minus: { minHeight: 46, padding: "0 18px", border: "1px solid #F0B9B3", borderRadius: 12, background: "#FFF5F3", color: "#B91C1C", fontWeight: 900, fontSize: 15, cursor: "pointer" },
+  plus: { minHeight: 46, padding: "0 18px", border: "1px solid #9FD9C0", borderRadius: 12, background: "#F0FAF5", color: "#047857", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   histList: { display: "grid", gap: 6, maxHeight: "52dvh", overflowY: "auto", margin: "4px 0 8px" },
-  histRow: { display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", border: "1px solid #EFEAE0", borderRadius: 10, background: "#FBFAF6" },
+  histRow: { width: "100%", font: "inherit", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", border: "1px solid #EFEAE0", borderRadius: 10, background: "#FBFAF6" },
   histTitle: { fontWeight: 800, color: "#16324F", fontSize: 14 },
   error: { padding: "10px 12px", borderRadius: 10, background: "#FBE9E7", color: "#8A2D1C", fontSize: 13, margin: "0 0 10px" },
 };
