@@ -794,3 +794,32 @@ export async function forgetScanCode(code) {
   if (error) throw error;
   return next;
 }
+
+// Photo of a box label -> the website's AI reader (uses the shop's Gemini key) -> which filament it is.
+const LABEL_API = import.meta.env.VITE_LABEL_API || "https://www.printtools3d.com";
+
+async function shrinkPhoto(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+export async function readLabelPhoto(file, options, known) {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) throw new Error("Please sign in again.");
+  const image = await shrinkPhoto(file);
+  const response = await fetch(`${LABEL_API}/api/label-read`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ image, options, known }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "The AI could not read that photo.");
+  return result;
+}

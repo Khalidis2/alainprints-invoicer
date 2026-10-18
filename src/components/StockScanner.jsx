@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AED } from "../lib/helpers";
-import { fetchScanCodes, forgetScanCode, saveScanCode } from "../lib/storage";
+import { fetchScanCodes, forgetScanCode, readLabelPhoto, saveScanCode } from "../lib/storage";
 
-// Scan the label on a Kingroon box (barcode or QR) and see how many spools are in stock.
-// The first time a box type is scanned you say which filament it is; the app remembers that code.
+// Photo of a filament box label -> AI reads it -> how many spools are in stock.
+// A barcode / QR scan is kept as a second way. Codes you confirm are remembered.
 
 const clean = (code) => String(code || "").trim().toUpperCase();
 const norm = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9+]+/g, " ").trim();
@@ -22,25 +22,24 @@ function typeTotal(filaments, material) {
     .reduce((sum, entry) => sum + Math.floor(Number(entry.remainingG || 0) / Number(entry.spoolWeightG || 1000)), 0);
 }
 
-// If the label text itself says e.g. "PLA+ Black", suggest that filament.
-function guessFromText(text, options) {
-  const haystack = ` ${norm(text)} `;
-  const hits = options.filter((option) => haystack.includes(` ${norm(option.material)} `) && haystack.includes(` ${norm(option.color)} `));
-  return hits.length === 1 ? hits[0] : null;
-}
+const sure = (confidence) => (confidence >= 0.8 ? "sure" : confidence >= 0.55 ? "fairly sure" : "not sure");
 
 export default function StockScanner({ filaments, onClose, showToast }) {
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
+  const fileRef = useRef(null);
   const foundRef = useRef(false); // a code can be read before the camera finishes starting
   const [codes, setCodes] = useState({});
-  const [phase, setPhase] = useState("starting"); // starting | scanning | result
+  const [phase, setPhase] = useState("choose"); // choose | reading | starting | scanning | result
   const [error, setError] = useState("");
-  const [code, setCode] = useState("");
   const [typed, setTyped] = useState("");
-  const [relink, setRelink] = useState(false);
+  const [code, setCode] = useState("");
+  const [target, setTarget] = useState(null); // { material, color } once we know the filament
+  const [read, setRead] = useState(null); // what the AI read from a photo
+  const [preview, setPreview] = useState("");
   const [pickMaterial, setPickMaterial] = useState("");
   const [pickColor, setPickColor] = useState("");
+  const [choosing, setChoosing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const options = useMemo(() => {
@@ -51,8 +50,10 @@ export default function StockScanner({ filaments, onClose, showToast }) {
   const materials = useMemo(() => [...new Set(options.map((option) => option.material))], [options]);
 
   useEffect(() => {
-    fetchScanCodes().then(setCodes).catch(() => setError("Couldn't load saved labels. You can still scan."));
+    fetchScanCodes().then(setCodes).catch(() => { /* optional: the scanner still works without saved labels */ });
   }, []);
+
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   const stopCamera = useCallback(() => {
     try { controlsRef.current?.stop(); } catch { /* already stopped */ }
@@ -60,7 +61,44 @@ export default function StockScanner({ filaments, onClose, showToast }) {
     const stream = videoRef.current?.srcObject;
     if (stream && stream.getTracks) stream.getTracks().forEach((track) => track.stop());
   }, []);
+  useEffect(() => stopCamera, [stopCamera]);
 
+  const reset = () => {
+    stopCamera();
+    setError(""); setCode(""); setTarget(null); setRead(null); setTyped(""); setChoosing(false);
+    setPickMaterial(""); setPickColor(""); setPreview("");
+    setPhase("choose");
+  };
+
+  // ---------- way 1: photo + AI ----------
+  const onPhoto = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setError("");
+    setPreview(URL.createObjectURL(file));
+    setPhase("reading");
+    try {
+      const result = await readLabelPhoto(file, options, codes);
+      setRead(result);
+      setCode(clean(result.code));
+      const learned = result.code ? codes[clean(result.code)] : null;
+      if (result.matched && result.confidence >= 0.55) setTarget({ material: result.material, color: result.color });
+      else if (learned) setTarget(learned);
+      else {
+        setTarget(null);
+        if (materials.includes(result.material)) setPickMaterial(result.material);
+        const guess = options.find((option) => option.material === result.material && norm(option.color) === norm(result.color));
+        if (guess) setPickColor(guess.color);
+      }
+      setPhase("result");
+    } catch (cause) {
+      setError(cause?.message || "The AI could not read that photo.");
+      setPhase("result");
+    }
+  };
+
+  // ---------- way 2: barcode / QR ----------
   const handleCode = useCallback((raw) => {
     const value = clean(raw);
     if (!value) return;
@@ -68,7 +106,8 @@ export default function StockScanner({ filaments, onClose, showToast }) {
     stopCamera();
     try { navigator.vibrate?.(80); } catch { /* optional */ }
     setCode(value);
-    setRelink(false);
+    setRead(null);
+    setChoosing(false);
     setPhase("result");
   }, [stopCamera]);
 
@@ -77,7 +116,7 @@ export default function StockScanner({ filaments, onClose, showToast }) {
     foundRef.current = false;
     setPhase("starting");
     try {
-      // The scanner library is only downloaded when you open the scanner.
+      // The barcode library is only downloaded if you use this way.
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       const reader = new BrowserMultiFormatReader(undefined, { delayBetweenScanAttempts: 150 });
       const controls = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: "environment" } } }, videoRef.current, (result) => {
@@ -87,45 +126,43 @@ export default function StockScanner({ filaments, onClose, showToast }) {
       if (foundRef.current) { controls.stop(); return; }
       setPhase("scanning");
     } catch (cause) {
-      setPhase("result");
-      setCode("");
-      setError(cause?.name === "NotAllowedError" ? "Camera is blocked. Allow the camera for this site in your browser settings, or type the code below." : "Couldn't start the camera. Type the code below instead.");
+      setPhase("choose");
+      setError(cause?.name === "NotAllowedError" ? "Camera is blocked. Allow the camera for this site in your browser settings." : "Couldn't start the camera.");
     }
   }, [handleCode]);
 
-  useEffect(() => {
-    startCamera();
-    return stopCamera;
-  }, [startCamera, stopCamera]);
+  // A barcode that was linked before (or matches a SKU) shows its filament straight away.
+  const linked = code && !read ? codes[code] : null;
+  const skuMatch = code && !read && !linked ? filaments.find((entry) => clean(entry.sku) === code) : null;
+  const known = target || linked || (skuMatch ? { material: skuMatch.material, color: skuMatch.color } : null);
+  const info = known ? stockFor(filaments, known.material, known.color) : null;
+  const showPickers = phase === "result" && !error && (!known || choosing);
+  const colourOptions = options.filter((option) => option.material === pickMaterial);
 
-  const linked = code ? codes[code] : null;
-  const skuMatch = code && !linked ? filaments.find((entry) => clean(entry.sku) === code) : null;
-  const match = linked || (skuMatch ? { material: skuMatch.material, color: skuMatch.color } : null);
-  const guess = code && !match ? guessFromText(code, options) : null;
-  const info = match ? stockFor(filaments, match.material, match.color) : null;
-
-  const link = async (target) => {
-    if (!target?.material || !target?.color) return;
+  const confirm = async (chosen) => {
+    if (!chosen?.material || !chosen?.color) return;
     setSaving(true);
+    setTarget(chosen);
+    setChoosing(false);
     try {
-      setCodes(await saveScanCode(code, target));
-      setRelink(false);
-      showToast?.(`Saved: this label is ${target.material} · ${target.color}`);
+      if (code) {
+        setCodes(await saveScanCode(code, chosen));
+        showToast?.(`Saved: label ${code} is ${chosen.material} · ${chosen.color}`);
+      }
     } catch {
-      showToast?.("Couldn't save the label. Try again.");
+      showToast?.("Couldn't save the label, but the stock is shown.");
     } finally {
       setSaving(false);
     }
   };
 
-  const unlink = async () => {
-    if (!window.confirm("Forget this label so you can link it again?")) return;
-    try { setCodes(await forgetScanCode(code)); setRelink(true); } catch { showToast?.("Couldn't forget the label"); }
+  const forget = async () => {
+    if (!code || !window.confirm("Forget this label so you can link it again?")) return;
+    try { setCodes(await forgetScanCode(code)); } catch { showToast?.("Couldn't forget the label"); }
+    setTarget(null); setChoosing(true);
   };
 
-  const scanNext = () => { setCode(""); setTyped(""); setRelink(false); setPickMaterial(""); setPickColor(""); startCamera(); };
   const close = () => { stopCamera(); onClose(); };
-  const colourOptions = options.filter((option) => option.material === pickMaterial);
 
   return (
     <div style={s.overlay} role="dialog" aria-label="Scan a filament label">
@@ -134,65 +171,73 @@ export default function StockScanner({ filaments, onClose, showToast }) {
           <strong>Scan a filament label</strong>
           <button type="button" style={s.x} onClick={close} aria-label="Close scanner">×</button>
         </div>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} aria-label="Photo of the label" />
 
-        <div style={{ ...s.cameraBox, display: phase === "result" ? "none" : "block" }}>
+        {error && <div style={s.error}>{error}</div>}
+
+        {phase === "choose" && (
+          <div style={s.body}>
+            <button type="button" style={s.bigBtn} onClick={() => fileRef.current?.click()}>📷 Take a photo of the label</button>
+            <div style={s.meta}>The AI reads the label and tells you which filament it is and how many you have.</div>
+            <button type="button" style={s.secondary} onClick={startCamera}>Scan a barcode instead</button>
+            <form style={s.manual} onSubmit={(event) => { event.preventDefault(); handleCode(typed); }}>
+              <input style={s.input} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Or type the code on the label" aria-label="Label code" />
+              <button type="submit" style={s.secondary} disabled={!typed.trim()}>Look up</button>
+            </form>
+          </div>
+        )}
+
+        <div style={{ ...s.cameraBox, display: phase === "starting" || phase === "scanning" ? "block" : "none" }}>
           <video ref={videoRef} style={s.video} playsInline muted autoPlay />
           <div style={s.frame} aria-hidden="true" />
-          <div style={s.hint}>{phase === "starting" ? "Starting camera…" : "Point at the barcode or QR code on the box"}</div>
+          <div style={s.hint}>{phase === "starting" ? "Starting camera…" : "Point at the barcode or QR code"}</div>
         </div>
+        {(phase === "starting" || phase === "scanning") && <div style={s.actions}><button type="button" style={s.secondary} onClick={reset}>Back</button></div>}
 
-        {phase !== "result" && (
-          <form style={s.manual} onSubmit={(event) => { event.preventDefault(); handleCode(typed); }}>
-            <input style={s.input} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Or type the code on the label" aria-label="Label code" />
-            <button type="submit" style={s.secondary} disabled={!typed.trim()}>Look up</button>
-          </form>
+        {phase === "reading" && (
+          <div style={s.body}>
+            {preview && <img src={preview} alt="Your photo of the label" style={s.photo} />}
+            <div style={s.reading}>Reading the label…</div>
+          </div>
         )}
 
         {phase === "result" && (
           <div style={s.body}>
-            {error && <div style={s.error}>{error}</div>}
-            {code && match && info && !relink && (
+            {preview && !error && <img src={preview} alt="Your photo of the label" style={{ ...s.photo, maxHeight: 120 }} />}
+            {known && info && !choosing && (
               <>
-                <div style={s.label}>{match.material}</div>
-                <div style={s.big}>{match.color}</div>
+                <div style={s.label}>{known.material}</div>
+                <div style={s.big}>{known.color}</div>
                 <div style={{ ...s.count, color: info.spools > 0 ? "#047857" : "#B91C1C" }}>{info.spools} {info.spools === 1 ? "spool" : "spools"} in stock</div>
                 <div style={s.meta}>
                   {info.grams ? `${Math.round(info.grams).toLocaleString()} g left` : "Sold out"}{info.price ? ` · sells at ${AED(info.price)}` : ""}
-                  <br />All {match.material}: {typeTotal(filaments, match.material)} spools
+                  <br />All {known.material}: {typeTotal(filaments, known.material)} spools
+                  {read && <><br /><span style={s.small}>AI read: "{read.text || `${read.material} ${read.color}`}" · {sure(read.confidence)}</span></>}
+                </div>
+                {!info.rows && <div style={s.meta}>No stock row for this colour yet. Add it with "Add filament".</div>}
+              </>
+            )}
+            {showPickers && (
+              <>
+                <div style={s.label}>{read ? "Please confirm" : "New label"}</div>
+                {read && <div style={s.meta}>{read.material || read.color ? <>I read <b>{[read.material, read.color].filter(Boolean).join(" · ")}</b> ({sure(read.confidence)}), but it doesn't match your stock exactly.</> : "I couldn't tell which filament this is."}{read.text ? <><br /><span style={s.small}>"{read.text}"</span></> : null}</div>}
+                {!read && code && <><div style={s.codeText}>{code}</div><div style={s.meta}>I don't know this label yet. Tell me which filament it is and I will remember it.</div></>}
+                <div style={s.pick}>
+                  <select style={s.input} value={pickMaterial} onChange={(event) => { setPickMaterial(event.target.value); setPickColor(""); }} aria-label="Filament type">
+                    <option value="">Filament type…</option>
+                    {materials.map((material) => <option key={material} value={material}>{material}</option>)}
+                  </select>
+                  <select style={s.input} value={pickColor} onChange={(event) => setPickColor(event.target.value)} disabled={!pickMaterial} aria-label="Colour">
+                    <option value="">Colour…</option>
+                    {colourOptions.map((option) => <option key={option.color} value={option.color}>{option.color}</option>)}
+                  </select>
+                  <button type="button" style={s.primary} disabled={saving || !pickMaterial || !pickColor} onClick={() => confirm({ material: pickMaterial, color: pickColor })}>{saving ? "Saving…" : "Show stock"}</button>
                 </div>
               </>
             )}
-            {code && match && !info?.rows && !relink && <div style={s.meta}>No stock row for this colour yet. Add it with "Add filament".</div>}
-            {code && !match && !relink && (
-              <>
-                <div style={s.label}>New label</div>
-                <div style={s.codeText}>{code}</div>
-                <div style={s.meta}>I don't know this label yet. Tell me which filament it is and I will remember it.</div>
-                {guess && <button type="button" style={s.primary} disabled={saving} onClick={() => link(guess)}>Yes, it is {guess.material} · {guess.color}</button>}
-              </>
-            )}
-            {code && (!match || relink) && (
-              <div style={s.pick}>
-                <select style={s.input} value={pickMaterial} onChange={(event) => { setPickMaterial(event.target.value); setPickColor(""); }} aria-label="Filament type">
-                  <option value="">Filament type…</option>
-                  {materials.map((material) => <option key={material} value={material}>{material}</option>)}
-                </select>
-                <select style={s.input} value={pickColor} onChange={(event) => setPickColor(event.target.value)} disabled={!pickMaterial} aria-label="Colour">
-                  <option value="">Colour…</option>
-                  {colourOptions.map((option) => <option key={option.color} value={option.color}>{option.color}</option>)}
-                </select>
-                <button type="button" style={s.primary} disabled={saving || !pickMaterial || !pickColor} onClick={() => link({ material: pickMaterial, color: pickColor })}>{saving ? "Saving…" : "Save this label"}</button>
-              </div>
-            )}
-            {!code && (
-              <form style={s.manual} onSubmit={(event) => { event.preventDefault(); handleCode(typed); }}>
-                <input style={s.input} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Type the code on the label" aria-label="Label code" />
-                <button type="submit" style={s.secondary} disabled={!typed.trim()}>Look up</button>
-              </form>
-            )}
             <div style={s.actions}>
-              <button type="button" style={s.primary} onClick={scanNext}>📷 Scan next</button>
-              {code && linked && !relink && <button type="button" style={s.secondary} onClick={unlink}>Wrong filament? Re-link</button>}
+              <button type="button" style={s.primary} onClick={reset}>📷 Scan next</button>
+              {known && !choosing && <button type="button" style={s.secondary} onClick={() => (code && (linked || read) ? forget() : setChoosing(true))}>Wrong filament?</button>}
               <button type="button" style={s.secondary} onClick={close}>Done</button>
             </div>
           </div>
@@ -214,13 +259,17 @@ const s = {
   manual: { display: "flex", gap: 8, marginTop: 12 },
   input: { flex: 1, minWidth: 0, padding: "12px 12px", border: "1px solid #DCD5C6", borderRadius: 10, fontSize: 16, background: "#fff", color: "#16324F" },
   body: { textAlign: "center", padding: "4px 0 6px" },
+  bigBtn: { width: "100%", minHeight: 64, border: 0, borderRadius: 14, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 18, cursor: "pointer" },
+  photo: { display: "block", margin: "0 auto 10px", maxWidth: "100%", maxHeight: 220, borderRadius: 12, objectFit: "contain" },
+  reading: { fontWeight: 800, color: "#16324F", margin: "6px 0 10px" },
   label: { fontSize: 12, fontWeight: 800, letterSpacing: 2, color: "#746A59", textTransform: "uppercase" },
   big: { fontSize: 30, fontWeight: 900, color: "#16324F", margin: "4px 0" },
   count: { fontSize: 26, fontWeight: 900, margin: "8px 0" },
-  meta: { color: "#6B6355", fontSize: 14, lineHeight: 1.6, margin: "6px 0 12px" },
+  meta: { color: "#6B6355", fontSize: 14, lineHeight: 1.6, margin: "8px 0 12px" },
+  small: { fontSize: 12, color: "#8A8170" },
   codeText: { fontFamily: "ui-monospace, monospace", fontSize: 16, wordBreak: "break-all", margin: "8px 0", color: "#16324F" },
   pick: { display: "grid", gap: 8, margin: "12px 0" },
-  actions: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 8 },
+  actions: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 10 },
   primary: { minHeight: 46, padding: "0 20px", border: 0, borderRadius: 12, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   secondary: { minHeight: 46, padding: "0 16px", border: "1px solid #DCD5C6", borderRadius: 12, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 14, cursor: "pointer" },
   error: { padding: "10px 12px", borderRadius: 10, background: "#FBE9E7", color: "#8A2D1C", fontSize: 13, margin: "0 0 10px" },
