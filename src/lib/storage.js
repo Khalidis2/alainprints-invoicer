@@ -822,3 +822,24 @@ export async function readLabelPhoto(file, options, known) {
   if (!response.ok) throw new Error(result.error || "The AI could not read that photo.");
   return result;
 }
+
+// Every label that was scanned, newest first (last 100). Stored in settings, shared by all your devices.
+const SCAN_HISTORY_KEY = "scan_history";
+
+export async function fetchScanHistory() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", SCAN_HISTORY_KEY).maybeSingle();
+  if (error) throw error;
+  return Array.isArray(data?.value) ? data.value : [];
+}
+
+export async function addScanHistory(entry) {
+  const next = [entry, ...(await fetchScanHistory())].slice(0, 100);
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_HISTORY_KEY, value: next }, { onConflict: "key" });
+  if (error) throw error;
+  return next;
+}
+
+export async function clearScanHistory() {
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_HISTORY_KEY, value: [] }, { onConflict: "key" });
+  if (error) throw error;
+}

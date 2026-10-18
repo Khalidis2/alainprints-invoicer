@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AED } from "../lib/helpers";
-import { fetchScanCodes, forgetScanCode, readLabelPhoto, saveScanCode } from "../lib/storage";
+import { addScanHistory, clearScanHistory, fetchScanCodes, fetchScanHistory, forgetScanCode, readLabelPhoto, saveScanCode } from "../lib/storage";
 
 // Photo of a filament box label -> AI reads it -> how many spools are in stock.
 // A barcode / QR scan is kept as a second way. Codes you confirm are remembered.
@@ -30,7 +30,7 @@ export default function StockScanner({ filaments, onClose, showToast }) {
   const fileRef = useRef(null);
   const foundRef = useRef(false); // a code can be read before the camera finishes starting
   const [codes, setCodes] = useState({});
-  const [phase, setPhase] = useState("choose"); // choose | reading | starting | scanning | result
+  const [phase, setPhase] = useState("choose"); // choose | reading | starting | scanning | result | history
   const [error, setError] = useState("");
   const [typed, setTyped] = useState("");
   const [code, setCode] = useState("");
@@ -41,6 +41,9 @@ export default function StockScanner({ filaments, onClose, showToast }) {
   const [pickColor, setPickColor] = useState("");
   const [choosing, setChoosing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [source, setSource] = useState("");
+  const loggedRef = useRef(false);
 
   const options = useMemo(() => {
     const seen = new Map();
@@ -66,7 +69,8 @@ export default function StockScanner({ filaments, onClose, showToast }) {
   const reset = () => {
     stopCamera();
     setError(""); setCode(""); setTarget(null); setRead(null); setTyped(""); setChoosing(false);
-    setPickMaterial(""); setPickColor(""); setPreview("");
+    setPickMaterial(""); setPickColor(""); setPreview(""); setSource("");
+    loggedRef.current = false;
     setPhase("choose");
   };
 
@@ -80,6 +84,8 @@ export default function StockScanner({ filaments, onClose, showToast }) {
     setPhase("reading");
     try {
       const result = await readLabelPhoto(file, options, codes);
+      loggedRef.current = false;
+      setSource("photo");
       setRead(result);
       setCode(clean(result.code));
       const learned = result.code ? codes[clean(result.code)] : null;
@@ -103,6 +109,8 @@ export default function StockScanner({ filaments, onClose, showToast }) {
     const value = clean(raw);
     if (!value) return;
     foundRef.current = true;
+    loggedRef.current = false;
+    setSource("barcode");
     stopCamera();
     try { navigator.vibrate?.(80); } catch { /* optional */ }
     setCode(value);
@@ -139,9 +147,30 @@ export default function StockScanner({ filaments, onClose, showToast }) {
   const showPickers = phase === "result" && !error && (!known || choosing);
   const colourOptions = options.filter((option) => option.material === pickMaterial);
 
+  // Write each scan to the history once, as soon as we know which filament it is.
+  useEffect(() => {
+    if (phase !== "result" || error || !known || !info || choosing || loggedRef.current) return;
+    loggedRef.current = true;
+    addScanHistory({ at: new Date().toISOString(), material: known.material, color: known.color, spools: info.spools, code, text: read?.text || "", source: source || (read ? "photo" : "barcode") })
+      .then(setHistory)
+      .catch(() => { /* history is optional */ });
+  }, [phase, error, known, info, choosing, code, read, source]);
+
+  const openHistory = async () => {
+    setError("");
+    setPhase("history");
+    try { setHistory(await fetchScanHistory()); } catch { setError("Couldn't load the history."); }
+  };
+
+  const wipeHistory = async () => {
+    if (!window.confirm("Clear the whole scan history?")) return;
+    try { await clearScanHistory(); setHistory([]); } catch { showToast?.("Couldn't clear the history"); }
+  };
+
   const confirm = async (chosen) => {
     if (!chosen?.material || !chosen?.color) return;
     setSaving(true);
+    loggedRef.current = false; // a corrected answer is logged too
     setTarget(chosen);
     setChoosing(false);
     try {
@@ -180,6 +209,7 @@ export default function StockScanner({ filaments, onClose, showToast }) {
             <button type="button" style={s.bigBtn} onClick={() => fileRef.current?.click()}>📷 Take a photo of the label</button>
             <div style={s.meta}>The AI reads the label and tells you which filament it is and how many you have.</div>
             <button type="button" style={s.secondary} onClick={startCamera}>Scan a barcode instead</button>
+            <button type="button" style={{ ...s.secondary, marginLeft: 8 }} onClick={openHistory}>🕘 History</button>
             <form style={s.manual} onSubmit={(event) => { event.preventDefault(); handleCode(typed); }}>
               <input style={s.input} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Or type the code on the label" aria-label="Label code" />
               <button type="submit" style={s.secondary} disabled={!typed.trim()}>Look up</button>
@@ -193,6 +223,34 @@ export default function StockScanner({ filaments, onClose, showToast }) {
           <div style={s.hint}>{phase === "starting" ? "Starting camera…" : "Point at the barcode or QR code"}</div>
         </div>
         {(phase === "starting" || phase === "scanning") && <div style={s.actions}><button type="button" style={s.secondary} onClick={reset}>Back</button></div>}
+
+        {phase === "history" && (
+          <div style={s.body}>
+            {history.length === 0 && !error && <div style={s.meta}>No scans yet. Scanned labels will show up here.</div>}
+            <div style={s.histList}>
+              {history.map((entry, index) => {
+                const now = stockFor(filaments, entry.material, entry.color).spools;
+                return (
+                  <div key={`${entry.at}-${index}`} style={s.histRow}>
+                    <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
+                      <div style={s.histTitle}>{entry.material} · {entry.color}</div>
+                      <div style={s.small}>{new Date(entry.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {entry.source === "photo" ? "photo" : "barcode"}{entry.code ? ` · ${entry.code}` : ""}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ ...s.histTitle, color: entry.spools > 0 ? "#047857" : "#B91C1C" }}>{entry.spools} then</div>
+                      <div style={s.small}>{now} now</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={s.actions}>
+              <button type="button" style={s.primary} onClick={reset}>📷 Scan</button>
+              {history.length > 0 && <button type="button" style={s.secondary} onClick={wipeHistory}>Clear history</button>}
+              <button type="button" style={s.secondary} onClick={close}>Done</button>
+            </div>
+          </div>
+        )}
 
         {phase === "reading" && (
           <div style={s.body}>
@@ -272,5 +330,8 @@ const s = {
   actions: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 10 },
   primary: { minHeight: 46, padding: "0 20px", border: 0, borderRadius: 12, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   secondary: { minHeight: 46, padding: "0 16px", border: "1px solid #DCD5C6", borderRadius: 12, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 14, cursor: "pointer" },
+  histList: { display: "grid", gap: 6, maxHeight: "52dvh", overflowY: "auto", margin: "4px 0 8px" },
+  histRow: { display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", border: "1px solid #EFEAE0", borderRadius: 10, background: "#FBFAF6" },
+  histTitle: { fontWeight: 800, color: "#16324F", fontSize: 14 },
   error: { padding: "10px 12px", borderRadius: 10, background: "#FBE9E7", color: "#8A2D1C", fontSize: 13, margin: "0 0 10px" },
 };
