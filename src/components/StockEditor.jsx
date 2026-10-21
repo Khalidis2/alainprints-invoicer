@@ -34,14 +34,17 @@ const Field = ({ label, hint, children }) => (
   <label style={s.field}><span style={s.label}>{label}</span>{children}{hint ? <small style={s.hint}>{hint}</small> : null}</label>
 );
 
-export function AddFilamentModal({ filaments, onSave, onClose, showToast }) {
+// `initial` ({ material, color }) pre-fills the form, e.g. from a scanned label. An unknown type becomes "Other type".
+export function AddFilamentModal({ filaments, onSave, onClose, showToast, initial }) {
   const types = useMemo(() => [...new Set([...COMMON_TYPES, ...filaments.map((entry) => entry.material).filter(Boolean)])].sort((a, b) => a.localeCompare(b)), [filaments]);
-  const [type, setType] = useState("PLA Matte");
-  const [custom, setCustom] = useState("");
-  const [color, setColor] = useState("");
+  const startMaterial = (initial?.material || "").trim();
+  const knownType = types.includes(startMaterial);
+  const [type, setType] = useState(startMaterial ? (knownType ? startMaterial : "__other") : "PLA Matte");
+  const [custom, setCustom] = useState(startMaterial && !knownType ? startMaterial : "");
+  const [color, setColor] = useState(initial?.color || "");
   const [spools, setSpools] = useState(1);
   const [status, setStatus] = useState("available");
-  const [price, setPrice] = useState(() => usualPrice(filaments, "PLA Matte"));
+  const [price, setPrice] = useState(() => usualPrice(filaments, knownType ? startMaterial : startMaterial ? (types.find((name) => startMaterial.startsWith(name)) || "PLA Matte") : "PLA Matte"));
   const [cost, setCost] = useState("");
   const [busy, setBusy] = useState(false);
 

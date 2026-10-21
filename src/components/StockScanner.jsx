@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AED } from "../lib/helpers";
-import { EditFilamentModal } from "./StockEditor";
+import { AddFilamentModal, EditFilamentModal } from "./StockEditor";
 import { addScanHistory, clearScanHistory, fetchScanCodes, fetchScanHistory, forgetScanCode, readLabelPhoto, saveScanCode } from "../lib/storage";
 
 // Photo of a filament box label -> AI reads it -> how many spools are in stock.
@@ -31,7 +31,7 @@ function rowFor(filaments, material, color) {
   return rows.filter((entry) => entry.stockStatus === "available").sort((a, b) => Number(b.remainingG) - Number(a.remainingG))[0] || rows[0] || null;
 }
 
-export default function StockScanner({ filaments, onUpdate, onArchive, onClose, showToast }) {
+export default function StockScanner({ filaments, onUpdate, onArchive, onAdd, onClose, showToast }) {
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
   const fileRef = useRef(null);
@@ -58,6 +58,7 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
   const [liveNote, setLiveNote] = useState("");
   const liveRef = useRef({ timer: null, tries: 0, busy: false, seenCode: "" });
   const [adjusting, setAdjusting] = useState(false);
+  const [adding, setAdding] = useState(null); // { material, color } while the "new filament" form is open
 
   const options = useMemo(() => {
     const seen = new Map();
@@ -104,7 +105,7 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
       setTarget({ material: result.material, color: result.color });
       // A barcode seen next to the text is linked to this filament, so the next scan is instant.
       if (found && !codes[found]) saveScanCode(found, { material: result.material, color: result.color }).then(setCodes).catch(() => { /* optional */ });
-    } else if (learned) setTarget(learned);
+    } else if (learned && !(result.confidence >= 0.7 && (result.material || result.color))) setTarget(learned); // a sure AI read that is not in stock beats an old link: it is probably a new filament
     else {
       setTarget(null);
       if (materials.includes(result.material)) setPickMaterial(result.material);
@@ -153,7 +154,11 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
       const blob = await frameBlob(video);
       const result = await readLabelPhoto(blob, options, codes);
       if (foundRef.current) return;
-      if (result.matched && result.confidence >= 0.7) {
+      // A filament that is not in stock: two reads in a row that agree and are confident mean it is new, so stop and offer to add it.
+      const readKey = !result.matched && result.confidence >= 0.7 && result.material && result.color ? norm(`${result.material} ${result.color}`) : "";
+      const agreed = Boolean(readKey) && live.lastNew === readKey;
+      live.lastNew = readKey;
+      if ((result.matched && result.confidence >= 0.7) || agreed) {
         foundRef.current = true;
         finished = true;
         stopCamera();
@@ -273,6 +278,17 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
     } finally {
       setSaving(false);
     }
+  };
+
+  // A filament that is not in stock yet: the form opens filled in from the label, and the label code is remembered.
+  const addNew = (prefill) => setAdding({ material: prefill?.material || "", color: prefill?.color || "" });
+  const saveNew = async (filament) => {
+    await onAdd(filament);
+    const chosen = { material: filament.material, color: filament.color.trim() };
+    loggedRef.current = false;
+    setTarget(chosen);
+    setChoosing(false);
+    if (code) saveScanCode(code, chosen).then(setCodes).catch(() => { /* optional */ });
   };
 
   const forget = async () => {
@@ -431,17 +447,20 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onClose, 
                   </select>
                   <button type="button" style={s.primary} disabled={saving || !pickMaterial || !pickColor} onClick={() => confirm({ material: pickMaterial, color: pickColor })}>{saving ? "Saving…" : "Show stock"}</button>
                 </div>
+                {onAdd && <button type="button" style={s.newBtn} onClick={() => addNew(read)}>➕ New filament, not in my stock{read?.material || read?.color ? `: ${[read.material, read.color].filter(Boolean).join(" · ")}` : ""}</button>}
               </>
             )}
             <div style={s.actions}>
               <button type="button" style={s.primary} onClick={reset}>📷 Scan next</button>
               {known && !choosing && <button type="button" style={s.secondary} onClick={() => (code && (linked || read) ? forget() : setChoosing(true))}>Wrong filament?</button>}
+              {known && !choosing && onAdd && <button type="button" style={s.secondary} onClick={() => addNew(read && !read.matched ? read : null)}>➕ New filament</button>}
               <button type="button" style={s.secondary} onClick={close}>Done</button>
             </div>
           </div>
         )}
       </div>
     </div>
+    {adding && onAdd && <AddFilamentModal filaments={filaments} initial={adding} onSave={saveNew} onClose={() => setAdding(null)} showToast={showToast || (() => {})} />}
     {editing && <EditFilamentModal entry={{ ...editing }} onSave={onUpdate} onRemove={async (id) => { await onArchive(id); }} onClose={() => setEditing(null)} showToast={showToast || (() => {})} />}
     </>
   );
@@ -478,5 +497,6 @@ const s = {
   histList: { display: "grid", gap: 6, maxHeight: "52dvh", overflowY: "auto", margin: "4px 0 8px" },
   histRow: { width: "100%", font: "inherit", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", border: "1px solid #EFEAE0", borderRadius: 10, background: "#FBFAF6" },
   histTitle: { fontWeight: 800, color: "#16324F", fontSize: 14 },
+  newBtn: { width: "100%", minHeight: 46, border: "1px dashed #9FD9C0", borderRadius: 12, background: "#F0FAF5", color: "#047857", fontWeight: 900, fontSize: 14, cursor: "pointer", padding: "8px 12px" },
   error: { padding: "10px 12px", borderRadius: 10, background: "#FBE9E7", color: "#8A2D1C", fontSize: 13, margin: "0 0 10px" },
 };

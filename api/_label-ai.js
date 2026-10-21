@@ -49,15 +49,24 @@ function cleanOptions(value) {
   return value.slice(0, 200).map((raw) => ({ material: String(raw?.material || "").trim().slice(0, 40), color: String(raw?.color || "").trim().slice(0, 60) })).filter((o) => o.material && o.color);
 }
 
+// Finish words that make a different filament. If the label says one of these and the stock name does not,
+// it is a new filament, not the plain colour that happens to share the type and colour name.
+const FINISH_WORDS = ["translucent", "glow", "luminous", "fluorescent", "neon", "metallic", "glitter", "sparkle", "carbon", "wood", "marble", "silk", "tricolor", "matte", "rapid", "hs", "galaxy", "rainbow", "gradient", "dual", "glossy", "cf"];
+const finishOf = (text) => {
+  const words = norm(text).replace(/\btransparent\b|\bsemi transparent\b/g, "translucent").split(" ");
+  return FINISH_WORDS.filter((word) => words.includes(word));
+};
+
 function buildPrompt(options, known) {
   return `You are reading the label or box of a 3D printing filament spool (usually the brand Kingroon). Read ALL the text on it, including small print, codes and Chinese text.
 Reply with ONE JSON object only, with these keys:
 - "material": the filament type, for example PLA, PLA+, PLA Matte, PLA HS, PLA Marble, PETG, PETG Matte, Silk Tricolor.
 - "color": the colour name in English (translate Chinese colour words; for silk/tricolor list the colours separated by " / ").
+- "variant": any special finish printed on the label, for example Translucent, Transparent, Glow in the dark, Matte, Silk, Marble, Metallic, Carbon fiber, Basic, High Speed. Empty string if none.
 - "code": the product code if you can see one (for example KR-PLA301Y-1CH), else "".
 - "text": the main text you read, one short line.
 - "confidence": a number from 0 to 1 for how sure you are about material AND color.
-${options.length ? `The shop's stock uses these exact names. If the label matches one, use its exact spelling:\n${options.map((o) => `${o.material} | ${o.color}`).join("\n")}\n` : ""}${known.length ? `Label codes the shop already knows:\n${known.join("\n")}\n` : ""}If the photo is not a filament label, use empty strings and confidence 0. Never guess a colour you cannot see or read.`;
+${options.length ? `The shop's stock uses these exact names. Use one of them ONLY if the label says exactly that: same type, same finish and same colour. A translucent, glow, metallic or other special finish is a DIFFERENT filament from the plain colour, so do not map it to a plain colour. If nothing matches exactly, this is a NEW filament: write the type and colour exactly as the label says (for example material "PETG Translucent", color "Blue"). Never pick the nearest name just to match. Stock names:\n${options.map((o) => `${o.material} | ${o.color}`).join("\n")}\n` : ""}${known.length ? `Label codes the shop already knows:\n${known.join("\n")}\n` : ""}If the photo is not a filament label, use empty strings and confidence 0. Never guess a colour you cannot see or read.`;
 }
 
 export async function readLabel(input) {
@@ -77,9 +86,17 @@ export async function readLabel(input) {
   const shape = (result) => {
     const material = String(result.material || "").trim().slice(0, 40);
     const color = String(result.color || "").trim().slice(0, 80);
-    const match = options.find((o) => norm(o.material) === norm(material) && norm(o.color) === norm(color)) || null;
+    const variant = String(result.variant || "").trim().slice(0, 60);
+    const wanted = finishOf(`${material} ${color} ${variant}`);
+    const sameName = options.find((o) => norm(o.material) === norm(material) && norm(o.color) === norm(color)) || null;
+    // Every finish word on the label must also be in the stock name, and the other way round.
+    const match = sameName && JSON.stringify(finishOf(`${sameName.material} ${sameName.color}`).sort()) === JSON.stringify([...wanted].sort()) ? sameName : null;
+    // A new finish that the model only put in "variant" belongs in the type name, e.g. "PETG" + Translucent.
+    const named = finishOf(`${material} ${color}`);
+    const newType = !match && variant && wanted.some((word) => !named.includes(word)) && !norm(material).includes(norm(variant)) ? `${material} ${variant}`.trim().slice(0, 40) : material;
     return {
-      material: match?.material || material,
+      variant,
+      material: match?.material || newType,
       color: match?.color || color,
       code: String(result.code || "").trim().slice(0, 60),
       text: String(result.text || "").trim().slice(0, 160),
