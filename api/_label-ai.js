@@ -87,19 +87,23 @@ export async function readLabel(input) {
     const material = String(result.material || "").trim().slice(0, 40);
     const color = String(result.color || "").trim().slice(0, 80);
     const variant = String(result.variant || "").trim().slice(0, 60);
-    const wanted = finishOf(`${material} ${color} ${variant}`);
+    const text = String(result.text || "").trim().slice(0, 160);
+    // The whole line the model read counts too, so a finish word it forgot to put in "variant" still makes this a new filament.
+    const wanted = finishOf(`${material} ${color} ${variant} ${text}`);
     const sameName = options.find((o) => norm(o.material) === norm(material) && norm(o.color) === norm(color)) || null;
     // Every finish word on the label must also be in the stock name, and the other way round.
     const match = sameName && JSON.stringify(finishOf(`${sameName.material} ${sameName.color}`).sort()) === JSON.stringify([...wanted].sort()) ? sameName : null;
     // A new finish that the model only put in "variant" belongs in the type name, e.g. "PETG" + Translucent.
     const named = finishOf(`${material} ${color}`);
-    const newType = !match && variant && wanted.some((word) => !named.includes(word)) && !norm(material).includes(norm(variant)) ? `${material} ${variant}`.trim().slice(0, 40) : material;
+    const missing = wanted.filter((word) => !named.includes(word));
+    const addon = variant && !norm(material).includes(norm(variant)) ? variant : missing.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+    const newType = !match && missing.length && addon ? `${material} ${addon}`.trim().slice(0, 40) : material;
     return {
       variant,
       material: match?.material || newType,
       color: match?.color || color,
       code: String(result.code || "").trim().slice(0, 60),
-      text: String(result.text || "").trim().slice(0, 160),
+      text,
       confidence: Math.max(0, Math.min(1, Number(result.confidence) || 0)),
       matched: Boolean(match),
     };

@@ -101,7 +101,7 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onAdd, on
     const found = clean(result.code) || seenCode;
     setCode(found);
     const learned = found ? codes[found] : null;
-    if (result.matched && result.confidence >= 0.55) {
+    if (result.matched && result.confidence >= 0.7) {
       setTarget({ material: result.material, color: result.color });
       // A barcode seen next to the text is linked to this filament, so the next scan is instant.
       if (found && !codes[found]) saveScanCode(found, { material: result.material, color: result.color }).then(setCodes).catch(() => { /* optional */ });
@@ -419,7 +419,7 @@ export default function StockScanner({ filaments, onUpdate, onArchive, onAdd, on
                 <div style={s.meta}>
                   {info.grams ? `${Math.round(info.grams).toLocaleString()} g left` : "Sold out"}{info.price ? ` · sells at ${AED(info.price)}` : ""}
                   <br />All {known.material}: {typeTotal(filaments, known.material)} spools
-                  {read && <><br /><span style={s.small}>AI read: "{read.text || `${read.material} ${read.color}`}" · {sure(read.confidence)}</span></>}
+                  {read && <><br /><span style={{ ...s.small, fontWeight: 700 }}>Label says: "{read.text || `${read.material} ${read.color}`}" · {sure(read.confidence)}. Not the same as your box? Tap "Wrong filament?" or "New filament".</span></>}
                 </div>
                 {!info.rows && <div style={s.meta}>No stock row for this colour yet. Add it with "Add filament".</div>}
                 {info.rows > 0 && (
