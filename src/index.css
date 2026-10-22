@@ -95,12 +95,6 @@ button, input, textarea, select { font-family: inherit; }
   .two-column-fields, .calculator-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .invoice-actions { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; position: sticky; bottom: 0; margin: 16px -18px -18px; padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid #E4DFD3; box-shadow: 0 -8px 20px rgba(22,50,79,.08); z-index: 5; }
   .invoice-actions button { width: 100%; }
-  .invoice-line-editor { padding: 12px !important; gap: 10px !important; grid-template-columns: minmax(0, 1fr) auto !important; grid-template-areas: "name remove" "price total" "stepper stepper" "stock stock" !important; }
-  .invoice-line-editor > label { white-space: nowrap; }
-  .invoice-line-editor [aria-label="Quantity"] { flex: 1; width: auto !important; min-width: 0; }
-  .invoice-line-editor > div[style*="stepper"] button, .invoice-line-editor button[aria-label^="One"] { width: 64px !important; }
-  .invoice-line-editor > div:nth-of-type(2) { justify-self: stretch; }
-  .invoice-line-editor [style*="min-width: 76px"] { align-self: end; font-size: 18px !important; }
 
   .history-summary { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
   .history-toolbar { grid-template-columns: minmax(0, 1fr) !important; gap: 8px !important; }
@@ -421,3 +415,14 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
 
 .history-row { transition: border-color .15s; }
 .history-row:hover { border-color: #9C917C !important; }
+
+/* Invoice maker: stacked line cards whenever the panel is narrow (phones and tablets) */
+@media screen and (max-width: 1100px) {
+  .invoice-line-editor { padding: 12px !important; gap: 10px !important; grid-template-columns: minmax(0, 1fr) auto !important; grid-template-areas: "name name" "price total" "stepper remove" "stock stock" !important; }
+  .invoice-line-editor > label { white-space: nowrap; }
+  .invoice-line-editor button[aria-label="Remove"] { min-height: 44px; }
+  .invoice-line-editor [aria-label="Quantity"] { flex: 1; width: auto !important; min-width: 0; }
+  .invoice-line-editor > div[style*="stepper"] button, .invoice-line-editor button[aria-label^="One"] { width: 64px !important; }
+  .invoice-line-editor > div:nth-of-type(2) { justify-self: stretch; }
+  .invoice-line-editor [style*="min-width: 76px"] { align-self: end; font-size: 18px !important; }
+}

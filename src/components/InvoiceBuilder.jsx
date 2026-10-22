@@ -208,7 +208,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const sections = [
     { id: "all", label: "All" },
     ...productCategories.map((category) => ({ id: category, label: category })),
-    { id: "spools", label: `Filament spools (${availableFilaments.length})` },
+    { id: "spools", label: `Spools (${availableFilaments.length})` },
   ];
 
   return (
@@ -371,7 +371,9 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
                   <button type="button" style={s.stepBtn} aria-label="One more" onClick={() => increaseLine(l.itemId)}>+</button>
                 </div>
                 <div style={{ ...s.lineTotal, gridArea: "total" }}>{AED(l.price * l.qty)}</div>
-                <button type="button" style={{ ...s.removeBtn, gridArea: "remove" }} aria-label="Remove" onClick={() => removeLine(l.itemId)}>×</button>
+                <button type="button" style={{ ...s.removeBtn, gridArea: "remove" }} aria-label="Remove" onClick={() => removeLine(l.itemId)}>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M4 4l10 10M14 4L4 14" /></svg>
+                </button>
               </div>
             ))}
           </div>
@@ -501,7 +503,7 @@ const s = {
   priceInput: { width: 96, minHeight: 44, border: "1.5px solid #DCD5C6", borderRadius: 10, fontSize: 15, fontWeight: 700, color: "#1B2A3D", padding: "8px 10px", background: "#fff" },
   qtyInput: { width: 44, height: 44, padding: 0, textAlign: "center", border: "none", fontSize: 16, fontWeight: 800, background: "#fff" },
   lineTotal: { minWidth: 76, textAlign: "right", fontSize: 15, fontWeight: 850, color: "#16324F" },
-  removeBtn: { width: 44, height: 44, borderRadius: 12, border: "none", background: "#FBECE6", color: "#B3451D", fontSize: 24, cursor: "pointer", lineHeight: 1 },
+  removeBtn: { width: 44, height: 44, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "none", background: "#FBECE6", color: "#B3451D", cursor: "pointer" },
   summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 14, color: "#6B6355" },
   totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, padding: "14px 16px", borderRadius: 14, background: "#FFF1E4", fontWeight: 800, fontSize: 15, color: "#16324F" },
   totalAmt: { fontSize: 28, fontWeight: 900, color: "#B9531A", letterSpacing: "-0.01em" },
