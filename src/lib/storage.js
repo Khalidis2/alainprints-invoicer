@@ -557,6 +557,7 @@ function dbToInvoice(row) {
     paymentMethod: invoiceMeta?.paymentMethod ?? "",
     paidDate: invoiceMeta?.paidDate ?? "",
     paymentReference: invoiceMeta?.paymentReference ?? "",
+    payments: Array.isArray(invoiceMeta?.payments) ? invoiceMeta.payments : [],
     stripeLinkId: invoiceMeta?.stripeLinkId ?? "",
     stripeLinkUrl: invoiceMeta?.stripeLinkUrl ?? "",
     stripeLinkAmount: Number(invoiceMeta?.stripeLinkAmount) || 0,
@@ -581,6 +582,8 @@ function invoiceToDb(invoice) {
       paymentMethod: invoice.paymentMethod ?? "",
       paidDate: invoice.paidDate ?? "",
       paymentReference: invoice.paymentReference ?? "",
+      // Deposits and part payments. The invoice stays Unpaid until the full amount is in.
+      ...(Array.isArray(invoice.payments) && invoice.payments.length ? { payments: invoice.payments } : {}),
       ...(invoice.customer?.email ? { customerEmail: String(invoice.customer.email).trim() } : {}),
       // Keep the Stripe link attached when the invoice is edited or its status changes.
       ...(invoice.stripeLinkId ? { stripeLinkId: invoice.stripeLinkId, stripeLinkUrl: invoice.stripeLinkUrl, stripeLinkAmount: invoice.stripeLinkAmount } : {}),
@@ -845,5 +848,20 @@ export async function addScanHistory(entry) {
 
 export async function clearScanHistory() {
   const { error } = await supabase.from("settings").upsert({ key: SCAN_HISTORY_KEY, value: [] }, { onConflict: "key" });
+  if (error) throw error;
+}
+
+
+// ---------- invoice templates ----------
+// Saved in the existing settings table (key "invoice_templates"), so no database change is needed.
+
+export async function fetchInvoiceTemplates() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", "invoice_templates").maybeSingle();
+  if (error) throw error;
+  return Array.isArray(data?.value) ? data.value : [];
+}
+
+export async function saveInvoiceTemplates(templates) {
+  const { error } = await supabase.from("settings").upsert({ key: "invoice_templates", value: templates }, { onConflict: "key" });
   if (error) throw error;
 }

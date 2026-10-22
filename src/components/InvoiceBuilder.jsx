@@ -1,17 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 import { autoLinkLines } from "../lib/stockCheck";
+import { fetchInvoiceTemplates, saveInvoiceTemplates } from "../lib/storage";
+import { addDays, paymentsOf, round2 } from "../lib/invoiceMath";
 
 const StepBadge = ({ n }) => (
   <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: 999, background: "#0F6B64", color: "#fff", fontSize: 12.5, fontWeight: 850 }}>{n}</span>
 );
 
-export default function InvoiceBuilder({ items, customers = [], filaments = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
+export default function InvoiceBuilder({ items, customers = [], filaments = [], invoices = [], prefill = null, invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
-  const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "", email: "" });
-  const [lines, setLines] = useState(initialInvoice?.lines ?? []);
-  const [notes, setNotes] = useState(initialInvoice?.notes ?? "");
+  // A new invoice can start from a chosen customer, a duplicated invoice or a repeated order (prefill).
+  const seed = initialInvoice ?? prefill ?? null;
+  const [customer, setCustomer] = useState(seed?.customer ?? { name: "", phone: "", email: "" });
+  const [lines, setLines] = useState(() => (seed?.lines ? autoLinkLines(seed.lines.map((line) => ({ ...line })), filaments).lines : []));
+  const [notes, setNotes] = useState(seed?.notes ?? "");
+  const [templates, setTemplates] = useState([]);
+  // Money already received on this invoice (read-only here) and a new deposit typed in now.
+  const receivedPayments = paymentsOf(initialInvoice);
+  const [depositInput, setDepositInput] = useState("");
+  const [depositMethod, setDepositMethod] = useState("Cash");
   const [customInvoiceNo, setCustomInvoiceNo] = useState(String(initialInvoice?.number ?? invoiceNo));
   const [invoiceDate, setInvoiceDate] = useState(initialInvoice?.date ?? today());
   const [dueDate, setDueDate] = useState(initialInvoice?.dueDate ?? "");
@@ -99,8 +108,79 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const parsedInvoiceNo = Number(customInvoiceNo);
   const invoiceNumberIsValid = Number.isInteger(parsedInvoiceNo) && parsedInvoiceNo > 0;
 
+  const receivedBefore = round2(receivedPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
+  const depositAmount = status === "Deposit" ? round2(Math.max(0, Number(depositInput) || 0)) : 0;
+  const leftToPay = round2(Math.max(0, total - receivedBefore - depositAmount));
+  const depositProblem = status === "Deposit" && (depositAmount <= 0 || depositAmount >= round2(total - receivedBefore))
+    ? (depositAmount >= round2(total - receivedBefore) && depositAmount > 0 ? "A deposit must be less than the amount still owed. Use Paid instead." : "Enter the deposit amount received.")
+    : "";
+
+  useEffect(() => {
+    fetchInvoiceTemplates().then(setTemplates).catch(() => {});
+  }, []);
+
+  const applyTemplate = (template) => {
+    setLines(autoLinkLines(template.lines.map((line) => ({ ...line })), filaments).lines);
+    if (template.notes && !notes) setNotes(template.notes);
+  };
+  const saveAsTemplate = async () => {
+    if (lines.length === 0) return showToast("Add items first, then save them as a template");
+    const name = (window.prompt("Template name, for example: Mug + keychain set") || "").trim();
+    if (!name) return;
+    const template = { id: `tpl-${Date.now()}`, name, notes, lines: lines.map(({ itemId, name: lineName, price, qty, filamentId, gramsPerUnit }) => ({ itemId, name: lineName, price, qty, filamentId: filamentId || null, gramsPerUnit: gramsPerUnit || 0 })) };
+    const next = [...templates, template];
+    try {
+      await saveInvoiceTemplates(next);
+      setTemplates(next);
+      showToast(`Template "${name}" saved`);
+    } catch {
+      showToast("Couldn't save the template, check connection");
+    }
+  };
+  const removeTemplate = async (template) => {
+    if (!window.confirm(`Delete template "${template.name}"?`)) return;
+    const next = templates.filter((entry) => entry.id !== template.id);
+    try {
+      await saveInvoiceTemplates(next);
+      setTemplates(next);
+    } catch {
+      showToast("Couldn't delete the template, check connection");
+    }
+  };
+
+  // The last invoices per customer, for one-tap customers and "repeat last order".
+  const recentCustomers = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const invoice of invoices) {
+      const name = String(invoice.customer?.name || "").trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      out.push({ name, phone: invoice.customer?.phone || "", email: invoice.customer?.email || "", last: invoice });
+      if (out.length === 4) break;
+    }
+    return out;
+  }, [invoices]);
+  const lastOrder = useMemo(() => {
+    const name = customer.name.trim().toLowerCase();
+    if (!name) return null;
+    return invoices.find((invoice) => String(invoice.customer?.name || "").trim().toLowerCase() === name && invoice.id !== initialInvoice?.id) || null;
+  }, [invoices, customer.name, initialInvoice?.id]);
+  const repeatLastOrder = () => {
+    if (!lastOrder) return;
+    if (lines.length > 0 && !window.confirm("Replace the items on this invoice with that order?")) return;
+    setLines(autoLinkLines(lastOrder.lines.map((line) => ({ ...line })), filaments).lines);
+  };
+
   const generate = async () => {
     if (lines.length === 0 || !invoiceNumberIsValid) return;
+    if (depositProblem) return showToast(depositProblem);
+    // A deposit is saved as an Unpaid invoice with a payment on it, so stock stays reserved.
+    const savedStatus = status === "Deposit" ? "Unpaid" : status;
+    const payments = [
+      ...receivedPayments,
+      ...(depositAmount > 0 ? [{ id: `pay-${Date.now()}`, date: today(), amount: depositAmount, method: depositMethod }] : []),
+    ];
     setGenerating(true);
     try {
       const saved = await onSave({
@@ -114,7 +194,8 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         number: parsedInvoiceNo,
         date: invoiceDate,
         dueDate,
-        status,
+        status: savedStatus,
+        payments,
         paymentMethod: status === "Paid" ? paymentMethod : "",
         paidDate: status === "Paid" ? (paidDate || today()) : "",
         paymentReference: status === "Paid" ? paymentReference : "",
@@ -125,7 +206,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         total,
       });
       setFinalized(saved);
-      const movesStock = ["Unpaid", "Paid"].includes(status) && lines.some((line) => line.filamentId);
+      const movesStock = ["Unpaid", "Paid"].includes(savedStatus) && lines.some((line) => line.filamentId);
       showToast(`${editing ? "Invoice updated" : "Invoice saved"}${movesStock ? " · checking stock…" : ""}`);
     } catch (e) {
       showToast(e.code === "23505" ? `Invoice #${parsedInvoiceNo} already exists` : (e.message || "Couldn't save invoice — check connection"));
@@ -155,6 +236,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setPaymentMethod("");
     setPaidDate("");
     setPaymentReference("");
+    setDepositInput("");
   };
 
   if (finalized) {
@@ -203,7 +285,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setCustomer(saved ? { name: saved.name, phone: saved.phone || customer.phone, email: customer.email || "" } : { ...customer, name });
   };
 
-  const STATUS_COLOR = { Unpaid: "#B45309", Paid: "#0F6B64", Draft: "#5B6573", Cancelled: "#B3451D" };
+  const STATUS_COLOR = { Unpaid: "#B45309", Paid: "#0F6B64", Deposit: "#B45309", Draft: "#5B6573", Cancelled: "#B3451D" };
 
   const sections = [
     { id: "all", label: "All" },
@@ -312,6 +394,18 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           <span>{itemCount} item{itemCount === 1 ? "" : "s"}</span>
         </div>
 
+        <div style={s.tplLabel}>Start from a template</div>
+        <div style={s.tplRow}>
+          <button type="button" style={{ ...s.tplChip, ...s.tplChipOn }} onClick={() => setLines([])}>Blank</button>
+          {templates.map((template) => (
+            <span key={template.id} style={s.tplChip}>
+              <button type="button" style={s.tplApply} onClick={() => applyTemplate(template)}>{template.name}</button>
+              <button type="button" style={s.tplRemove} aria-label={`Delete template ${template.name}`} onClick={() => removeTemplate(template)}>×</button>
+            </span>
+          ))}
+          <button type="button" style={s.tplSave} onClick={saveAsTemplate}>+ Save as template</button>
+        </div>
+
         <div style={s.step}><StepBadge n={1} />Customer</div>
         <input
           style={s.input}
@@ -339,6 +433,25 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           placeholder="Customer email (optional, to send the PDF)"
           aria-label="Customer email"
         />
+        {recentCustomers.length > 0 && !customer.name && (
+          <>
+            <div style={s.tplLabel}>Tap to reuse</div>
+            <div style={s.tplRow}>
+              {recentCustomers.map((entry) => (
+                <button key={entry.name} type="button" style={s.recentChip} onClick={() => setCustomer({ name: entry.name, phone: entry.phone, email: entry.email })}>
+                  <b>{entry.name}</b>
+                  <span>{entry.phone || "No phone"}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {lastOrder && lines.length === 0 && (
+          <div style={s.lastOrder}>
+            Last order: {lastOrder.lines.slice(0, 2).map((line) => `${line.name} × ${line.qty}`).join(", ")}{lastOrder.lines.length > 2 ? "…" : ""}.{" "}
+            <button type="button" style={s.linkBtn} onClick={repeatLastOrder}>Repeat it</button>
+          </div>
+        )}
 
         <div style={s.step}><StepBadge n={2} />Items</div>
         {lines.length === 0 ? (
@@ -348,23 +461,10 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
             {lines.map((l) => (
               <div key={l.itemId} className="invoice-line-editor" style={s.lineRow}>
                 <input aria-label="Item name" style={{ ...s.lineNameInput, gridArea: "name" }} value={l.name} onChange={(e) => setLine(l.itemId, "name", e.target.value)} />
-                <label style={{ ...s.priceLabel, gridArea: "price" }}>
-                  Price (AED)
+                <label style={{ ...s.priceBox, gridArea: "price" }}>
+                  <span>AED</span>
                   <input aria-label="Unit price" type="number" inputMode="decimal" min="0" step="0.01" style={s.priceInput} value={l.price} onChange={(e) => setLine(l.itemId, "price", e.target.value)} />
                 </label>
-                <div style={{ gridArea: "stock" }}>
-                  {l.filamentId ? (
-                    <div style={{ fontSize: 12.5, color: "#15803d", fontWeight: 700 }}>📦 Takes {l.qty} spool(s) from stock</div>
-                  ) : (
-                    <div style={{ fontSize: 12.5, color: "#b45309", background: "#FEF3E2", borderRadius: 10, padding: "8px 10px" }}>
-                      ⚠ Not linked to stock — will NOT deduct.
-                      <select aria-label="Take from stock" value="" onChange={(e) => linkLine(l.itemId, e.target.value)} style={{ display: "block", width: "100%", minHeight: 44, marginTop: 6, padding: "8px 10px", borderRadius: 10, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D" }}>
-                        <option value="">Link to a spool…</option>
-                        {availableFilaments.map((f) => <option key={f.id} value={f.id}>{f.material} {f.color} ({f.availableSpools} left)</option>)}
-                      </select>
-                    </div>
-                  )}
-                </div>
                 <div style={{ ...s.stepper, gridArea: "stepper" }}>
                   <button type="button" style={s.stepBtn} aria-label="One less" onClick={() => changeQty(l.itemId, -1)}>−</button>
                   <input type="number" inputMode="numeric" min="1" aria-label="Quantity" value={l.qty} onChange={(e) => setQty(l.itemId, e.target.value)} style={s.qtyInput} />
@@ -374,6 +474,19 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
                 <button type="button" style={{ ...s.removeBtn, gridArea: "remove" }} aria-label="Remove" onClick={() => removeLine(l.itemId)}>
                   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M4 4l10 10M14 4L4 14" /></svg>
                 </button>
+                <div style={{ gridArea: "stock" }}>
+                  {l.filamentId ? (
+                    <div style={s.linked}>📦 Takes {l.qty} spool(s) from stock</div>
+                  ) : (
+                    <div style={s.unlinked}>
+                      <span>⚠ No stock link</span>
+                      <select aria-label="Take from stock" value="" onChange={(e) => linkLine(l.itemId, e.target.value)} style={s.linkSelect}>
+                        <option value="">Link to a spool…</option>
+                        {availableFilaments.map((f) => <option key={f.id} value={f.id}>{f.material} {f.color} ({f.availableSpools} left)</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -404,7 +517,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
         <div style={s.step}><StepBadge n={3} />Payment</div>
         <div style={s.segment} role="radiogroup" aria-label="Status">
-          {["Unpaid", "Paid", "Draft", ...(editing ? ["Cancelled"] : [])].map((option) => (
+          {["Unpaid", "Paid", "Deposit", "Draft", ...(editing ? ["Cancelled"] : [])].map((option) => (
             <button
               key={option}
               type="button"
@@ -422,11 +535,47 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         </div>
         <div style={s.hint}>
           {status === "Draft" && "Draft: saved for later, stock is not touched."}
+          {status === "Deposit" && "Deposit: customer paid part now. Stock is reserved and the rest stays unpaid."}
           {status === "Unpaid" && "Unpaid: stock is reserved now, mark Paid later from Invoices."}
           {status === "Paid" && "Paid: stock is taken out and revenue is counted."}
           {status === "Cancelled" && "Cancelled: any spools on this invoice go back into stock."}
         </div>
 
+        {receivedPayments.length > 0 && (
+          <div style={s.hint}>Already received on this invoice: <b>{AED(receivedBefore)}</b></div>
+        )}
+        {status === "Deposit" && (
+          <div className="two-column-fields" style={s.fieldGrid}>
+            <div>
+              <label style={s.label}>Deposit received now (AED)</label>
+              <input type="number" inputMode="decimal" min="0" step="0.01" style={s.input} value={depositInput} onChange={(e) => setDepositInput(e.target.value)} placeholder="e.g. 100" />
+            </div>
+            <div>
+              <label style={s.label}>Paid by</label>
+              <div style={s.segmentSmall}>
+                {["Cash", "Card", "Bank Transfer"].map((method) => (
+                  <button key={method} type="button" style={{ ...s.segBtn, ...(depositMethod === method ? s.segBtnActive : {}) }} onClick={() => setDepositMethod(method)}>
+                    {method === "Bank Transfer" ? "Transfer" : method}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {status === "Deposit" && depositProblem && depositInput !== "" && <div style={s.error}>{depositProblem}</div>}
+        {status === "Deposit" && !depositProblem && (
+          <div style={s.summaryRow}><span>Still to pay after deposit</span><b>{AED(leftToPay)}</b></div>
+        )}
+        {["Unpaid", "Deposit"].includes(status) && (
+          <div style={s.dueRow}>
+            <span style={s.dueLabel}>Due</span>
+            {[["On receipt", 0], ["7 days", 7], ["14 days", 14]].map(([label, days]) => {
+              const value = addDays(invoiceDate, days);
+              return <button key={label} type="button" style={{ ...s.dueChip, ...(dueDate === value ? s.dueChipOn : {}) }} onClick={() => setDueDate(value)}>{label}</button>;
+            })}
+            {dueDate && <span style={s.dueDate}>{dueDate}</span>}
+          </div>
+        )}
         {status === "Paid" && (
           <div className="two-column-fields" style={s.fieldGrid}>
             <div>
@@ -474,7 +623,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         )}
         <div className="invoice-actions" style={s.actionRow}>
           {editing && <button type="button" style={s.secondaryBtn} disabled={generating} onClick={onCancel}>Cancel</button>}
-          <button type="button" style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || generating} onClick={generate}>
+          <button type="button" style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || Boolean(depositProblem) || generating} onClick={generate}>
             {generating ? "Saving…" : editing ? `Update invoice · ${AED(total)}` : `Create invoice · ${AED(total)}`}
           </button>
         </div>
@@ -498,11 +647,30 @@ const s = {
   label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#746A59", marginTop: 12, marginBottom: 5 },
   input: { width: "100%", boxSizing: "border-box", minHeight: 46, padding: "10px 13px", borderRadius: 12, border: "1.5px solid #DCD5C6", fontSize: 14.5, background: "#FDFCF9", color: "#1B2A3D" },
   hr: { borderTop: "1.5px dashed #E4DFD3", margin: "14px 0" },
-  lineRow: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gridTemplateAreas: '"name name remove" "price stepper total" "stock stock stock"', alignItems: "center", gap: "10px 10px", padding: 12, background: "#FBF9F4", border: "1px solid #EBE5D8", borderRadius: 14 },
-  lineNameInput: { width: "100%", minHeight: 40, border: "none", borderBottom: "1.5px solid #E4DFD3", background: "transparent", borderRadius: 0, fontSize: 14.5, fontWeight: 800, color: "#16324F", padding: "4px 0" },
-  priceInput: { width: 96, minHeight: 44, border: "1.5px solid #DCD5C6", borderRadius: 10, fontSize: 15, fontWeight: 700, color: "#1B2A3D", padding: "8px 10px", background: "#fff" },
-  qtyInput: { width: 44, height: 44, padding: 0, textAlign: "center", border: "none", fontSize: 16, fontWeight: 800, background: "#fff" },
-  lineTotal: { minWidth: 76, textAlign: "right", fontSize: 15, fontWeight: 850, color: "#16324F" },
+  tplLabel: { margin: "14px 0 8px", color: "#6B6355", fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase" },
+  tplRow: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 },
+  tplChip: { display: "inline-flex", alignItems: "center", flex: "0 0 auto", minHeight: 44, border: "1.5px solid #DCD5C6", borderRadius: 999, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 13, overflow: "hidden" },
+  tplChipOn: { padding: "0 16px", background: "#16324F", borderColor: "#16324F", color: "#fff", cursor: "pointer" },
+  tplApply: { minHeight: 44, padding: "0 6px 0 14px", border: 0, background: "none", color: "inherit", font: "inherit", cursor: "pointer" },
+  tplRemove: { width: 36, minHeight: 44, border: 0, background: "none", color: "#6B6355", fontSize: 18, cursor: "pointer" },
+  tplSave: { flex: "0 0 auto", minHeight: 44, padding: "0 14px", border: "1.5px dashed #B9B09B", borderRadius: 999, background: "transparent", color: "#16324F", fontWeight: 800, fontSize: 13, cursor: "pointer" },
+  recentChip: { flex: "1 1 0", minWidth: 120, minHeight: 56, padding: "8px 12px", border: "1.5px solid #E4DFD3", borderRadius: 12, background: "#fff", color: "#16324F", textAlign: "left", cursor: "pointer", display: "grid", gap: 1 },
+  lastOrder: { marginTop: 10, color: "#047857", fontSize: 12.5, fontWeight: 750 },
+  linkBtn: { padding: 0, border: 0, background: "none", color: "#2E7D8C", font: "inherit", fontWeight: 800, textDecoration: "underline", cursor: "pointer" },
+  priceBox: { display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, minHeight: 44, padding: "0 8px", border: "1.5px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#6B6355", fontSize: 12, fontWeight: 800 },
+  linked: { color: "#15803d", fontSize: 12.5, fontWeight: 700 },
+  unlinked: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 10px", borderRadius: 10, background: "#FEF3E2", color: "#B45309", fontSize: 12.5, fontWeight: 750, whiteSpace: "nowrap" },
+  linkSelect: { flex: "1 1 0", minWidth: 0, minHeight: 40, padding: "6px 8px", borderRadius: 10, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D", fontSize: 13 },
+  dueRow: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 14 },
+  dueLabel: { color: "#16324F", fontSize: 13, fontWeight: 800 },
+  dueChip: { minHeight: 40, padding: "0 14px", border: "1.5px solid #DCD5C6", borderRadius: 999, background: "#fff", color: "#16324F", fontWeight: 750, fontSize: 12.5, cursor: "pointer" },
+  dueChipOn: { background: "#16324F", borderColor: "#16324F", color: "#fff" },
+  dueDate: { color: "#6B6355", fontSize: 12.5, fontWeight: 700 },
+  lineRow: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gridTemplateAreas: '"name name remove" "price stepper total" "stock stock stock"', alignItems: "center", gap: "8px 10px", padding: 10, background: "#FBF9F4", border: "1px solid #EBE5D8", borderRadius: 14 },
+  lineNameInput: { width: "100%", minHeight: 44, border: "none", borderBottom: "1.5px solid #E4DFD3", background: "transparent", borderRadius: 0, fontSize: 14.5, fontWeight: 800, color: "#16324F", padding: "4px 0" },
+  priceInput: { width: "100%", minWidth: 0, minHeight: 40, border: "none", background: "transparent", fontSize: 15, fontWeight: 800, color: "#1B2A3D", padding: 0 },
+  qtyInput: { width: 34, height: 44, padding: 0, textAlign: "center", border: "none", fontSize: 16, fontWeight: 800, background: "#fff" },
+  lineTotal: { minWidth: 62, textAlign: "right", fontSize: 15, fontWeight: 850, color: "#16324F" },
   removeBtn: { width: 44, height: 44, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "none", background: "#FBECE6", color: "#B3451D", cursor: "pointer" },
   summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 14, color: "#6B6355" },
   totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, padding: "14px 16px", borderRadius: 14, background: "#FFF1E4", fontWeight: 800, fontSize: 15, color: "#16324F" },
@@ -535,7 +703,7 @@ const s = {
   emptySmall: { padding: "18px", textAlign: "center", color: "#746A59", fontSize: 13.5, border: "1.5px dashed #CFC7B5", borderRadius: 14, background: "#FBF9F4" },
   priceLabel: { display: "flex", flexDirection: "column", gap: 3, fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "#746A59" },
   stepper: { display: "flex", alignItems: "center", border: "1.5px solid #DCD5C6", borderRadius: 12, overflow: "hidden", background: "#fff" },
-  stepBtn: { width: 44, height: 44, border: "none", background: "#F1EDE3", color: "#16324F", fontSize: 20, fontWeight: 800, cursor: "pointer" },
+  stepBtn: { width: 40, height: 44, border: "none", background: "#F1EDE3", color: "#16324F", fontSize: 20, fontWeight: 800, cursor: "pointer" },
   segment: { display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: 6 },
   segmentSmall: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 },
   segBtn: { minHeight: 46, padding: "0 6px", borderRadius: 12, border: "1.5px solid #DCD5C6", background: "#fff", color: "#16324F", fontWeight: 750, fontSize: 13.5, cursor: "pointer" },

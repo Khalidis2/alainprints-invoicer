@@ -4,6 +4,8 @@ import InvoicePrint from "./InvoicePrint";
 import { StripeLinkButton, StripeLinkDetails, initialStripeUrl } from "./StripeLinkPanel";
 import { checkStripePayment, matchStripePayments, syncStripeRefunds } from "../lib/storage";
 import { FeeLine, FeeSummary } from "./StripeFees";
+import InvoiceDetail from "./InvoiceDetail";
+import { isPartPaid, receivedSoFar, remainingOf } from "../lib/invoiceMath";
 
 const STATUSES = ["Draft", "Unpaid", "Paid", "Refunded", "Cancelled"];
 const STATUS_COLOR = {
@@ -21,8 +23,10 @@ const STATUS_BG = {
   Cancelled: "#FEF2F2",
 };
 
-export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, onRefresh, showToast }) {
+export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, onDuplicate, onRefresh, showToast }) {
   const [open, setOpen] = useState(null);
+  // The invoice opened from the list: shows what is still owed, reminders, payments and history.
+  const [detailId, setDetailId] = useState(null);
   const [autoPrint, setAutoPrint] = useState(false);
   const [autoShare, setAutoShare] = useState(false);
   const [workingId, setWorkingId] = useState(null);
@@ -111,8 +115,8 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
 
   const totals = useMemo(() => {
     const billable = invoices.filter((invoice) => ["Paid", "Unpaid"].includes(invoice.status || "Unpaid"));
-    const paid = billable.filter((invoice) => invoice.status === "Paid").reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-    const unpaid = billable.filter((invoice) => (invoice.status || "Unpaid") === "Unpaid").reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+    const paid = billable.reduce((sum, invoice) => sum + receivedSoFar(invoice), 0);
+    const unpaid = billable.reduce((sum, invoice) => sum + remainingOf(invoice), 0);
     return { billed: paid + unpaid, paid, unpaid, count: billable.length };
   }, [invoices]);
 
@@ -206,6 +210,25 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
     }
   };
 
+  const detailInvoice = detailId ? invoices.find((invoice) => invoice.id === detailId) : null;
+  if (detailInvoice) {
+    return (
+      <InvoiceDetail
+        invoice={detailInvoice}
+        onBack={() => setDetailId(null)}
+        onUpdate={onUpdate}
+        onEdit={() => onEdit(detailInvoice)}
+        onDuplicate={() => onDuplicate?.({ customer: { ...detailInvoice.customer }, lines: (detailInvoice.lines || []).map((line) => ({ ...line })), notes: detailInvoice.notes || "" })}
+        onPrint={() => { setAutoShare(false); setAutoPrint(true); setOpen(detailInvoice); }}
+        onShare={() => { setAutoPrint(false); setAutoShare(true); setOpen(detailInvoice); }}
+        onStatus={(next) => updateStatus(detailInvoice, next)}
+        onDelete={async () => { await remove(detailInvoice); setDetailId(null); }}
+        onRefresh={onRefresh}
+        showToast={showToast}
+      />
+    );
+  }
+
   return (
     <div>
       <div style={s.headingRow}>
@@ -267,7 +290,7 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
 
             return (
               <div key={invoice.id} className="history-row" style={s.row}>
-                <button className="history-main" style={s.rowMain} onClick={() => { setAutoPrint(false); setAutoShare(false); setOpen(invoice); }}>
+                <button className="history-main" style={s.rowMain} onClick={() => setDetailId(invoice.id)}>
                   <span style={s.no}>INV-{invoice.number}</span>
                   <span style={s.name}>{invoice.customer.name || "Walk-in"}</span>
                   <span style={s.date}>{invoice.date}</span>
@@ -296,6 +319,11 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
                   {locked && <span style={s.locked}>Locked</span>}
                 </div>
                 <StripeLinkDetails invoice={invoice} url={stripeUrls[invoice.id] || initialStripeUrl(invoice)} showToast={showToast} onPaid={onRefresh} />
+                {isPartPaid(invoice) && (
+                  <div className="payment-summary" style={{ ...s.paymentSummary, color: "#B45309" }}>
+                    Part paid: {AED(receivedSoFar(invoice))} received · {AED(remainingOf(invoice))} left
+                  </div>
+                )}
                 {status === "Paid" && (
                   <div className="payment-summary" style={s.paymentSummary}>
                     Paid {invoice.paidDate || "date not recorded"}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}{invoice.paymentReference ? ` · Ref: ${invoice.paymentReference}` : ""}
