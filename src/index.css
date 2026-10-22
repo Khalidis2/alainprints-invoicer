@@ -93,10 +93,14 @@ button, input, textarea, select { font-family: inherit; }
   .item-picker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .invoice-panel { position: static !important; width: 100%; min-width: 0; }
   .two-column-fields, .calculator-grid { grid-template-columns: minmax(0, 1fr) !important; }
-  .invoice-line-editor { display: grid !important; grid-template-columns: minmax(0, 1fr) 84px 42px !important; gap: 7px !important; }
-  .invoice-line-editor > :first-child { grid-column: 1 / -1; }
-  .invoice-actions { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; }
+  .invoice-actions { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; position: sticky; bottom: 0; margin: 16px -18px -18px; padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid #E4DFD3; box-shadow: 0 -8px 20px rgba(22,50,79,.08); z-index: 5; }
   .invoice-actions button { width: 100%; }
+  .invoice-line-editor { padding: 12px !important; gap: 10px !important; grid-template-columns: minmax(0, 1fr) auto !important; grid-template-areas: "name remove" "price total" "stepper stepper" "stock stock" !important; }
+  .invoice-line-editor > label { white-space: nowrap; }
+  .invoice-line-editor [aria-label="Quantity"] { flex: 1; width: auto !important; min-width: 0; }
+  .invoice-line-editor > div[style*="stepper"] button, .invoice-line-editor button[aria-label^="One"] { width: 64px !important; }
+  .invoice-line-editor > div:nth-of-type(2) { justify-self: stretch; }
+  .invoice-line-editor [style*="min-width: 76px"] { align-self: end; font-size: 18px !important; }
 
   .history-summary { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
   .history-toolbar { grid-template-columns: minmax(0, 1fr) !important; gap: 8px !important; }
@@ -338,14 +342,11 @@ button, input, textarea, select { font-family: inherit; }
 /* Invoice maker: phone layout */
 .section-chips::-webkit-scrollbar{display:none}
 @media (max-width:760px){
-  .invoice-line-editor{grid-template-columns:minmax(0,1fr) auto auto 28px !important}
-  .invoice-line-editor > :first-child{grid-column:1 / -1}
   .invoice-panel input,.invoice-panel select{font-size:16px !important}
 }
 .jump-to-bill{display:none}
 @media (max-width:760px){
   .jump-to-bill{display:flex;align-items:center;justify-content:center;min-height:46px;margin-bottom:12px;border-radius:10px;background:#1B2A3D;color:#fff;font-weight:800;font-size:14px;text-decoration:none}
-  .invoice-line-editor > div:nth-child(2){justify-self:start}
   #invoice-bill{scroll-margin-top:12px}
 }
 

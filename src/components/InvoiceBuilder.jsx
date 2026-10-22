@@ -3,6 +3,10 @@ import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 import { autoLinkLines } from "../lib/stockCheck";
 
+const StepBadge = ({ n }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: 999, background: "#0F6B64", color: "#fff", fontSize: 12.5, fontWeight: 850 }}>{n}</span>
+);
+
 export default function InvoiceBuilder({ items, customers = [], filaments = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
   const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "", email: "" });
@@ -199,6 +203,8 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setCustomer(saved ? { name: saved.name, phone: saved.phone || customer.phone, email: customer.email || "" } : { ...customer, name });
   };
 
+  const STATUS_COLOR = { Unpaid: "#B45309", Paid: "#0F6B64", Draft: "#5B6573", Cancelled: "#B3451D" };
+
   const sections = [
     { id: "all", label: "All" },
     ...productCategories.map((category) => ({ id: category, label: category })),
@@ -246,7 +252,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
                 const cs = CAT_STYLE[item.category] || CAT_STYLE.Custom;
                 const inInvoice = qtyInInvoice(item.id);
                 return (
-                  <button key={item.id} type="button" style={{ ...s.pickCard, ...(inInvoice ? s.pickCardOn : {}) }} onClick={() => addItem(item)}>
+                  <button key={item.id} type="button" style={{ ...s.pickCard, borderLeftColor: cs.fg, ...(inInvoice ? s.pickCardOn : {}) }} onClick={() => addItem(item)}>
                     {inInvoice > 0 && <span style={s.qtyBadge}>×{inInvoice}</span>}
                     {item.imageUrl && <img src={item.imageUrl} alt="" style={s.pickThumb} />}
                     <span style={{ ...s.badge, color: cs.fg, background: cs.bg, alignSelf: "flex-start" }}>{item.category}</span>
@@ -306,7 +312,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           <span>{itemCount} item{itemCount === 1 ? "" : "s"}</span>
         </div>
 
-        <div style={s.step}>1 · Customer</div>
+        <div style={s.step}><StepBadge n={1} />Customer</div>
         <input
           style={s.input}
           list="saved-customers"
@@ -334,39 +340,38 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           aria-label="Customer email"
         />
 
-        <div style={s.step}>2 · Items</div>
+        <div style={s.step}><StepBadge n={2} />Items</div>
         {lines.length === 0 ? (
           <div style={s.emptySmall}>Nothing added yet. Tap a product or spool.</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {lines.map((l) => (
               <div key={l.itemId} className="invoice-line-editor" style={s.lineRow}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input aria-label="Item name" style={s.lineNameInput} value={l.name} onChange={(e) => setLine(l.itemId, "name", e.target.value)} />
-                  <label style={s.priceLabel}>
-                    AED
-                    <input aria-label="Unit price" type="number" inputMode="decimal" min="0" step="0.01" style={s.priceInput} value={l.price} onChange={(e) => setLine(l.itemId, "price", e.target.value)} />
-                    each
-                  </label>
+                <input aria-label="Item name" style={{ ...s.lineNameInput, gridArea: "name" }} value={l.name} onChange={(e) => setLine(l.itemId, "name", e.target.value)} />
+                <label style={{ ...s.priceLabel, gridArea: "price" }}>
+                  Price (AED)
+                  <input aria-label="Unit price" type="number" inputMode="decimal" min="0" step="0.01" style={s.priceInput} value={l.price} onChange={(e) => setLine(l.itemId, "price", e.target.value)} />
+                </label>
+                <div style={{ gridArea: "stock" }}>
                   {l.filamentId ? (
-                    <div style={{ fontSize: 12, color: "#15803d", marginTop: 4 }}>📦 Takes {l.qty} spool(s) from stock</div>
+                    <div style={{ fontSize: 12.5, color: "#15803d", fontWeight: 700 }}>📦 Takes {l.qty} spool(s) from stock</div>
                   ) : (
-                    <div style={{ fontSize: 12, marginTop: 4, color: "#b45309" }}>
-                      ⚠ Not linked to stock — will NOT deduct.{" "}
-                      <select aria-label="Take from stock" value="" onChange={(e) => linkLine(l.itemId, e.target.value)} style={{ fontSize: 12, maxWidth: "100%" }}>
+                    <div style={{ fontSize: 12.5, color: "#b45309", background: "#FEF3E2", borderRadius: 10, padding: "8px 10px" }}>
+                      ⚠ Not linked to stock — will NOT deduct.
+                      <select aria-label="Take from stock" value="" onChange={(e) => linkLine(l.itemId, e.target.value)} style={{ display: "block", width: "100%", minHeight: 44, marginTop: 6, padding: "8px 10px", borderRadius: 10, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D" }}>
                         <option value="">Link to a spool…</option>
                         {availableFilaments.map((f) => <option key={f.id} value={f.id}>{f.material} {f.color} ({f.availableSpools} left)</option>)}
                       </select>
                     </div>
                   )}
                 </div>
-                <div style={s.stepper}>
+                <div style={{ ...s.stepper, gridArea: "stepper" }}>
                   <button type="button" style={s.stepBtn} aria-label="One less" onClick={() => changeQty(l.itemId, -1)}>−</button>
                   <input type="number" inputMode="numeric" min="1" aria-label="Quantity" value={l.qty} onChange={(e) => setQty(l.itemId, e.target.value)} style={s.qtyInput} />
                   <button type="button" style={s.stepBtn} aria-label="One more" onClick={() => increaseLine(l.itemId)}>+</button>
                 </div>
-                <div style={s.lineTotal}>{AED(l.price * l.qty)}</div>
-                <button type="button" style={s.removeBtn} aria-label="Remove" onClick={() => removeLine(l.itemId)}>×</button>
+                <div style={{ ...s.lineTotal, gridArea: "total" }}>{AED(l.price * l.qty)}</div>
+                <button type="button" style={{ ...s.removeBtn, gridArea: "remove" }} aria-label="Remove" onClick={() => removeLine(l.itemId)}>×</button>
               </div>
             ))}
           </div>
@@ -395,7 +400,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         {discount > 0 && <div style={s.summaryRow}><span>Discount{discountMode === "percent" ? ` (${typedDiscount}%)` : ""}</span><span>− {AED(discount)}</span></div>}
         <div style={s.totalRow}><span>Total</span><span style={s.totalAmt}>{AED(total)}</span></div>
 
-        <div style={s.step}>3 · Payment</div>
+        <div style={s.step}><StepBadge n={3} />Payment</div>
         <div style={s.segment} role="radiogroup" aria-label="Status">
           {["Unpaid", "Paid", "Draft", ...(editing ? ["Cancelled"] : [])].map((option) => (
             <button
@@ -403,7 +408,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
               type="button"
               role="radio"
               aria-checked={status === option}
-              style={{ ...s.segBtn, ...(status === option ? s.segBtnActive : {}) }}
+              style={{ ...s.segBtn, ...(status === option ? { ...s.segBtnActive, background: STATUS_COLOR[option], borderColor: STATUS_COLOR[option] } : {}) }}
               onClick={() => {
                 setStatus(option);
                 if (option === "Paid" && !paidDate) setPaidDate(today());
@@ -478,32 +483,32 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
 const s = {
   layout: { display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 24, alignItems: "start" },
-  h2: { fontSize: 22, fontWeight: 800, margin: 0 },
-  sub: { fontSize: 13, color: "#746A59", marginTop: 4, marginBottom: 16 },
+  h2: { fontSize: 26, fontWeight: 850, margin: 0, color: "#16324F", letterSpacing: "-0.01em" },
+  sub: { fontSize: 13.5, color: "#746A59", marginTop: 4, marginBottom: 18 },
   pickGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 10 },
-  pickCard: { position: "relative", textAlign: "left", background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 6, cursor: "pointer" },
+  pickCard: { position: "relative", textAlign: "left", background: "#fff", border: "1.5px solid #E4DFD3", borderLeftWidth: 5, borderRadius: 14, padding: "12px 12px 12px 14px", display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", minHeight: 104, boxShadow: "0 1px 2px rgba(22,50,79,.05)" },
   pickThumb: { width: "100%", height: 90, objectFit: "cover", borderRadius: 6, background: "#F1EDE3" },
-  pickName: { fontWeight: 700, fontSize: 13, color: "#1B2A3D" },
-  pickPrice: { fontSize: 12.5, color: "#746A59" },
+  pickName: { fontWeight: 750, fontSize: 14, lineHeight: 1.25, color: "#16324F" },
+  pickPrice: { marginTop: "auto", fontSize: 14, fontWeight: 800, color: "#0F6B64" },
   badge: { fontSize: 10, padding: "3px 8px", borderRadius: 6, fontWeight: 700 },
-  panel: { background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 14, padding: 18, position: "sticky", top: 16 },
+  panel: { background: "#fff", border: "1px solid #E4DFD3", borderRadius: 20, padding: 18, position: "sticky", top: 16, overflow: "hidden", boxShadow: "0 12px 32px rgba(22,50,79,.10)" },
   panelTitle: { fontSize: 13, fontWeight: 700, color: "#B9531A", marginBottom: 4 },
   label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#746A59", marginTop: 12, marginBottom: 5 },
-  input: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, border: "1.5px solid #DCD5C6", fontSize: 14, background: "#fff", color: "#1B2A3D" },
+  input: { width: "100%", boxSizing: "border-box", minHeight: 46, padding: "10px 13px", borderRadius: 12, border: "1.5px solid #DCD5C6", fontSize: 14.5, background: "#FDFCF9", color: "#1B2A3D" },
   hr: { borderTop: "1.5px dashed #E4DFD3", margin: "14px 0" },
-  lineRow: { display: "flex", alignItems: "center", gap: 8 },
-  lineNameInput: { width: "100%", border: "none", borderBottom: "1px solid #E4DFD3", fontSize: 13, fontWeight: 700, color: "#1B2A3D", padding: "3px 0" },
-  priceInput: { width: 72, border: "none", borderBottom: "1px dashed #DCD5C6", fontSize: 12, color: "#1B2A3D", padding: "3px 0" },
-  qtyInput: { width: 40, height: 36, padding: 0, textAlign: "center", border: "none", fontSize: 14, fontWeight: 700 },
-  lineTotal: { width: 84, textAlign: "right", fontSize: 13, fontWeight: 700, color: "#1B2A3D" },
-  removeBtn: { background: "none", border: "none", color: "#B3451D", fontSize: 18, cursor: "pointer", lineHeight: 1 },
-  summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 13, color: "#6B6355" },
-  totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 14, borderTop: "2px solid #1B2A3D", fontWeight: 700, fontSize: 14, color: "#1B2A3D" },
-  totalAmt: { fontSize: 20, fontWeight: 800, color: "#B9531A" },
+  lineRow: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gridTemplateAreas: '"name name remove" "price stepper total" "stock stock stock"', alignItems: "center", gap: "10px 10px", padding: 12, background: "#FBF9F4", border: "1px solid #EBE5D8", borderRadius: 14 },
+  lineNameInput: { width: "100%", minHeight: 40, border: "none", borderBottom: "1.5px solid #E4DFD3", background: "transparent", borderRadius: 0, fontSize: 14.5, fontWeight: 800, color: "#16324F", padding: "4px 0" },
+  priceInput: { width: 96, minHeight: 44, border: "1.5px solid #DCD5C6", borderRadius: 10, fontSize: 15, fontWeight: 700, color: "#1B2A3D", padding: "8px 10px", background: "#fff" },
+  qtyInput: { width: 44, height: 44, padding: 0, textAlign: "center", border: "none", fontSize: 16, fontWeight: 800, background: "#fff" },
+  lineTotal: { minWidth: 76, textAlign: "right", fontSize: 15, fontWeight: 850, color: "#16324F" },
+  removeBtn: { width: 44, height: 44, borderRadius: 12, border: "none", background: "#FBECE6", color: "#B3451D", fontSize: 24, cursor: "pointer", lineHeight: 1 },
+  summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 14, color: "#6B6355" },
+  totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, padding: "14px 16px", borderRadius: 14, background: "#FFF1E4", fontWeight: 800, fontSize: 15, color: "#16324F" },
+  totalAmt: { fontSize: 28, fontWeight: 900, color: "#B9531A", letterSpacing: "-0.01em" },
   fieldGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
   actionRow: { display: "flex", gap: 8, marginTop: 16 },
-  primaryBtn: { flex: 1, minHeight: 50, background: "#B9531A", color: "#fff", border: "none", borderRadius: 10, padding: "12px", fontWeight: 800, fontSize: 15, cursor: "pointer" },
-  secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
+  primaryBtn: { flex: 1, minHeight: 56, background: "linear-gradient(180deg,#E8792D,#B9531A)", color: "#fff", border: "none", borderRadius: 14, padding: "12px", fontWeight: 850, fontSize: 16, cursor: "pointer", boxShadow: "0 6px 16px rgba(185,83,26,.28)" },
+  secondaryBtn: { minHeight: 56, background: "#fff", color: "#16324F", border: "1.5px solid #DCD5C6", borderRadius: 14, padding: "12px 18px", fontWeight: 750, fontSize: 14, cursor: "pointer" },
   empty: { padding: "30px 16px", textAlign: "center", color: "#746A59", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff" },
   error: { marginTop: 4, color: "#B3451D", fontSize: 11.5 },
   filamentSection: { marginBottom: 22, padding: 14, border: "1.5px solid #D8E5DF", borderRadius: 10, background: "#F4FAF7" },
@@ -512,28 +517,28 @@ const s = {
   filamentCard: { position: "relative", textAlign: "left", background: "#fff", border: "1.5px solid #CFE0D8", borderRadius: 9, padding: 11, display: "flex", flexDirection: "column", gap: 5, cursor: "pointer" },
   filamentMaterial: { color: "#047857", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
   filamentStock: { color: "#6B6355", fontSize: 11.5 },
-  search: { minHeight: 44, fontSize: 15, marginBottom: 10 },
+  search: { minHeight: 50, fontSize: 15, marginBottom: 12, borderRadius: 14 },
   chips: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 12 },
-  chip: { flex: "0 0 auto", minHeight: 38, padding: "0 14px", borderRadius: 999, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" },
-  chipActive: { background: "#1B2A3D", borderColor: "#1B2A3D", color: "#fff" },
+  chip: { flex: "0 0 auto", minHeight: 42, padding: "0 16px", borderRadius: 999, border: "1.5px solid #DCD5C6", background: "#fff", color: "#16324F", fontWeight: 750, fontSize: 13.5, cursor: "pointer", whiteSpace: "nowrap" },
+  chipActive: { background: "#0F6B64", borderColor: "#0F6B64", color: "#fff" },
   group: { marginBottom: 18 },
   groupTitle: { color: "#16324F", fontSize: 14, fontWeight: 800, marginBottom: 8 },
   spoolGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px,1fr))", gap: 8, marginTop: 6 },
-  pickCardOn: { borderColor: "#E8792D", boxShadow: "0 0 0 1px #E8792D inset" },
+  pickCardOn: { borderColor: "#E8792D", background: "#FFF4EA", boxShadow: "0 0 0 1px #E8792D inset" },
   disabledCard: { opacity: 0.45, cursor: "not-allowed" },
-  qtyBadge: { position: "absolute", top: 6, right: 6, minWidth: 26, padding: "2px 7px", borderRadius: 999, background: "#B9531A", color: "#fff", fontSize: 11.5, fontWeight: 800, textAlign: "center" },
-  customBtn: { width: "100%", minHeight: 46, marginTop: 4, border: "1.5px dashed #DCD5C6", borderRadius: 10, background: "transparent", color: "#1B2A3D", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
-  panelHead: { display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 800, color: "#B9531A" },
-  step: { marginTop: 18, marginBottom: 8, color: "#1B2A3D", fontSize: 13, fontWeight: 800 },
-  emptySmall: { padding: "14px", textAlign: "center", color: "#746A59", fontSize: 13, border: "1.5px dashed #DCD5C6", borderRadius: 10 },
-  priceLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#746A59", marginTop: 2 },
-  stepper: { display: "flex", alignItems: "center", border: "1.5px solid #DCD5C6", borderRadius: 8, overflow: "hidden" },
-  stepBtn: { width: 34, height: 36, border: "none", background: "#F6F3EC", color: "#1B2A3D", fontSize: 17, fontWeight: 800, cursor: "pointer" },
+  qtyBadge: { position: "absolute", top: 8, right: 8, minWidth: 28, padding: "3px 8px", borderRadius: 999, background: "#B9531A", color: "#fff", fontSize: 12, fontWeight: 850, textAlign: "center" },
+  customBtn: { width: "100%", minHeight: 52, marginTop: 4, border: "1.5px dashed #B9B09B", borderRadius: 14, background: "transparent", color: "#16324F", fontWeight: 750, fontSize: 14, cursor: "pointer" },
+  panelHead: { display: "flex", justifyContent: "space-between", alignItems: "center", margin: "-18px -18px 4px", padding: "16px 18px", background: "#16324F", color: "#fff", fontSize: 17, fontWeight: 850 },
+  step: { display: "flex", alignItems: "center", gap: 9, marginTop: 22, marginBottom: 10, color: "#16324F", fontSize: 14.5, fontWeight: 850 },
+  emptySmall: { padding: "18px", textAlign: "center", color: "#746A59", fontSize: 13.5, border: "1.5px dashed #CFC7B5", borderRadius: 14, background: "#FBF9F4" },
+  priceLabel: { display: "flex", flexDirection: "column", gap: 3, fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "#746A59" },
+  stepper: { display: "flex", alignItems: "center", border: "1.5px solid #DCD5C6", borderRadius: 12, overflow: "hidden", background: "#fff" },
+  stepBtn: { width: 44, height: 44, border: "none", background: "#F1EDE3", color: "#16324F", fontSize: 20, fontWeight: 800, cursor: "pointer" },
   segment: { display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: 6 },
   segmentSmall: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 },
-  segBtn: { minHeight: 42, padding: "0 6px", borderRadius: 8, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D", fontWeight: 700, fontSize: 13, cursor: "pointer" },
-  segBtnActive: { background: "#1B2A3D", borderColor: "#1B2A3D", color: "#fff" },
-  hint: { marginTop: 8, color: "#6B6355", fontSize: 12, lineHeight: 1.45 },
+  segBtn: { minHeight: 46, padding: "0 6px", borderRadius: 12, border: "1.5px solid #DCD5C6", background: "#fff", color: "#16324F", fontWeight: 750, fontSize: 13.5, cursor: "pointer" },
+  segBtnActive: { background: "#16324F", borderColor: "#16324F", color: "#fff" },
+  hint: { marginTop: 10, color: "#6B6355", fontSize: 12.5, lineHeight: 1.5 },
   details: { marginTop: 16, borderTop: "1.5px dashed #E4DFD3", paddingTop: 10 },
   summary: { minHeight: 36, display: "flex", alignItems: "center", cursor: "pointer", color: "#1B2A3D", fontSize: 13, fontWeight: 700 },
 };
