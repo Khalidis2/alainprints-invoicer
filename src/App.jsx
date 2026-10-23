@@ -44,6 +44,7 @@ import { describeStockChange, describeStockEdit } from "./lib/stockCheck";
 import WebsiteSettings from "./components/WebsiteSettings";
 import PayoutLedger from "./components/PayoutLedger";
 import Navigation, { MoreMenu } from "./components/Navigation";
+import SearchPage from "./components/SearchPage";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -131,6 +132,8 @@ function Invoicer({ userEmail, onSignOut }) {
   const [editingInvoice, setEditingInvoice] = useState(null);
   // Starting point for a new invoice: a chosen customer, a duplicated invoice, a repeated order.
   const [prefill, setPrefill] = useState(null);
+  // An invoice to open straight on its detail screen (used by Search).
+  const [openInvoiceId, setOpenInvoiceId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -344,6 +347,26 @@ function Invoicer({ userEmail, onSignOut }) {
     }
     window.scrollTo?.(0, 0);
   };
+  const openInvoice = (id) => {
+    setOpenInvoiceId(id);
+    setTab("history");
+    window.scrollTo?.(0, 0);
+  };
+  // Ctrl/Cmd+K, or "/" when not typing, jumps to Search from anywhere.
+  useEffect(() => {
+    const onKey = (event) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "");
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        go("search");
+      } else if (event.key === "/" && !typing && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        go("search");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const startInvoice = (draft) => {
     setEditingInvoice(null);
     setPrefill({ ...draft, key: Date.now() });
@@ -399,7 +422,7 @@ function Invoicer({ userEmail, onSignOut }) {
 
   return (
     <div className={`shell${tab === "invoice" ? " is-invoice" : ""}`} style={s.app}>
-      <Navigation tab={tab} groups={tabGroups} onGo={go} userEmail={userEmail} onSignOut={onSignOut} />
+      <Navigation tab={tab} groups={tabGroups} onGo={go} onSearch={() => go("search")} userEmail={userEmail} onSignOut={onSignOut} />
 
       <main className="app-main">
       <div className="app-body" style={s.body}>
@@ -475,7 +498,19 @@ function Invoicer({ userEmail, onSignOut }) {
           />
         )}
         {tab === "history" && (
-          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} onDuplicate={startInvoice} onRefresh={refreshInvoices} showToast={showToast} />
+          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} onDuplicate={startInvoice} openId={openInvoiceId} onOpened={() => setOpenInvoiceId(null)} onRefresh={refreshInvoices} showToast={showToast} />
+        )}
+        {tab === "search" && (
+          <SearchPage
+            invoices={invoices}
+            customers={customers}
+            items={items}
+            filaments={filaments}
+            storeOrders={storeOrders}
+            onOpenInvoice={openInvoice}
+            onNewInvoice={startInvoice}
+            onGo={go}
+          />
         )}
         {tab === "more" && <MoreMenu groups={tabGroups} onGo={go} userEmail={userEmail} onSignOut={onSignOut} />}
         {tab === "payouts" && <PayoutLedger showToast={showToast} />}
@@ -498,14 +533,6 @@ const s = {
     backgroundSize: "28px 28px",
     color: "#1B2A3D",
   },
-  header: { maxWidth: 980, margin: "0 auto 24px" },
-  brandRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 18 },
-  brandName: { fontSize: 20, fontWeight: 800 },
-  brandSub: { fontSize: 11.5, color: "#746A59", marginTop: 2 },
-  tabRow: { display: "flex", gap: 6, borderBottom: "2px solid #E4DFD3" },
-  tabBtn: { fontWeight: 700, fontSize: 13.5, padding: "9px 16px", background: "transparent", border: "none", borderBottom: "2px solid transparent", marginBottom: -2, cursor: "pointer", color: "#746A59" },
-  tabBtnActive: { color: "#B9531A", borderBottom: "2px solid #E8792D" },
   body: { maxWidth: 1040, margin: "0 auto" },
-  signOutBtn: { background: "#fff", color: "#1B2A3D", border: "1px solid #DCD5C6", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" },
   toast: { position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#1B2A3D", color: "#fff", padding: "10px 18px", borderRadius: 30, fontSize: 13, fontWeight: 600, boxShadow: "0 6px 20px rgba(0,0,0,0.2)" },
 };

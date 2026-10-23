@@ -1,13 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
 import { autoLinkLines } from "../lib/stockCheck";
-import { fetchInvoiceTemplates, saveInvoiceTemplates } from "../lib/storage";
+import { createPaymentLink, fetchInvoiceTemplates, saveInvoiceTemplates } from "../lib/storage";
 import { addDays, paymentsOf, round2 } from "../lib/invoiceMath";
 
 const StepBadge = ({ n }) => (
   <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: 999, background: "#0F6B64", color: "#fff", fontSize: 12.5, fontWeight: 850 }}>{n}</span>
 );
+
+// A one-row text box that grows when the text is long, so full item names stay visible on phones.
+function AutoText({ value, onChange, style, ...rest }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={onChange}
+      onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
+      style={{ ...style, resize: "none", overflow: "hidden", display: "block", lineHeight: 1.3 }}
+      {...rest}
+    />
+  );
+}
 
 export default function InvoiceBuilder({ items, customers = [], filaments = [], invoices = [], prefill = null, invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
@@ -24,6 +46,9 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const [templates, setTemplates] = useState([]);
   // Money already received on this invoice (read-only here) and a new deposit typed in now.
   const receivedPayments = paymentsOf(initialInvoice);
+  // After saving: also create a one-time card payment link, and/or open the share screen straight away.
+  const [makeCardLink, setMakeCardLink] = useState(false);
+  const [shareAfter, setShareAfter] = useState(false);
   const [depositInput, setDepositInput] = useState("");
   const [depositMethod, setDepositMethod] = useState("Cash");
   const [customInvoiceNo, setCustomInvoiceNo] = useState(String(initialInvoice?.number ?? invoiceNo));
@@ -128,29 +153,37 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setLines(autoLinkLines(template.lines.map((line) => ({ ...line })), filaments).lines);
     if (template.notes && !notes) setNotes(template.notes);
   };
-  const saveAsTemplate = async () => {
-    if (lines.length === 0) return showToast("Add items first, then save them as a template");
-    const name = (window.prompt("Template name, for example: Mug + keychain set") || "").trim();
-    if (!name) return;
-    const template = { id: `tpl-${Date.now()}`, name, notes, lines: lines.map(({ itemId, name: lineName, price, qty, filamentId, gramsPerUnit }) => ({ itemId, name: lineName, price, qty, filamentId: filamentId || null, gramsPerUnit: gramsPerUnit || 0 })) };
-    const next = [...templates, template];
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const persistTemplates = async (next, doneText) => {
     try {
       await saveInvoiceTemplates(next);
       setTemplates(next);
-      showToast(`Template "${name}" saved`);
+      if (doneText) showToast(doneText);
+      return true;
     } catch {
-      showToast("Couldn't save the template, check connection");
+      showToast("Couldn't save templates, check connection");
+      return false;
     }
   };
-  const removeTemplate = async (template) => {
-    if (!window.confirm(`Delete template "${template.name}"?`)) return;
-    const next = templates.filter((entry) => entry.id !== template.id);
-    try {
-      await saveInvoiceTemplates(next);
-      setTemplates(next);
-    } catch {
-      showToast("Couldn't delete the template, check connection");
+  const saveAsTemplate = async () => {
+    const name = templateName.trim();
+    if (lines.length === 0) return showToast("Add items first, then save them as a template");
+    if (!name) return;
+    const template = { id: `tpl-${Date.now()}`, name, notes, lines: lines.map(({ itemId, name: lineName, price, qty, filamentId, gramsPerUnit }) => ({ itemId, name: lineName, price, qty, filamentId: filamentId || null, gramsPerUnit: gramsPerUnit || 0 })) };
+    if (await persistTemplates([...templates, template], `Template "${name}" saved`)) {
+      setSavingTemplate(false);
+      setTemplateName("");
     }
+  };
+  const renameTemplate = (template, name) => {
+    const clean = name.trim();
+    if (!clean || clean === template.name) return;
+    persistTemplates(templates.map((entry) => (entry.id === template.id ? { ...entry, name: clean } : entry)));
+  };
+  const removeTemplate = (template) => {
+    if (!window.confirm(`Delete template "${template.name}"?`)) return;
+    persistTemplates(templates.filter((entry) => entry.id !== template.id));
   };
 
   // The last invoices per customer, for one-tap customers and "repeat last order".
@@ -177,7 +210,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setLines(autoLinkLines(lastOrder.lines.map((line) => ({ ...line })), filaments).lines);
   };
 
-  const generate = async () => {
+  const generate = async (share = false) => {
     if (lines.length === 0 || !invoiceNumberIsValid) return;
     if (depositProblem) return showToast(depositProblem);
     // A deposit is saved as an Unpaid invoice with a payment on it, so stock stays reserved.
@@ -210,7 +243,18 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         discount,
         total,
       });
-      setFinalized(saved);
+      let finalInvoice = saved;
+      // A card link charges the full total, so it is only offered for a plain Unpaid invoice (no deposit).
+      if (makeCardLink && status === "Unpaid" && saved?.id) {
+        try {
+          const url = await createPaymentLink(saved.id);
+          finalInvoice = { ...saved, stripeLinkUrl: url, stripeLinkAmount: Math.round(Number(saved.total) * 100) };
+        } catch (linkError) {
+          showToast(`Invoice saved, but the card link failed: ${linkError.message}`);
+        }
+      }
+      setShareAfter(share);
+      setFinalized(finalInvoice);
       const movesStock = ["Unpaid", "Paid"].includes(savedStatus) && lines.some((line) => line.filamentId);
       showToast(`${editing ? "Invoice updated" : "Invoice saved"}${movesStock ? " · checking stock…" : ""}`);
     } catch (e) {
@@ -249,6 +293,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
       <InvoicePrint
         invoice={finalized}
         showPaymentLink
+        autoShare={shareAfter}
         showToast={showToast}
         onBack={editing ? onFinished : startOver}
         backLabel={editing ? "Back to history" : "New invoice"}
@@ -403,13 +448,28 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         <div style={s.tplRow}>
           <button type="button" style={{ ...s.tplChip, ...s.tplChipOn }} onClick={() => setLines([])}>Blank</button>
           {templates.map((template) => (
-            <span key={template.id} style={s.tplChip}>
-              <button type="button" style={s.tplApply} onClick={() => applyTemplate(template)}>{template.name}</button>
-              <button type="button" style={s.tplRemove} aria-label={`Delete template ${template.name}`} onClick={() => removeTemplate(template)}>×</button>
-            </span>
+            <button key={template.id} type="button" style={{ ...s.tplChip, padding: "0 14px", cursor: "pointer" }} onClick={() => applyTemplate(template)}>{template.name}</button>
           ))}
-          <button type="button" style={s.tplSave} onClick={saveAsTemplate}>+ Save as template</button>
+          <button type="button" style={s.tplSave} onClick={() => setSavingTemplate((value) => !value)}>{savingTemplate ? "Cancel" : "+ Save as template"}</button>
         </div>
+        {savingTemplate && (
+          <div style={s.tplForm}>
+            <input style={{ ...s.input, flex: 1 }} value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Template name, e.g. Mug + keychain set" aria-label="Template name" />
+            <button type="button" style={s.tplSaveBtn} disabled={!templateName.trim() || lines.length === 0} onClick={saveAsTemplate}>Save</button>
+          </div>
+        )}
+        {savingTemplate && lines.length === 0 && <div style={s.hint}>Add items first. The template keeps the items, prices and quantities.</div>}
+        {templates.length > 0 && (
+          <details style={s.tplManage}>
+            <summary style={s.tplManageSummary}>Manage templates</summary>
+            {templates.map((template) => (
+              <div key={template.id} style={s.tplManageRow}>
+                <input style={{ ...s.input, flex: 1 }} defaultValue={template.name} aria-label={`Rename template ${template.name}`} onBlur={(e) => renameTemplate(template, e.target.value)} />
+                <button type="button" style={s.tplDelete} onClick={() => removeTemplate(template)}>Delete</button>
+              </div>
+            ))}
+          </details>
+        )}
 
         <div style={s.step}><StepBadge n={1} />Customer</div>
         <input
@@ -465,7 +525,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {lines.map((l) => (
               <div key={l.itemId} className="invoice-line-editor" style={s.lineRow}>
-                <input aria-label="Item name" style={{ ...s.lineNameInput, gridArea: "name" }} value={l.name} onChange={(e) => setLine(l.itemId, "name", e.target.value)} />
+                <AutoText aria-label="Item name" style={{ ...s.lineNameInput, gridArea: "name" }} value={l.name} onChange={(e) => setLine(l.itemId, "name", e.target.value)} />
                 <label style={{ ...s.priceBox, gridArea: "price" }}>
                   <span>AED</span>
                   <input aria-label="Unit price" type="number" inputMode="decimal" min="0" step="0.01" style={s.priceInput} value={l.price} onChange={(e) => setLine(l.itemId, "price", e.target.value)} />
@@ -581,6 +641,15 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
             {dueDate && <span style={s.dueDate}>{dueDate}</span>}
           </div>
         )}
+        {status === "Unpaid" && !initialInvoice?.stripeLinkUrl && (
+          <button type="button" role="switch" aria-checked={makeCardLink} style={s.switchRow} onClick={() => setMakeCardLink((value) => !value)}>
+            <span style={{ flex: 1, textAlign: "left" }}>
+              <b style={{ display: "block", color: "#16324F", fontSize: 14 }}>Add a card payment link</b>
+              <small style={{ color: "#6B6355", fontSize: 12.5 }}>Customer pays by card, the invoice marks itself Paid.</small>
+            </span>
+            <span style={{ ...s.switchTrack, background: makeCardLink ? "#16324F" : "#CFC7B5" }}><span style={{ ...s.switchKnob, left: makeCardLink ? 21 : 3 }} /></span>
+          </button>
+        )}
         {status === "Paid" && (
           <div className="two-column-fields" style={s.fieldGrid}>
             <div>
@@ -628,7 +697,10 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         )}
         <div className="invoice-actions" style={s.actionRow}>
           {editing && <button type="button" style={s.secondaryBtn} disabled={generating} onClick={onCancel}>Cancel</button>}
-          <button type="button" style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || Boolean(depositProblem) || generating} onClick={generate}>
+          {!editing && (
+            <button type="button" style={s.secondaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || Boolean(depositProblem) || generating} onClick={() => generate(true)}>Create + share</button>
+          )}
+          <button type="button" className="invoice-primary" style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || Boolean(depositProblem) || generating} onClick={() => generate(false)}>
             {generating ? "Saving…" : editing ? `Update invoice · ${AED(total)}` : `Create invoice · ${AED(total)}`}
           </button>
         </div>
@@ -652,12 +724,19 @@ const s = {
   label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#746A59", marginTop: 12, marginBottom: 5 },
   input: { width: "100%", boxSizing: "border-box", minHeight: 46, padding: "10px 13px", borderRadius: 12, border: "1.5px solid #DCD5C6", fontSize: 14.5, background: "#FDFCF9", color: "#1B2A3D" },
   hr: { borderTop: "1.5px dashed #E4DFD3", margin: "14px 0" },
+  tplForm: { display: "flex", gap: 8, marginTop: 10 },
+  tplSaveBtn: { flex: "0 0 auto", minHeight: 46, padding: "0 18px", border: 0, borderRadius: 12, background: "#16324F", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" },
+  tplManage: { marginTop: 10 },
+  tplManageSummary: { minHeight: 40, display: "flex", alignItems: "center", color: "#2E7D8C", fontSize: 13, fontWeight: 800, cursor: "pointer" },
+  tplManageRow: { display: "flex", gap: 8, marginTop: 8 },
+  tplDelete: { flex: "0 0 auto", minHeight: 46, padding: "0 14px", border: "1.5px solid #FECACA", borderRadius: 12, background: "#FEF2F2", color: "#B91C1C", fontWeight: 800, fontSize: 13, cursor: "pointer" },
+  switchRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", marginTop: 14, padding: "12px 14px", border: "1.5px dashed #B9B09B", borderRadius: 13, background: "#fff", cursor: "pointer" },
+  switchTrack: { position: "relative", flex: "0 0 auto", width: 46, height: 28, borderRadius: 14, transition: "background .15s" },
+  switchKnob: { position: "absolute", top: 3, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "left .15s" },
   tplLabel: { margin: "14px 0 8px", color: "#6B6355", fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase" },
   tplRow: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 },
   tplChip: { display: "inline-flex", alignItems: "center", flex: "0 0 auto", minHeight: 44, border: "1.5px solid #DCD5C6", borderRadius: 999, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 13, overflow: "hidden" },
   tplChipOn: { padding: "0 16px", background: "#16324F", borderColor: "#16324F", color: "#fff", cursor: "pointer" },
-  tplApply: { minHeight: 44, padding: "0 6px 0 14px", border: 0, background: "none", color: "inherit", font: "inherit", cursor: "pointer" },
-  tplRemove: { width: 36, minHeight: 44, border: 0, background: "none", color: "#6B6355", fontSize: 18, cursor: "pointer" },
   tplSave: { flex: "0 0 auto", minHeight: 44, padding: "0 14px", border: "1.5px dashed #B9B09B", borderRadius: 999, background: "transparent", color: "#16324F", fontWeight: 800, fontSize: 13, cursor: "pointer" },
   recentChip: { flex: "1 1 0", minWidth: 120, minHeight: 56, padding: "8px 12px", border: "1.5px solid #E4DFD3", borderRadius: 12, background: "#fff", color: "#16324F", textAlign: "left", cursor: "pointer", display: "grid", gap: 1 },
   lastOrder: { marginTop: 10, color: "#047857", fontSize: 12.5, fontWeight: 750 },

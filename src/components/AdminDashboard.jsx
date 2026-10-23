@@ -188,10 +188,15 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
           <strong style={{ color: "#047857" }}>{aed0(week.total)}</strong>
           <span>{week.count} payment{week.count === 1 ? "" : "s"}</span>
         </button>
-        <button type="button" className="home-card" onClick={() => onNavigate(pendingOrders.length ? "store-orders" : "filament")}>
-          <small>ORDERS &amp; STOCK</small>
+        <button type="button" className="home-card" onClick={() => onNavigate("store-orders")}>
+          <small>WEBSITE ORDERS</small>
           <strong>{pendingOrders.length} pending</strong>
-          <span style={lowStock.length ? { color: "#B91C1C", fontWeight: 800 } : undefined}>{lowStock.length} low on stock</span>
+          <span>{storeOrders.length} order{storeOrders.length === 1 ? "" : "s"} in total</span>
+        </button>
+        <button type="button" className="home-card" onClick={() => onNavigate("filament")}>
+          <small>LOW STOCK</small>
+          <strong style={lowStock.length ? { color: "#B91C1C" } : undefined}>{lowStock.length} spool{lowStock.length === 1 ? "" : "s"}</strong>
+          <span>{lowStock.length ? lowStock.slice(0, 2).map((f) => [f.material, f.color].filter(Boolean).join(" ")).join(", ") : "All colours in stock"}</span>
         </button>
       </div>
 

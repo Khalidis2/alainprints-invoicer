@@ -36,9 +36,9 @@ export default function EmailTest() {
 const s = {
   box: { display: "grid", gap: 10, marginBottom: 18, padding: 18, border: "1px solid #E4DFD3", borderRadius: 13, background: "#fff" },
   head: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" },
-  title: { display: "block", color: "#16324F", fontSize: 16 },
+  title: { display: "block", color: "#16324F", fontSize: 26, fontWeight: 850 },
   sub: { display: "block", marginTop: 3, color: "#6B6355", fontSize: 12.5 },
-  btn: { minHeight: 42, padding: "0 16px", border: "1px solid #16324F", borderRadius: 8, background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
+  btn: { minHeight: 42, padding: "0 16px", border: "1px solid #16324F", borderRadius: 10, background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
   result: { margin: 0, padding: "10px 12px", borderRadius: 8, fontSize: 13, lineHeight: 1.5, wordBreak: "break-word" },
   ok: { background: "#ECFDF5", color: "#047857" },
   bad: { background: "#FEF2F2", color: "#B91C1C" },

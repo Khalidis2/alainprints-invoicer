@@ -476,7 +476,7 @@ const s = {
   frame: { position: "absolute", inset: "22% 12%", border: "3px solid rgba(255,255,255,.9)", borderRadius: 14, boxShadow: "0 0 0 999px rgba(0,0,0,.28)" },
   hint: { position: "absolute", left: 0, right: 0, bottom: 10, textAlign: "center", color: "#fff", fontSize: 13, fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,.7)" },
   manual: { display: "flex", gap: 8, marginTop: 12 },
-  input: { flex: 1, minWidth: 0, padding: "12px 12px", border: "1px solid #DCD5C6", borderRadius: 10, fontSize: 16, background: "#fff", color: "#16324F" },
+  input: { minHeight: 46, flex: 1, minWidth: 0, padding: "12px 12px", border: "1.5px solid #DCD5C6", borderRadius: 12, fontSize: 16, background: "#fff", color: "#16324F" },
   body: { textAlign: "center", padding: "4px 0 6px" },
   bigBtn: { width: "100%", minHeight: 64, border: 0, borderRadius: 14, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 18, cursor: "pointer" },
   photo: { display: "block", margin: "0 auto 10px", maxWidth: "100%", maxHeight: 220, borderRadius: 12, objectFit: "contain" },

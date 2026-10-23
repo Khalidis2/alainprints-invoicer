@@ -13,6 +13,7 @@ const PATHS = {
   users: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M17 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6" /></>,
   card: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 11h18M7 15h4" /></>,
   calc: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 12h2M13 12h2M9 16h2M13 16h2" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
 };
 
@@ -32,7 +33,7 @@ const BOTTOM = [
   { id: "more", label: "More", icon: "menu" },
 ];
 
-export default function Navigation({ tab, groups, onGo, userEmail, onSignOut }) {
+export default function Navigation({ tab, groups, onGo, onSearch, userEmail, onSignOut }) {
   const bottomIds = BOTTOM.map((entry) => entry.id);
   return (
     <>
@@ -41,7 +42,12 @@ export default function Navigation({ tab, groups, onGo, userEmail, onSignOut }) 
           <img src="/logo-round.png" alt="" width="44" height="44" />
           <span>alainprints</span>
         </div>
-        <button type="button" className="side-new" onClick={() => onGo("invoice", { fresh: true })}>
+        <button type="button" className={`side-search${tab === "search" ? " is-active" : ""}`} onClick={onSearch}>
+          <Icon name="search" size={18} />
+          <span>Search</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <button type="button" className={`side-new${tab === "invoice" ? " is-active" : ""}`} aria-current={tab === "invoice" ? "page" : undefined} onClick={() => onGo("invoice", { fresh: true })}>
           <Icon name="plus" size={18} />New invoice
         </button>
         {groups.map((group) => (
@@ -71,6 +77,7 @@ export default function Navigation({ tab, groups, onGo, userEmail, onSignOut }) 
       <header className="phone-bar no-print">
         <img src="/logo-round.png" alt="" width="36" height="36" />
         <span>alainprints</span>
+        <button type="button" className="phone-search" aria-label="Search" onClick={onSearch}><Icon name="search" size={20} /></button>
       </header>
 
       <nav className="bottom-nav no-print" aria-label="Main">

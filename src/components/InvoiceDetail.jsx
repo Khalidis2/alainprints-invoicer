@@ -240,6 +240,15 @@ export default function InvoiceDetail({ invoice, onBack, onUpdate, onEdit, onDup
         ))}
       </div>
 
+      {!["Cancelled", "Refunded"].includes(status) && (
+        <label style={s.statusRow}>
+          <span>Change status</span>
+          <select style={s.statusSelect} value={status} onChange={(event) => onStatus(event.target.value)} aria-label="Change status">
+            {["Draft", "Unpaid", "Paid", "Cancelled", "Refunded"].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+      )}
+
       <div style={s.foot}>
         {editable && <button type="button" style={s.footBtn} onClick={onEdit}>Edit</button>}
         {status === "Draft" && <button type="button" style={{ ...s.footBtn, ...s.footDanger }} onClick={onDelete}>Delete draft</button>}
@@ -289,6 +298,8 @@ const s = {
   dot: { width: 12, height: 12, borderRadius: "50%", display: "block" },
   stem: { width: 2, flex: 1, background: "#E4DFD3", marginTop: 4, textDecoration: "none" },
   eventTitle: { paddingTop: 10, color: "#1B2A3D", fontSize: 14, fontWeight: 800 },
+  statusRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 14px", border: "1px solid #E4DFD3", borderRadius: 13, background: "#fff", color: "#16324F", fontSize: 14, fontWeight: 800 },
+  statusSelect: { minHeight: 44, minWidth: 130, padding: "0 10px", border: "1.5px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#1B2A3D", fontSize: 14, fontWeight: 700 },
   foot: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 },
   footBtn: { flex: "1 1 140px", minHeight: 50, border: "1.5px solid #DCD5C6", borderRadius: 12, background: "#fff", color: "#16324F", fontSize: 14, fontWeight: 800, cursor: "pointer" },
   footDanger: { borderColor: "#FECACA", background: "#FEF2F2", color: "#B91C1C" },

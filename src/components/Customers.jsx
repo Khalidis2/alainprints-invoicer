@@ -113,11 +113,11 @@ function Metric({ label, value, color = "#16324F" }) {
 
 const s = {
   heading: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  title: { margin: 0, fontSize: 24, fontWeight: 800 },
+  title: { margin: 0, color: "#16324F", fontSize: 26, fontWeight: 850 },
   sub: { marginTop: 4, color: "#746A59", fontSize: 13 },
-  search: { width: "100%", margin: "18px 0 14px", padding: "11px 12px", border: "1px solid #DCD5C6", borderRadius: 9, background: "#fff", color: "#1B2A3D" },
+  search: { minHeight: 46, width: "100%", margin: "18px 0 14px", padding: "11px 12px", border: "1.5px solid #DCD5C6", borderRadius: 12, background: "#fff", color: "#1B2A3D" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 },
-  card: { background: "#fff", border: "1px solid #E4DFD3", borderRadius: 12, padding: 16 },
+  card: { background: "#fff", border: "1px solid #E4DFD3", borderRadius: 14, padding: 16 },
   cardHead: { display: "flex", justifyContent: "space-between", gap: 12 },
   name: { fontWeight: 800, fontSize: 16 },
   phone: { color: "#746A59", fontSize: 12.5, marginTop: 4 },
@@ -131,8 +131,8 @@ const s = {
   modal: { width: "100%", maxWidth: 440, padding: 22, borderRadius: 14, background: "#fff", boxShadow: "0 20px 60px rgba(0,0,0,.24)" },
   modalTitle: { margin: "0 0 14px", fontSize: 19 },
   label: { display: "block", margin: "12px 0 5px", color: "#6B6355", fontSize: 11.5, fontWeight: 700 },
-  input: { width: "100%", padding: "10px 11px", border: "1px solid #DCD5C6", borderRadius: 8, color: "#1B2A3D", background: "#fff" },
+  input: { minHeight: 46, width: "100%", padding: "10px 11px", border: "1.5px solid #DCD5C6", borderRadius: 12, color: "#1B2A3D", background: "#fff" },
   actions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 },
-  cancel: { padding: "9px 14px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#1B2A3D", fontWeight: 700, cursor: "pointer" },
-  save: { padding: "9px 14px", border: "none", borderRadius: 8, background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
+  cancel: { minHeight: 44, padding: "9px 14px", border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#1B2A3D", fontWeight: 700, cursor: "pointer" },
+  save: { minHeight: 44, padding: "9px 14px", border: "none", borderRadius: 10, background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
 };
