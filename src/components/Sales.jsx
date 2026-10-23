@@ -3,6 +3,7 @@ import { AED } from "../lib/helpers";
 import { FeeLine, useStripeFees } from "./StripeFees";
 import StockNote from "./StockNote";
 import DeliveryPin, { pinFromNotes } from "./DeliveryPin";
+import { receivedSoFar, remainingOf } from "../lib/invoiceMath";
 
 const waNumber = (phone) => String(phone || "").replace(/[^\d]/g, "").replace(/^0(?=5)/, "971");
 const FILTERS = [
@@ -31,6 +32,9 @@ export function buildEntries(invoices, storeOrders) {
       total: Number(invoice.total) || 0,
       status,
       paid: status === "Paid",
+      // Deposits already received on an unpaid invoice, and what is still owed.
+      received: status === "Unpaid" ? receivedSoFar(invoice) : 0,
+      owed: status === "Unpaid" ? remainingOf(invoice) : Number(invoice.total) || 0,
       done: ["Paid", "Refunded", "Cancelled"].includes(status),
       attention: status === "Unpaid" || status === "Draft",
       intent: status === "Paid" ? invoice.stripePaymentIntent : "",
@@ -83,7 +87,8 @@ export function Breakdown({ entries, waiting, waitingTotal }) {
   const cardPaid = confirmed.reduce((sum, entry) => sum + fees[entry.intent].gross, 0);
   const cardFees = confirmed.reduce((sum, entry) => sum + fees[entry.intent].fee, 0);
   const cardNet = confirmed.reduce((sum, entry) => sum + fees[entry.intent].net, 0);
-  const otherPaid = other.reduce((sum, entry) => sum + entry.total, 0);
+  const deposits = entries.filter((entry) => !entry.paid).reduce((sum, entry) => sum + (entry.received || 0), 0);
+  const otherPaid = other.reduce((sum, entry) => sum + entry.total, 0) + deposits;
   const unconfirmedPaid = unconfirmed.reduce((sum, entry) => sum + entry.total, 0);
   const totalPaid = cardPaid + otherPaid + unconfirmedPaid;
   const youKeep = cardNet + otherPaid + unconfirmedPaid;
@@ -134,7 +139,7 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
     return true;
   });
   const waiting = entries.filter((entry) => entry.attention);
-  const waitingTotal = waiting.reduce((sum, entry) => sum + entry.total, 0);
+  const waitingTotal = waiting.reduce((sum, entry) => sum + (entry.owed ?? entry.total), 0);
   const count = (id) => entries.filter((entry) => (id === "attention" ? entry.attention : id === "paid" ? entry.paid : id === "orders" ? entry.kind === "order" : id === "invoices" ? entry.kind === "invoice" : true)).length;
 
   return (

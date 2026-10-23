@@ -152,7 +152,7 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
   // Same numbers as the All sales tab: website orders and invoices together.
   const entries = useMemo(() => buildEntries(invoices, storeOrders), [invoices, storeOrders]);
   const waiting = entries.filter((entry) => entry.attention);
-  const waitingTotal = waiting.reduce((sum, entry) => sum + entry.total, 0);
+  const waitingTotal = waiting.reduce((sum, entry) => sum + (entry.owed ?? entry.total), 0);
 
   const topMax = Math.max(1, ...report.top.map((row) => row.amount));
 

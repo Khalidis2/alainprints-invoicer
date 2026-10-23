@@ -14,7 +14,12 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   // A new invoice can start from a chosen customer, a duplicated invoice or a repeated order (prefill).
   const seed = initialInvoice ?? prefill ?? null;
   const [customer, setCustomer] = useState(seed?.customer ?? { name: "", phone: "", email: "" });
-  const [lines, setLines] = useState(() => (seed?.lines ? autoLinkLines(seed.lines.map((line) => ({ ...line })), filaments).lines : []));
+  const [lines, setLines] = useState(() => {
+    if (!seed?.lines) return [];
+    const copy = seed.lines.map((line) => ({ ...line }));
+    // Editing keeps the stock links exactly as saved; a duplicate or repeated order is linked fresh.
+    return initialInvoice ? copy : autoLinkLines(copy, filaments).lines;
+  });
   const [notes, setNotes] = useState(seed?.notes ?? "");
   const [templates, setTemplates] = useState([]);
   // Money already received on this invoice (read-only here) and a new deposit typed in now.
