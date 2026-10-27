@@ -7,6 +7,8 @@ function money(value) {
 
 const DAY = 86400000;
 const dayLabel = (time) => new Date(time).toLocaleDateString("en-AE", { day: "numeric", month: "short" });
+// Invoice dates are plain YYYY-MM-DD strings; show them like the payment dates ("16 Sep").
+const dateLabel = (value) => (value ? dayLabel(new Date(`${value}T00:00:00`).getTime()) : "No date");
 
 // Money that actually came in, newest first. Uses the day it was paid, not the day it was created.
 function buildPayments(invoices, storeOrders) {
@@ -74,7 +76,7 @@ function DashboardCards({ invoices, storeOrders, filaments, onNavigate }) {
         {unpaid.length === 0 && <p className="dash-empty">Nothing unpaid.</p>}
         <ul className="dash-list">
           {unpaid.slice(0, 4).map((invoice) => (
-            <li key={invoice.id}><b>{invoice.customer?.name || "No name"}</b><small>{invoice.date} · INV-{invoice.number}</small><strong>{money(invoice.total)}</strong></li>
+            <li key={invoice.id}><b>{invoice.customer?.name || "No name"}</b><small>{dateLabel(invoice.date)} · INV-{invoice.number}</small><strong>{money(invoice.total)}</strong></li>
           ))}
         </ul>
         {unpaid.length > 4 && <button type="button" className="dash-link" onClick={() => onNavigate("history")}>All {unpaid.length} unpaid →</button>}
@@ -88,7 +90,7 @@ function DashboardCards({ invoices, storeOrders, filaments, onNavigate }) {
             <li key={item.id}><b>{`${item.material} ${item.color}`.trim()}</b><small>{Math.round(Number(item.remainingG || 0))} g left</small><strong>{Number(item.remainingG || 0) <= 0 ? "Out" : "Low"}</strong></li>
           ))}
         </ul>
-        {low.length > 6 && <button type="button" className="dash-link" onClick={() => onNavigate("filament")}>All {low.length} low →</button>}
+        <button type="button" className="dash-link" onClick={() => onNavigate("filament")}>{low.length > 6 ? `All ${low.length} low · ` : ""}Manage stock →</button>
       </article>
     </div>
   );
@@ -109,16 +111,13 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
   const entries = useMemo(() => buildEntries(invoices, storeOrders), [invoices, storeOrders]);
   const waiting = entries.filter((entry) => entry.attention);
   const waitingTotal = waiting.reduce((sum, entry) => sum + entry.total, 0);
-  const paidAll = entries.filter((entry) => entry.paid).reduce((sum, entry) => sum + entry.total, 0);
 
   const sections = [
     { id: "filament", title: "Filament stock", value: `${metrics.fullSpools} spools`, text: "Update quantities, prices and incoming stock. Changes feed the PrintTools3D Store.", action: "Manage stock" },
     { id: "items", title: "Printed products", value: `${items.length} products`, text: "Add printed parts, photos and your own selling prices.", action: "Manage products" },
     { id: "store-orders", title: "Store orders", value: `${metrics.pendingOrders} pending`, text: "Review customer orders and update their fulfilment status.", action: "Open orders" },
     { id: "customers", title: "Customers", value: `${customers.length} customers`, text: "Maintain customer contact details and order history.", action: "View customers" },
-    { id: "sales", title: "All sales", value: money(paidAll), text: "Total paid by customers, website orders and invoices together. Open it to see what you keep after fees.", action: "Open all sales" },
     { id: "history", title: "Invoices", value: `${invoices.length} invoices`, text: "Create, edit, print and share invoices, and track unpaid ones.", action: "View invoices" },
-    { id: "settings", title: "Website", value: "Live", text: "Open PrintTools3D and review what is synchronized from this admin.", action: "Website settings" },
   ];
 
   return (
@@ -129,11 +128,18 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
           <h1>Business control centre</h1>
           <p>Manage the information used by your store and invoicing workflow from one protected place.</p>
         </div>
-        <a className="admin-site-link" href="https://www.printtools3d.com" target="_blank" rel="noreferrer">Open live website ↗</a>
+        <div className="admin-hero-links">
+          <a className="admin-site-link" href="https://www.printtools3d.com" target="_blank" rel="noreferrer">Open live website ↗</a>
+          <button type="button" className="admin-site-link" onClick={() => onNavigate("settings")}>Website settings</button>
+        </div>
       </div>
 
       <DashboardCards invoices={invoices} storeOrders={storeOrders} filaments={filaments} onNavigate={onNavigate} />
 
+      <div className="dash-section-row">
+        <span>What you keep</span>
+        <button type="button" className="dash-link" onClick={() => onNavigate("sales")}>Open all sales →</button>
+      </div>
       <Breakdown entries={entries} waiting={waiting} waitingTotal={waitingTotal} />
 
       <div className="admin-grid">
