@@ -36,16 +36,50 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
     const timer = window.setTimeout(() => window.print(), 250);
     return () => window.clearTimeout(timer);
   }, [autoPrint]);
+  // Browser print (Print / Save PDF, Ctrl P): if only the footer would spill onto a second page, tighten
+  // the row spacing for this print. The class is removed again as soon as printing is done.
+  useEffect(() => {
+    const COMPACT = ["pdf-compact-1", "pdf-compact-2", "pdf-compact-3"];
+    const before = () => {
+      const sheet = document.querySelector(".invoice-sheet:not(.pdf-exporting)");
+      if (!sheet) return;
+      const level = chooseCompactLevelForPrint(sheet);
+      if (level > 0) sheet.classList.add(`pdf-compact-${level}`);
+    };
+    const after = () => document.querySelectorAll(".invoice-sheet").forEach((el) => el.classList.remove(...COMPACT));
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
+
   const createPdfFile = async () => {
     const source = document.querySelector(".invoice-sheet");
     if (!source) throw new Error("Invoice is not ready");
 
-    const clone = source.cloneNode(true);
-    clone.classList.add("pdf-exporting");
-    document.body.appendChild(clone);
+    // Lay the sheet out for A4. If that would leave a last page holding nothing but the footer (the content
+    // just fits), retry with slightly tighter spacing. If it still does not fit, keep the normal layout.
+    let clone = null;
+    let fitted = false;
+    for (let level = 0; level <= MAX_COMPACT_LEVEL && !fitted; level += 1) {
+      clone?.remove();
+      clone = source.cloneNode(true);
+      clone.classList.add("pdf-exporting");
+      if (level > 0) clone.classList.add(`pdf-compact-${level}`);
+      document.body.appendChild(clone);
+      fitted = !paginateForPdf(clone).footerOnly;
+    }
+    if (!fitted) {
+      clone.remove();
+      clone = source.cloneNode(true);
+      clone.classList.add("pdf-exporting");
+      document.body.appendChild(clone);
+      paginateForPdf(clone);
+    }
 
     try {
-      paginateForPdf(clone);
       const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
@@ -60,7 +94,8 @@ export default function InvoicePrint({ invoice, onBack, backLabel, autoPrint = f
 
       let offset = 0;
       let page = 0;
-      while (offset < imageHeight) {
+      // Stop when only blank bottom margin is left, so a short invoice never gets an empty second page.
+      while (offset < imageHeight - PAGE_SLACK_MM) {
         if (page > 0) pdf.addPage();
         pdf.addImage(image, "JPEG", 0, -offset, pageWidth, imageHeight, undefined, "FAST");
         offset += pageHeight;
@@ -305,6 +340,40 @@ const s = {
 
 // The PDF is one tall image cut into A4 slices. Before taking the image, push any row or block
 // that would be cut by a page edge down to the next page, and repeat the table header there.
+// For browser print: which spacing level (0 = normal) keeps the footer on the same page as the content.
+function chooseCompactLevelForPrint(source) {
+  for (let level = 0; level <= MAX_COMPACT_LEVEL; level += 1) {
+    const clone = source.cloneNode(true);
+    clone.classList.add("pdf-exporting", "print-like");
+    if (level > 0) clone.classList.add(`pdf-compact-${level}`);
+    document.body.appendChild(clone);
+    let spills = false;
+    try {
+      const pageHeight = (clone.offsetWidth * 297) / 210;
+      const top = clone.getBoundingClientRect().top;
+      const footer = clone.querySelector(".invoice-footer");
+      let contentBottom = 0;
+      clone.querySelectorAll(".invoice-hero, .invoice-info, .invoice-table, .invoice-summary, .invoice-notes").forEach((block) => {
+        contentBottom = Math.max(contentBottom, block.getBoundingClientRect().bottom - top);
+      });
+      if (footer) {
+        const footerBottom = footer.getBoundingClientRect().bottom - top;
+        const contentPages = Math.max(1, Math.ceil(contentBottom / pageHeight));
+        const footerPages = Math.max(1, Math.ceil((footerBottom - PAGE_SLACK_PX) / pageHeight));
+        spills = footerPages > contentPages;
+      }
+    } finally {
+      clone.remove();
+    }
+    if (!spills) return level;
+  }
+  return 0;
+}
+
+const MAX_COMPACT_LEVEL = 3; // how many times the PDF layout may tighten its spacing to avoid a footer-only page
+const PAGE_SLACK_PX = 20; // blank space at the bottom of the sheet that never needs its own page
+const PAGE_SLACK_MM = (PAGE_SLACK_PX * 210) / 794;
+
 function paginateForPdf(sheet) {
   const pageHeight = (sheet.offsetWidth * 297) / 210;
   const topGap = 40; // breathing room at the top of continuation pages
@@ -339,7 +408,17 @@ function paginateForPdf(sheet) {
     block.style.setProperty("margin-top", `${current + nextPageTop - top + topGap}px`, "important");
   });
 
-  // Make the sheet a whole number of pages so the last page isn't a thin strip.
+  // Make the sheet a whole number of pages so the last page isn't a thin strip. A page is 1122.86px, so a
+  // sheet that is a hair over (rounding) must still count as one page; the footer's own bottom padding
+  // (26px) can safely absorb up to PAGE_SLACK of overflow.
   const total = sheet.scrollHeight;
-  sheet.style.setProperty("min-height", `${Math.ceil(total / pageHeight) * pageHeight - 1}px`, "important");
+  const pages = Math.max(1, Math.ceil((total - PAGE_SLACK_PX) / pageHeight));
+  sheet.style.setProperty("min-height", `${pages * pageHeight - 1}px`, "important");
+
+  // Report whether the last page would carry only the footer, so the caller can try a tighter layout.
+  let contentBottom = 0;
+  sheet.querySelectorAll(".invoice-hero, .invoice-info, .invoice-table, .invoice-summary, .invoice-notes").forEach((block) => {
+    contentBottom = Math.max(contentBottom, block.getBoundingClientRect().bottom - sheetTop());
+  });
+  return { footerOnly: pages > 1 && contentBottom <= (pages - 1) * pageHeight + 1 };
 }

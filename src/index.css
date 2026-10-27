@@ -73,7 +73,7 @@ button, input, textarea, select { font-family: inherit; }
   }
 
   .invoice-footer {
-    margin-top: 18mm !important;
+    margin-top: 10mm !important;
   }
 }
 
@@ -208,7 +208,7 @@ button, input, textarea, select { font-family: inherit; }
   top: 0 !important;
   z-index: -1 !important;
   width: 794px !important;
-  min-height: 1123px !important;
+  min-height: 1122px !important;
   margin: 0 !important;
   padding: 0 !important;
   box-shadow: none !important;
@@ -242,6 +242,28 @@ button, input, textarea, select { font-family: inherit; }
 .invoice-sheet.pdf-exporting .invoice-summary { padding: 26px 42px 0 !important; justify-content: flex-end !important; }
 .invoice-sheet.pdf-exporting .invoice-summary-box { width: 300px !important; }
 .invoice-sheet.pdf-exporting .invoice-notes { margin: 26px 42px 0 !important; }
+/* On a phone the screen layout squeezes the table columns; the PDF is always laid out as A4, so undo that. */
+@media screen and (max-width: 720px) {
+  .invoice-sheet.pdf-exporting .invoice-table th:nth-child(n),
+  .invoice-sheet.pdf-exporting .invoice-table td:nth-child(n) { width: auto !important; overflow-wrap: normal !important; }
+  .invoice-sheet.pdf-exporting .invoice-table td:nth-child(n+3) { white-space: nowrap !important; }
+}
+/* Measuring clone that behaves like the printed page (same footer gap, no forced full-page height). */
+.invoice-sheet.pdf-exporting.print-like { min-height: 0 !important; }
+.invoice-sheet.pdf-exporting.print-like .invoice-footer { margin: 10mm 42px 0 !important; }
+
+/* Tighter spacing used only when the normal A4 layout would leave a page holding just the footer. */
+.invoice-sheet.pdf-compact-1 .invoice-table td { padding-top: 10px !important; padding-bottom: 10px !important; }
+.invoice-sheet.pdf-compact-1 .invoice-table th { padding-top: 9px !important; padding-bottom: 9px !important; }
+.invoice-sheet.pdf-compact-2 .invoice-table td { padding-top: 7px !important; padding-bottom: 7px !important; }
+.invoice-sheet.pdf-compact-2 .invoice-table th { padding-top: 8px !important; padding-bottom: 8px !important; }
+.invoice-sheet.pdf-compact-2 .invoice-info { padding-top: 20px !important; padding-bottom: 18px !important; }
+.invoice-sheet.pdf-compact-2 .invoice-summary { padding-top: 18px !important; }
+.invoice-sheet.pdf-compact-3 .invoice-table td { padding-top: 5px !important; padding-bottom: 5px !important; }
+.invoice-sheet.pdf-compact-3 .invoice-hero { padding-top: 22px !important; padding-bottom: 18px !important; }
+.invoice-sheet.pdf-compact-3 .invoice-info { padding-top: 16px !important; padding-bottom: 14px !important; }
+.invoice-sheet.pdf-compact-3 .invoice-summary { padding-top: 14px !important; }
+.invoice-sheet.pdf-compact-3 .invoice-notes { margin-top: 16px !important; }
 .invoice-sheet.pdf-exporting .invoice-footer {
   margin: auto 42px 0 !important;
   flex-direction: row !important;
