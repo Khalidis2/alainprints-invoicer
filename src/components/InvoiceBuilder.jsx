@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
+import CustomerPicker from "./CustomerPicker";
 import { autoLinkLines } from "../lib/stockCheck";
 import { createPaymentLink, fetchInvoiceTemplates, saveInvoiceTemplates } from "../lib/storage";
 import { addDays, paymentsOf, round2 } from "../lib/invoiceMath";
@@ -44,6 +45,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   });
   const [notes, setNotes] = useState(seed?.notes ?? "");
   const [templates, setTemplates] = useState([]);
+  const phoneRef = useRef(null);
   // Money already received on this invoice (read-only here) and a new deposit typed in now.
   const receivedPayments = paymentsOf(initialInvoice);
   // After saving: also create a one-time card payment link, and/or open the share screen straight away.
@@ -186,19 +188,25 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     persistTemplates(templates.filter((entry) => entry.id !== template.id));
   };
 
-  // The last invoices per customer, for one-tap customers and "repeat last order".
-  const recentCustomers = useMemo(() => {
-    const seen = new Set();
-    const out = [];
-    for (const invoice of invoices) {
+  // Every customer we know: saved customers plus names from past invoices. Most recent first, then A to Z.
+  const customerOptions = useMemo(() => {
+    const byName = new Map();
+    invoices.forEach((invoice, index) => {
       const name = String(invoice.customer?.name || "").trim();
-      if (!name || seen.has(name.toLowerCase())) continue;
-      seen.add(name.toLowerCase());
-      out.push({ name, phone: invoice.customer?.phone || "", email: invoice.customer?.email || "", last: invoice });
-      if (out.length === 4) break;
-    }
-    return out;
-  }, [invoices]);
+      const key = name.toLowerCase();
+      if (!name || byName.has(key)) return;
+      byName.set(key, { name, phone: invoice.customer?.phone || "", email: invoice.customer?.email || "", rank: index });
+    });
+    customers.forEach((saved) => {
+      const name = String(saved.name || "").trim();
+      const key = name.toLowerCase();
+      if (!name) return;
+      const known = byName.get(key);
+      if (known) known.phone = known.phone || saved.phone || "";
+      else byName.set(key, { name, phone: saved.phone || "", email: "", rank: Number.MAX_SAFE_INTEGER });
+    });
+    return [...byName.values()].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+  }, [customers, invoices]);
   const lastOrder = useMemo(() => {
     const name = customer.name.trim().toLowerCase();
     if (!name) return null;
@@ -329,11 +337,6 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     return groups;
   }, {});
   const itemCount = lines.reduce((sum, line) => sum + Number(line.qty || 0), 0);
-
-  const pickCustomerByName = (name) => {
-    const saved = customers.find((entry) => entry.name.toLowerCase() === name.trim().toLowerCase());
-    setCustomer(saved ? { name: saved.name, phone: saved.phone || customer.phone, email: customer.email || "" } : { ...customer, name });
-  };
 
   const STATUS_COLOR = { Unpaid: "#B45309", Paid: "#0F6B64", Deposit: "#B45309", Draft: "#5B6573", Cancelled: "#B3451D" };
 
@@ -472,19 +475,25 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         )}
 
         <div style={s.step}><StepBadge n={1} />Customer</div>
-        <input
-          style={s.input}
-          list="saved-customers"
-          value={customer.name}
-          onChange={(e) => pickCustomerByName(e.target.value)}
-          placeholder="Customer name (saved ones appear as you type)"
-          aria-label="Customer name"
+        <CustomerPicker
+          options={customerOptions}
+          name={customer.name}
+          onType={(value) => {
+            // Typing a saved customer's exact name fills in their phone and email. Leaving it again
+            // clears them, so one customer's number never ends up on another customer's invoice.
+            const find = (text) => customerOptions.find((option) => option.name.toLowerCase() === text.trim().toLowerCase());
+            const was = find(customer.name);
+            const hit = find(value);
+            if (hit && hit !== was) setCustomer({ name: value, phone: hit.phone || "", email: hit.email || "" });
+            else if (!hit && was && customer.phone === (was.phone || "") && (customer.email || "") === (was.email || "")) setCustomer({ name: value, phone: "", email: "" });
+            else setCustomer({ ...customer, name: value });
+          }}
+          onPick={(option) => setCustomer({ name: option.name, phone: option.phone || "", email: option.email || "" })}
+          onNext={() => phoneRef.current?.focus()}
         />
-        <datalist id="saved-customers">
-          {customers.map((entry) => <option key={entry.id} value={entry.name}>{entry.phone || ""}</option>)}
-        </datalist>
         <input
           style={{ ...s.input, marginTop: 8 }}
+          ref={phoneRef}
           value={customer.phone}
           onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
           placeholder="Phone or Instagram (optional)"
@@ -498,19 +507,6 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           placeholder="Customer email (optional, to send the PDF)"
           aria-label="Customer email"
         />
-        {recentCustomers.length > 0 && !customer.name && (
-          <>
-            <div style={s.tplLabel}>Tap to reuse</div>
-            <div style={s.tplRow}>
-              {recentCustomers.map((entry) => (
-                <button key={entry.name} type="button" style={s.recentChip} onClick={() => setCustomer({ name: entry.name, phone: entry.phone, email: entry.email })}>
-                  <b>{entry.name}</b>
-                  <span>{entry.phone || "No phone"}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
         {lastOrder && lines.length === 0 && (
           <div style={s.lastOrder}>
             Last order: {lastOrder.lines.slice(0, 2).map((line) => `${line.name} × ${line.qty}`).join(", ")}{lastOrder.lines.length > 2 ? "…" : ""}.{" "}
@@ -738,7 +734,6 @@ const s = {
   tplChip: { display: "inline-flex", alignItems: "center", flex: "0 0 auto", minHeight: 44, border: "1.5px solid #DCD5C6", borderRadius: 999, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 13, overflow: "hidden" },
   tplChipOn: { padding: "0 16px", background: "#16324F", borderColor: "#16324F", color: "#fff", cursor: "pointer" },
   tplSave: { flex: "0 0 auto", minHeight: 44, padding: "0 14px", border: "1.5px dashed #B9B09B", borderRadius: 999, background: "transparent", color: "#16324F", fontWeight: 800, fontSize: 13, cursor: "pointer" },
-  recentChip: { flex: "1 1 0", minWidth: 120, minHeight: 56, padding: "8px 12px", border: "1.5px solid #E4DFD3", borderRadius: 12, background: "#fff", color: "#16324F", textAlign: "left", cursor: "pointer", display: "grid", gap: 1 },
   lastOrder: { marginTop: 10, color: "#047857", fontSize: 12.5, fontWeight: 750 },
   linkBtn: { padding: 0, border: 0, background: "none", color: "#2E7D8C", font: "inherit", fontWeight: 800, textDecoration: "underline", cursor: "pointer" },
   priceBox: { display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, minHeight: 44, padding: "0 8px", border: "1.5px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#6B6355", fontSize: 12, fontWeight: 800 },
