@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AED, today } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
-import { StripeLinkButton, StripeLinkDetails, initialStripeUrl } from "./StripeLinkPanel";
 import { checkStripePayment, matchStripePayments, syncStripeRefunds } from "../lib/storage";
 import { FeeLine, FeeSummary } from "./StripeFees";
+import InvoiceDetail from "./InvoiceDetail";
+import { displayStatus, isPartPaid, receivedSoFar, remainingOf } from "../lib/invoiceMath";
 
 const STATUSES = ["Draft", "Unpaid", "Paid", "Refunded", "Cancelled"];
 const STATUS_COLOR = {
   Draft: "#6B7280",
   Unpaid: "#B45309",
+  "Part paid": "#B45309",
   Paid: "#047857",
   Refunded: "#6D28D9",
   Cancelled: "#B91C1C",
@@ -16,19 +18,26 @@ const STATUS_COLOR = {
 const STATUS_BG = {
   Draft: "#F3F4F6",
   Unpaid: "#FFF7ED",
+  "Part paid": "#FFF7ED",
   Paid: "#ECFDF5",
   Refunded: "#F5F3FF",
   Cancelled: "#FEF2F2",
 };
 
-export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, onRefresh, showToast }) {
+export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, onDuplicate, openId, onOpened, onRefresh, showToast }) {
   const [open, setOpen] = useState(null);
+  // The invoice opened from the list: shows what is still owed, reminders, payments and history.
+  const [detailId, setDetailId] = useState(null);
+  useEffect(() => {
+    if (!openId) return;
+    setDetailId(openId);
+    onOpened?.();
+  }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [autoPrint, setAutoPrint] = useState(false);
   const [autoShare, setAutoShare] = useState(false);
   const [workingId, setWorkingId] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [stripeUrls, setStripeUrls] = useState({});
 
   // Backup for the Stripe webhook: when this tab opens, quietly ask Stripe about unpaid invoices that have a link.
   const refundsChecked = useRef(false);
@@ -111,8 +120,8 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
 
   const totals = useMemo(() => {
     const billable = invoices.filter((invoice) => ["Paid", "Unpaid"].includes(invoice.status || "Unpaid"));
-    const paid = billable.filter((invoice) => invoice.status === "Paid").reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-    const unpaid = billable.filter((invoice) => (invoice.status || "Unpaid") === "Unpaid").reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+    const paid = billable.reduce((sum, invoice) => sum + receivedSoFar(invoice), 0);
+    const unpaid = billable.reduce((sum, invoice) => sum + remainingOf(invoice), 0);
     return { billed: paid + unpaid, paid, unpaid, count: billable.length };
   }, [invoices]);
 
@@ -177,34 +186,24 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
     }
   };
 
-  const shareInvoice = async (invoice) => {
-    const lines = (invoice.lines || [])
-      .map((line) => `${line.qty} × ${line.name} — ${AED(Number(line.price || 0) * Number(line.qty || 0))}`)
-      .join("\n");
-    const text = [
-      `ALAINPRINTS INVOICE INV-${invoice.number}`,
-      `Date: ${invoice.date}`,
-      `Customer: ${invoice.customer?.name || "Walk-in customer"}`,
-      "",
-      lines,
-      "",
-      `Total: ${AED(invoice.total)}`,
-      `Status: ${invoice.status || "Unpaid"}`,
-      "Trade Licence No.: CN-6362373",
-      "Not VAT registered",
-    ].join("\n");
-
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: `Invoice INV-${invoice.number}`, text });
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      showToast("Invoice copied — paste it into WhatsApp or email");
-    } catch (error) {
-      if (error?.name !== "AbortError") showToast("Couldn't share this invoice");
-    }
-  };
+  const detailInvoice = detailId ? invoices.find((invoice) => invoice.id === detailId) : null;
+  if (detailInvoice) {
+    return (
+      <InvoiceDetail
+        invoice={detailInvoice}
+        onBack={() => setDetailId(null)}
+        onUpdate={onUpdate}
+        onEdit={() => onEdit(detailInvoice)}
+        onDuplicate={() => onDuplicate?.({ customer: { ...detailInvoice.customer }, lines: (detailInvoice.lines || []).map((line) => ({ ...line })), notes: detailInvoice.notes || "" })}
+        onPrint={() => { setAutoShare(false); setAutoPrint(true); setOpen(detailInvoice); }}
+        onShare={() => { setAutoPrint(false); setAutoShare(true); setOpen(detailInvoice); }}
+        onStatus={(next) => updateStatus(detailInvoice, next)}
+        onDelete={async () => { await remove(detailInvoice); setDetailId(null); }}
+        onRefresh={onRefresh}
+        showToast={showToast}
+      />
+    );
+  }
 
   return (
     <div>
@@ -260,42 +259,24 @@ export default function InvoiceHistory({ invoices, onEdit, onUpdate, onDelete, o
         <div style={s.list}>
           {filtered.map((invoice) => {
             const status = invoice.status || "Unpaid";
-            const editable = ["Draft", "Unpaid"].includes(status);
-            const deletable = status === "Draft";
-            const locked = status === "Cancelled" || status === "Refunded";
             const busy = workingId === invoice.id;
 
             return (
               <div key={invoice.id} className="history-row" style={s.row}>
-                <button className="history-main" style={s.rowMain} onClick={() => { setAutoPrint(false); setAutoShare(false); setOpen(invoice); }}>
+                <button className="history-main" style={s.rowMain} onClick={() => setDetailId(invoice.id)}>
                   <span style={s.no}>INV-{invoice.number}</span>
                   <span style={s.name}>{invoice.customer.name || "Walk-in"}</span>
                   <span style={s.date}>{invoice.date}</span>
                   <span style={s.total}>{AED(invoice.total)}</span>
                 </button>
 
-                <select
-                  aria-label={`Status for invoice INV-${invoice.number}`}
-                  style={{ ...s.statusSelect, color: STATUS_COLOR[status], background: STATUS_BG[status] }}
-                  value={status}
-                  disabled={busy || locked}
-                  onChange={(event) => updateStatus(invoice, event.target.value)}
-                >
-                  {STATUSES.map((option) => <option key={option}>{option}</option>)}
-                </select>
-
-                <div className="history-actions" style={s.actionGroup}>
-                  {status === "Unpaid" && <button style={s.paidBtn} disabled={busy} onClick={() => updateStatus(invoice, "Paid")}>Mark paid</button>}
-                  {status === "Unpaid" && !(stripeUrls[invoice.id] || initialStripeUrl(invoice)) && (
-                    <StripeLinkButton invoice={invoice} showToast={showToast} compact onUrl={(url) => setStripeUrls((current) => ({ ...current, [invoice.id]: url }))} />
-                  )}
-                  <button style={s.shareBtn} disabled={busy} onClick={() => { setAutoPrint(false); setAutoShare(true); setOpen(invoice); }}>Share PDF</button>
-                  <button style={s.printBtn} disabled={busy} onClick={() => { setAutoShare(false); setAutoPrint(true); setOpen(invoice); }}>Print</button>
-                  {editable && <button style={s.editBtn} disabled={busy} onClick={() => onEdit(invoice)}>Edit</button>}
-                  {deletable && <button style={s.deleteBtn} disabled={busy} onClick={() => remove(invoice)}>Delete</button>}
-                  {locked && <span style={s.locked}>Locked</span>}
-                </div>
-                <StripeLinkDetails invoice={invoice} url={stripeUrls[invoice.id] || initialStripeUrl(invoice)} showToast={showToast} onPaid={onRefresh} />
+                <span style={{ ...s.statusPill, color: STATUS_COLOR[displayStatus(invoice)] || STATUS_COLOR[status], background: STATUS_BG[displayStatus(invoice)] || STATUS_BG[status] }}>{displayStatus(invoice).toUpperCase()}</span>
+                {status === "Unpaid" && <button style={s.paidBtn} disabled={busy} onClick={() => updateStatus(invoice, "Paid")}>Mark paid</button>}
+                {isPartPaid(invoice) && (
+                  <div className="payment-summary" style={{ ...s.paymentSummary, color: "#B45309" }}>
+                    Part paid: {AED(receivedSoFar(invoice))} received · {AED(remainingOf(invoice))} left
+                  </div>
+                )}
                 {status === "Paid" && (
                   <div className="payment-summary" style={s.paymentSummary}>
                     Paid {invoice.paidDate || "date not recorded"}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}{invoice.paymentReference ? ` · Ref: ${invoice.paymentReference}` : ""}
@@ -332,7 +313,7 @@ function SummaryCard({ label, value, accent }) {
 
 const s = {
   headingRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 },
-  h2: { fontSize: 24, fontWeight: 800, margin: 0 },
+  h2: { fontSize: 26, fontWeight: 850, margin: 0, color: "#16324F" },
   sub: { fontSize: 13, color: "#746A59", marginTop: 4 },
   summaryGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, margin: "18px 0" },
   card: { background: "#fff", border: "1px solid #E4DFD3", borderRadius: 12, padding: "15px 16px" },
@@ -349,9 +330,9 @@ const s = {
   name: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 700, color: "#1B2A3D" },
   date: { color: "#746A59", fontSize: 12 },
   total: { fontWeight: 800, textAlign: "right", color: "#1B2A3D" },
-  statusSelect: { width: 112, border: "1px solid #DCD5C6", borderRadius: 8, padding: "7px 8px", fontWeight: 800, fontSize: 11.5, cursor: "pointer" },
+  statusPill: { flex: "0 0 auto", padding: "5px 10px", borderRadius: 999, fontSize: 10.5, fontWeight: 850, whiteSpace: "nowrap" },
   actionGroup: { display: "flex", alignItems: "center", gap: 8 },
-  paidBtn: { background: "#047857", border: "none", borderRadius: 7, color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
+  paidBtn: { minHeight: 40, background: "#047857", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", padding: "0 14px" },
   paymentSummary: { width: "100%", color: "#047857", fontSize: 11.5, fontWeight: 700 },
   shareBtn: { background: "#16324F", border: "none", borderRadius: 7, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "7px 10px" },
   printBtn: { background: "#fff", border: "1px solid #16324F", borderRadius: 7, color: "#16324F", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "7px 10px" },

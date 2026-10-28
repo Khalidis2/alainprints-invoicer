@@ -3,6 +3,7 @@ import { AED } from "../lib/helpers";
 import { FeeLine, useStripeFees } from "./StripeFees";
 import StockNote from "./StockNote";
 import DeliveryPin, { pinFromNotes } from "./DeliveryPin";
+import { receivedSoFar, remainingOf } from "../lib/invoiceMath";
 
 const waNumber = (phone) => String(phone || "").replace(/[^\d]/g, "").replace(/^0(?=5)/, "971");
 const FILTERS = [
@@ -31,6 +32,9 @@ export function buildEntries(invoices, storeOrders) {
       total: Number(invoice.total) || 0,
       status,
       paid: status === "Paid",
+      // Deposits already received on an unpaid invoice, and what is still owed.
+      received: status === "Unpaid" ? receivedSoFar(invoice) : 0,
+      owed: status === "Unpaid" ? remainingOf(invoice) : Number(invoice.total) || 0,
       done: ["Paid", "Refunded", "Cancelled"].includes(status),
       attention: status === "Unpaid" || status === "Draft",
       intent: status === "Paid" ? invoice.stripePaymentIntent : "",
@@ -83,7 +87,8 @@ export function Breakdown({ entries, waiting, waitingTotal }) {
   const cardPaid = confirmed.reduce((sum, entry) => sum + fees[entry.intent].gross, 0);
   const cardFees = confirmed.reduce((sum, entry) => sum + fees[entry.intent].fee, 0);
   const cardNet = confirmed.reduce((sum, entry) => sum + fees[entry.intent].net, 0);
-  const otherPaid = other.reduce((sum, entry) => sum + entry.total, 0);
+  const deposits = entries.filter((entry) => !entry.paid).reduce((sum, entry) => sum + (entry.received || 0), 0);
+  const otherPaid = other.reduce((sum, entry) => sum + entry.total, 0) + deposits;
   const unconfirmedPaid = unconfirmed.reduce((sum, entry) => sum + entry.total, 0);
   const totalPaid = cardPaid + otherPaid + unconfirmedPaid;
   const youKeep = cardNet + otherPaid + unconfirmedPaid;
@@ -134,7 +139,7 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
     return true;
   });
   const waiting = entries.filter((entry) => entry.attention);
-  const waitingTotal = waiting.reduce((sum, entry) => sum + entry.total, 0);
+  const waitingTotal = waiting.reduce((sum, entry) => sum + (entry.owed ?? entry.total), 0);
   const count = (id) => entries.filter((entry) => (id === "attention" ? entry.attention : id === "paid" ? entry.paid : id === "orders" ? entry.kind === "order" : id === "invoices" ? entry.kind === "invoice" : true)).length;
 
   return (
@@ -185,7 +190,7 @@ export default function Sales({ invoices, storeOrders, onOpen }) {
 }
 
 const s = {
-  break: { display: "grid", gap: 10, margin: "0 0 16px", padding: 14, border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff" },
+  break: { display: "grid", gap: 10, margin: "0 0 16px", padding: 14, border: "1px solid #E4DFD3", borderRadius: 14, background: "#fff" },
   keep: { display: "grid", gap: 3, padding: "12px 14px", border: "1px solid #A7D7C5", borderRadius: 10, background: "#F0FDF7", color: "#047857" },
   parts: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 },
   part: { display: "grid", gap: 5, padding: "12px 14px", border: "1px solid #EFEAE0", borderRadius: 10, background: "#FBFAF6", color: "#3F3A30", fontSize: 13 },
@@ -194,15 +199,15 @@ const s = {
   lineNet: { paddingTop: 5, borderTop: "1px dashed #DCD5C6", color: "#047857", fontWeight: 800 },
   warnNote: { color: "#B45309", lineHeight: 1.45 },
   heading: { marginBottom: 14 },
-  title: { margin: 0, fontSize: 24 },
+  title: { margin: 0, color: "#16324F", fontSize: 26, fontWeight: 850 },
   sub: { margin: "5px 0 0", color: "#746A59", fontSize: 13 },
   cards: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, margin: "0 0 14px" },
-  stat: { display: "grid", gap: 3, padding: "12px 14px", border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff", color: "#6B6355", fontSize: 12 },
+  stat: { display: "grid", gap: 3, padding: "12px 14px", border: "1px solid #E4DFD3", borderRadius: 14, background: "#fff", color: "#6B6355", fontSize: 12 },
   filters: { display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 14px" },
   chip: { minHeight: 40, padding: "0 12px", border: "1px solid #DCD5C6", borderRadius: 999, background: "#fff", color: "#6B6355", fontWeight: 700, cursor: "pointer" },
   chipOn: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
   list: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 12 },
-  card: { display: "grid", gap: 8, padding: 16, border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff", alignContent: "start" },
+  card: { display: "grid", gap: 8, padding: 16, border: "1px solid #E4DFD3", borderRadius: 14, background: "#fff", alignContent: "start" },
   top: { display: "flex", justifyContent: "space-between", gap: 10 },
   kind: { display: "inline-block", marginBottom: 4, padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".04em" },
   kindOrder: { background: "#ECFDF5", color: "#047857" },
@@ -218,7 +223,7 @@ const s = {
   items: { margin: 0, padding: "8px 0 0 18px", borderTop: "1px solid #EFEAE0", color: "#3F3A30", fontSize: 13, lineHeight: 1.5 },
   totalRow: { display: "flex", justifyContent: "space-between", fontSize: 14 },
   actions: { display: "flex", flexWrap: "wrap", gap: 8 },
-  open: { minHeight: 42, padding: "0 14px", border: 0, borderRadius: 8, background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
+  open: { minHeight: 42, padding: "0 14px", border: 0, borderRadius: 10, background: "#16324F", color: "#fff", fontWeight: 800, cursor: "pointer" },
   link: { display: "inline-flex", alignItems: "center", minHeight: 42, padding: "0 12px", border: "1px solid #16324F", borderRadius: 8, color: "#16324F", fontWeight: 800, textDecoration: "none" },
   empty: { padding: 30, textAlign: "center", color: "#746A59" },
 };

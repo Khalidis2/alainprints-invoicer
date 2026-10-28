@@ -37,7 +37,7 @@ export default function WebsiteSettings({ filaments, items }) {
     <section>
       <div className="admin-section-heading">
         <div>
-          <span className="admin-eyebrow">PRINTTOOLS3D</span>
+          <span className="admin-eyebrow">ALAIN PRINTS</span>
           <h2>Website controls</h2>
           <p>Changes here control the public Store and announcement banner.</p>
         </div>

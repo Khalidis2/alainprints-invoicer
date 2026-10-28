@@ -3,6 +3,7 @@ import { AED } from "../lib/helpers";
 import StockList from "./StockList";
 import ProfitPanel from "./ProfitPanel";
 import { AddFilamentModal, EditFilamentModal } from "./StockEditor";
+import StockScanner from "./StockScanner";
 
 const spoolsOf = (entry) => entry.remainingG / Number(entry.spoolWeightG || 1000);
 const fmt = (value) => (Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : value.toFixed(1));
@@ -13,6 +14,7 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, onAd
   const [material, setMaterial] = useState("all");
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [removed, setRemoved] = useState([]);
   const [removedTick, setRemovedTick] = useState(0);
@@ -94,8 +96,12 @@ export default function FilamentInventory({ filaments, onUpdate, onReceive, onAd
     <section>
       <div style={s.titleRow}>
         <h2 style={s.title}>Filament stock</h2>
-        <button type="button" style={s.addBtn} onClick={() => setAdding(true)}>＋ Add filament</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" style={s.scanBtn} onClick={() => setScanning(true)}>📷 Scan label</button>
+          <button type="button" style={s.addBtn} onClick={() => setAdding(true)}>＋ Add filament</button>
+        </div>
       </div>
+      {scanning && <StockScanner filaments={filaments} onUpdate={onUpdate} onArchive={onArchive} onAdd={onAdd} onClose={() => setScanning(false)} showToast={showToast} />}
       <div className="filament-summary" style={s.summary}>
         <Summary label="In stock" value={`${fmt(totals.availableSpools)} spools`} />
         <Summary label="Weight" value={`${totals.availableKg.toFixed(1)} kg`} />
@@ -186,10 +192,11 @@ function Summary({ label, value }) {
 
 const s = {
   titleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" },
-  title: { margin: 0, fontSize: 24 },
+  title: { margin: 0, color: "#16324F", fontSize: 26, fontWeight: 850 },
+  scanBtn: { minHeight: 46, padding: "0 18px", border: "2px solid #047857", borderRadius: 12, background: "#fff", color: "#047857", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   addBtn: { minHeight: 46, padding: "0 20px", border: 0, borderRadius: 12, background: "#047857", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer" },
   summary: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, margin: "18px 0" },
-  summaryCard: { display: "grid", gap: 5, padding: 14, border: "1px solid #E4DFD3", borderRadius: 10, background: "#fff" },
+  summaryCard: { display: "grid", gap: 5, padding: 14, border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff" },
   summaryLabel: { color: "#746A59", fontSize: 11, fontWeight: 700, textTransform: "uppercase" },
   summaryValue: { color: "#16324F", fontSize: 19 },
   toolbar: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 14 },
@@ -197,7 +204,7 @@ const s = {
   tab: { minHeight: 44, padding: "0 14px", border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#6B6355", fontWeight: 800, cursor: "pointer" },
   tabActive: { borderColor: "#E8792D", background: "#FFF5ED", color: "#B45309" },
   typeFilter: { minWidth: 160, minHeight: 44, padding: "0 12px", border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#1B2A3D", fontWeight: 700 },
-  search: { flex: 1, minWidth: 160, maxWidth: 380, minHeight: 44, padding: "0 12px", border: "1px solid #DCD5C6", borderRadius: 10, fontSize: 16 },
+  search: { flex: 1, minWidth: 160, maxWidth: 380, minHeight: 44, padding: "0 12px", border: "1.5px solid #DCD5C6", borderRadius: 12, fontSize: 16 },
   note: { margin: "0 0 14px", color: "#6B6355", fontSize: 13 },
   groups: { display: "grid", gap: 28 },
   group: { display: "grid", gap: 10 },

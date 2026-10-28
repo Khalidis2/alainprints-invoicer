@@ -542,45 +542,28 @@ export async function deleteInvoiceRow(id) {
 
 function dbToInvoice(row) {
   const storedLines = row.lines ?? [];
-  // Payment details are real columns. Rows read before invoice_columns.sql has run still carry them
-  // in the old meta line, so fall back to that.
-  const legacyMeta = storedLines.find((line) => line.itemId === "__invoice_meta__");
-  const hasColumns = "status" in row;
+  const invoiceMeta = storedLines.find((line) => line.itemId === "__invoice_meta__");
   const discountMeta = storedLines.find((line) => line.itemId === "__invoice_discount__");
-  const discount = Math.max(0, Number(hasColumns ? row.discount : legacyMeta?.discount ?? discountMeta?.amount) || 0);
+  const discount = Math.max(0, Number(invoiceMeta?.discount ?? discountMeta?.amount) || 0);
   const total = Number(row.total);
-  const meta = hasColumns
-    ? {
-        dueDate: row.due_date ?? "",
-        status: row.status,
-        paymentMethod: row.payment_method,
-        paidDate: row.paid_date ?? "",
-        paymentReference: row.payment_reference,
-        stripeLinkId: row.stripe_link_id,
-        stripeLinkUrl: row.stripe_link_url,
-        stripeLinkAmount: row.stripe_link_amount,
-        stripePaymentIntent: row.stripe_payment_intent,
-        stripeRefundedAmount: row.stripe_refunded_amount,
-        refundedDate: row.refunded_date ?? "",
-      }
-    : legacyMeta || {};
   return {
     id: row.id,
     number: row.number,
     date: row.date,
-    customer: { name: row.customer_name ?? "", phone: row.customer_phone ?? "" },
+    customer: { name: row.customer_name ?? "", phone: row.customer_phone ?? "", email: invoiceMeta?.customerEmail ?? "" },
     notes: row.notes ?? "",
-    dueDate: meta.dueDate ?? "",
-    status: meta.status || "Unpaid",
-    paymentMethod: meta.paymentMethod ?? "",
-    paidDate: meta.paidDate ?? "",
-    paymentReference: meta.paymentReference ?? "",
-    stripeLinkId: meta.stripeLinkId ?? "",
-    stripeLinkUrl: meta.stripeLinkUrl ?? "",
-    stripeLinkAmount: Number(meta.stripeLinkAmount) || 0,
-    stripePaymentIntent: meta.stripePaymentIntent ?? "",
-    stripeRefundedAmount: Number(meta.stripeRefundedAmount) || 0,
-    refundedDate: meta.refundedDate ?? "",
+    dueDate: invoiceMeta?.dueDate ?? "",
+    status: invoiceMeta?.status ?? "Unpaid",
+    paymentMethod: invoiceMeta?.paymentMethod ?? "",
+    paidDate: invoiceMeta?.paidDate ?? "",
+    paymentReference: invoiceMeta?.paymentReference ?? "",
+    payments: Array.isArray(invoiceMeta?.payments) ? invoiceMeta.payments : [],
+    stripeLinkId: invoiceMeta?.stripeLinkId ?? "",
+    stripeLinkUrl: invoiceMeta?.stripeLinkUrl ?? "",
+    stripeLinkAmount: Number(invoiceMeta?.stripeLinkAmount) || 0,
+    stripePaymentIntent: invoiceMeta?.stripePaymentIntent ?? "",
+    stripeRefundedAmount: Number(invoiceMeta?.stripeRefundedAmount) || 0,
+    refundedDate: invoiceMeta?.refundedDate ?? "",
     subtotal: total + discount,
     discount,
     total,
@@ -599,6 +582,9 @@ function invoiceToDb(invoice) {
       paymentMethod: invoice.paymentMethod ?? "",
       paidDate: invoice.paidDate ?? "",
       paymentReference: invoice.paymentReference ?? "",
+      // Deposits and part payments. The invoice stays Unpaid until the full amount is in.
+      ...(Array.isArray(invoice.payments) && invoice.payments.length ? { payments: invoice.payments } : {}),
+      ...(invoice.customer?.email ? { customerEmail: String(invoice.customer.email).trim() } : {}),
       // Keep the Stripe link attached when the invoice is edited or its status changes.
       ...(invoice.stripeLinkId ? { stripeLinkId: invoice.stripeLinkId, stripeLinkUrl: invoice.stripeLinkUrl, stripeLinkAmount: invoice.stripeLinkAmount } : {}),
       ...(invoice.stripePaymentIntent ? { stripePaymentIntent: invoice.stripePaymentIntent } : {}),
@@ -617,16 +603,19 @@ function invoiceToDb(invoice) {
 }
 
 // ---------- invoice counter ----------
-// The database owns the counter: save_invoice raises it atomically on every save, and
-// next_invoice_no() also looks at the highest saved number. The browser only ever reads it.
+// Read-then-write. Fine for two people on the same small team; if two
+// invoices could ever be finalized in the exact same instant, this is
+// the place to replace with a Postgres RPC that increments atomically.
 
 export async function fetchInvoiceNo() {
-  const { data, error } = await supabase.rpc("next_invoice_no");
-  if (!error && Number.isInteger(Number(data))) return Number(data);
-  // next_invoice_no() is not installed yet (invoice_columns.sql not run): read the stored counter.
-  const stored = await supabase.from("settings").select("value").eq("key", "invoice_no").single();
-  if (stored.error) throw stored.error;
-  return Number(stored.data.value);
+  const { data, error } = await supabase.from("settings").select("value").eq("key", "invoice_no").single();
+  if (error) throw error;
+  return Number(data.value);
+}
+
+export async function persistInvoiceNo(n) {
+  const { error } = await supabase.from("settings").update({ value: n }).eq("key", "invoice_no");
+  if (error) throw error;
 }
 
 // ---------- realtime ----------
@@ -729,6 +718,20 @@ export async function sendTestEmail() {
   return response.json();
 }
 
+// Email the invoice PDF to a customer (admin only). The server builds the PDF and sends it through Resend.
+export async function emailInvoicePdf(invoiceId, email) {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const response = await fetch("/api/store-order-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ invoiceId, email }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (result.ok) return `Invoice emailed to ${email}. Check spam if it does not arrive.`;
+  throw new Error(result.error || (result.result?.failed ? `Email not sent (${result.result.failed})` : "Email not sent"));
+}
+
 // Re-send the email for one website order; resolves with a short message for the toast.
 export async function resendOrderEmail(id) {
   const { data } = await supabase.auth.getSession();
@@ -767,19 +770,98 @@ export async function fetchStripeFees(paymentIntents) {
   return Object.fromEntries(wanted.map((id) => [id, feeCache.get(id)]));
 }
 
-// Money Stripe still holds for you (pending + available) and payouts already on their way to the bank.
-export async function fetchComingPayouts() {
+// ---------- label scanner ----------
+// Box label code -> filament (material + colour). Saved once per box type in settings, no extra table needed.
+const SCAN_CODES_KEY = "scan_codes";
+
+export async function fetchScanCodes() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", SCAN_CODES_KEY).maybeSingle();
+  if (error) throw error;
+  return data?.value && typeof data.value === "object" ? data.value : {};
+}
+
+export async function saveScanCode(code, target) {
+  const current = await fetchScanCodes();
+  const next = { ...current, [code]: { material: target.material, color: target.color } };
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_CODES_KEY, value: next }, { onConflict: "key" });
+  if (error) throw error;
+  return next;
+}
+
+export async function forgetScanCode(code) {
+  const current = await fetchScanCodes();
+  if (!(code in current)) return current;
+  const next = { ...current };
+  delete next[code];
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_CODES_KEY, value: next }, { onConflict: "key" });
+  if (error) throw error;
+  return next;
+}
+
+// Photo of a box label -> AI (Groq, key stored in this invoicer's Vercel settings) -> which filament it is.
+
+async function shrinkPhoto(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+export async function readLabelPhoto(file, options, known) {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
-  const balance = await fetch("/api/stripe-fees", {
+  if (!token) throw new Error("Please sign in again.");
+  const image = await shrinkPhoto(file);
+  const response = await fetch("/api/store-order-email", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ balance: true }),
-  }).then((response) => response.json()).catch(() => ({ error: "Couldn't reach Stripe" }));
-  const ledger = await supabase.from("payout_ledger").select("amount,entry_date").eq("kind", "payout").eq("status", "in_transit").order("entry_date");
-  return {
-    inStripe: balance.error ? null : Number(balance.pending || 0) + Number(balance.available || 0),
-    balanceError: balance.error || "",
-    inTransit: (ledger.data || []).map((row) => ({ amount: Number(row.amount) || 0, date: row.entry_date })),
-  };
+    body: JSON.stringify({ labelPhoto: { image, options, known } }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const failure = new Error(result.error || "The AI could not read that photo.");
+    failure.detail = result.detail || "";
+    throw failure;
+  }
+  return result;
+}
+
+// Every label that was scanned, newest first (last 100). Stored in settings, shared by all your devices.
+const SCAN_HISTORY_KEY = "scan_history";
+
+export async function fetchScanHistory() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", SCAN_HISTORY_KEY).maybeSingle();
+  if (error) throw error;
+  return Array.isArray(data?.value) ? data.value : [];
+}
+
+export async function addScanHistory(entry) {
+  const next = [entry, ...(await fetchScanHistory())].slice(0, 100);
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_HISTORY_KEY, value: next }, { onConflict: "key" });
+  if (error) throw error;
+  return next;
+}
+
+export async function clearScanHistory() {
+  const { error } = await supabase.from("settings").upsert({ key: SCAN_HISTORY_KEY, value: [] }, { onConflict: "key" });
+  if (error) throw error;
+}
+
+
+// ---------- invoice templates ----------
+// Saved in the existing settings table (key "invoice_templates"), so no database change is needed.
+
+export async function fetchInvoiceTemplates() {
+  const { data, error } = await supabase.from("settings").select("value").eq("key", "invoice_templates").maybeSingle();
+  if (error) throw error;
+  return Array.isArray(data?.value) ? data.value : [];
+}
+
+export async function saveInvoiceTemplates(templates) {
+  const { error } = await supabase.from("settings").upsert({ key: "invoice_templates", value: templates }, { onConflict: "key" });
+  if (error) throw error;
 }

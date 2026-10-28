@@ -10,6 +10,7 @@ import {
   updateInvoiceRow,
   deleteInvoiceRow,
   fetchInvoiceNo,
+  persistInvoiceNo,
   subscribeToChanges,
   fetchCustomers,
   upsertCustomer,
@@ -42,6 +43,8 @@ import AdminDashboard from "./components/AdminDashboard";
 import { describeStockChange, describeStockEdit } from "./lib/stockCheck";
 import WebsiteSettings from "./components/WebsiteSettings";
 import PayoutLedger from "./components/PayoutLedger";
+import Navigation, { MoreMenu } from "./components/Navigation";
+import SearchPage from "./components/SearchPage";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -91,7 +94,7 @@ function Login() {
       <form style={authStyles.card} onSubmit={signIn}>
         <img src="/logo-round.png" alt="Alain Prints" width="72" height="72" style={{ display: "block", margin: "0 0 12px", borderRadius: "50%" }} />
         <div style={authStyles.brand}>ALAINPRINTS</div>
-        <h1 style={authStyles.title}>PrintTools3D admin</h1>
+        <h1 style={authStyles.title}>Alain Prints admin</h1>
         <p style={authStyles.sub}>Sign in to manage stock, products, orders, customers and invoices.</p>
         <label style={authStyles.label}>Email</label>
         <input style={authStyles.input} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -127,6 +130,10 @@ function Invoicer({ userEmail, onSignOut }) {
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [invoiceNo, setInvoiceNo] = useState(1000);
   const [editingInvoice, setEditingInvoice] = useState(null);
+  // Starting point for a new invoice: a chosen customer, a duplicated invoice, a repeated order.
+  const [prefill, setPrefill] = useState(null);
+  // An invoice to open straight on its detail screen (used by Search).
+  const [openInvoiceId, setOpenInvoiceId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -223,7 +230,9 @@ function Invoicer({ userEmail, onSignOut }) {
     } catch (error) {
       if (error.code !== "42P01") showToast("Invoice saved, but customer couldn't be updated");
     }
-    fetchInvoiceNo().then(setInvoiceNo).catch(() => setInvoiceNo(Math.max(invoiceNo + 1, number + 1)));
+    const next = Math.max(invoiceNo + 1, number + 1);
+    await persistInvoiceNo(next);
+    setInvoiceNo(next);
     refreshInvoices();
     refreshFilaments();
     return saved;
@@ -246,7 +255,9 @@ function Invoicer({ userEmail, onSignOut }) {
     } catch (error) {
       if (error.code !== "42P01") showToast("Invoice updated, but customer couldn't be updated");
     }
-    fetchInvoiceNo().then(setInvoiceNo).catch(() => {});
+    const next = Math.max(invoiceNo, Number(draft.number) + 1);
+    await persistInvoiceNo(next);
+    setInvoiceNo(next);
     refreshInvoices();
     refreshFilaments();
     return saved;
@@ -261,6 +272,7 @@ function Invoicer({ userEmail, onSignOut }) {
       return;
     }
     setEditingInvoice(invoice);
+    setPrefill(null);
     setTab("invoice");
   };
   const finishEditing = () => {
@@ -327,27 +339,61 @@ function Invoicer({ userEmail, onSignOut }) {
   const pendingOrders = storeOrders.filter((order) => order.status === "pending").length;
   // "All sales" counts everything waiting: pending website orders and unpaid invoices.
   const needsAttention = pendingOrders + invoices.filter((invoice) => ["Unpaid", "Draft"].includes(invoice.status || "Unpaid")).length;
+  const go = (id, opts) => {
+    setTab(id);
+    if (id !== "invoice" || opts?.fresh) {
+      setEditingInvoice(null);
+      setPrefill(null);
+    }
+    window.scrollTo?.(0, 0);
+  };
+  const openInvoice = (id) => {
+    setOpenInvoiceId(id);
+    setTab("history");
+    window.scrollTo?.(0, 0);
+  };
+  // Ctrl/Cmd+K, or "/" when not typing, jumps to Search from anywhere.
+  useEffect(() => {
+    const onKey = (event) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "");
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        go("search");
+      } else if (event.key === "/" && !typing && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        go("search");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const startInvoice = (draft) => {
+    setEditingInvoice(null);
+    setPrefill({ ...draft, key: Date.now() });
+    setTab("invoice");
+    window.scrollTo?.(0, 0);
+  };
+
   const tabGroups = [
     {
       label: "Store admin",
       tabs: [
-        { id: "dashboard", label: "Dashboard" },
-        { id: "sales", label: `All sales${needsAttention ? ` (${needsAttention})` : ""}` },
-        { id: "filament", label: "Stock" },
-        { id: "price-list", label: "Price list" },
-        { id: "items", label: "Products" },
-        { id: "store-orders", label: `Orders${pendingOrders ? ` (${pendingOrders})` : ""}` },
-        { id: "settings", label: `Website${pendingReviewCount ? ` (${pendingReviewCount})` : ""}` },
+        { id: "dashboard", label: "Home", icon: "home" },
+        { id: "sales", label: "All sales", icon: "bars", badge: needsAttention || 0 },
+        { id: "filament", label: "Stock", icon: "box" },
+        { id: "price-list", label: "Price list", icon: "list" },
+        { id: "items", label: "Products", icon: "tag" },
+        { id: "store-orders", label: "Orders", icon: "bag", badge: pendingOrders || 0 },
+        { id: "settings", label: "Website", icon: "globe", badge: pendingReviewCount || 0 },
       ],
     },
     {
-      label: "alainprints invoicer",
+      label: "Invoicer",
       tabs: [
-        { id: "invoice", label: "New invoice" },
-        { id: "history", label: "Invoices" },
-        { id: "customers", label: "Customers" },
-        { id: "payouts", label: "Payouts" },
-        { id: "calculator", label: "Slice & price" },
+        { id: "history", label: "Invoices", icon: "receipt" },
+        { id: "customers", label: "Customers", icon: "users" },
+        { id: "payouts", label: "Payouts", icon: "card" },
+        { id: "calculator", label: "Slice & price", icon: "calc" },
       ],
     },
   ];
@@ -375,43 +421,10 @@ function Invoicer({ userEmail, onSignOut }) {
   }
 
   return (
-    <div className="app-shell" style={s.app}>
-      <div className="no-print app-header" style={s.header}>
-        <div className="brand-row" style={s.brandRow}>
-          <img src="/logo-round.png" alt="Alain Prints" width="48" height="48" style={{ borderRadius: "50%", flex: "0 0 auto" }} />
-          <div>
-            <div style={s.brandName}>alainprints</div>
-            <div style={s.brandSub}>PrintTools3D business admin · synced</div>
-          </div>
-        </div>
-        <div className="user-row" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: -50, marginBottom: 20 }}>
-          <span style={{ fontSize: 11, color: "#746A59", marginRight: 10 }}>{userEmail}</span>
-          <button style={s.signOutBtn} onClick={onSignOut}>Sign out</button>
-        </div>
-        <nav className="tab-groups" aria-label="Admin sections">
-          {tabGroups.map((group) => (
-            <div className="tab-group" key={group.label}>
-              <span className="tab-group-label">{group.label}</span>
-              <div className="app-tabs" style={s.tabRow}>
-                {group.tabs.map((t) => (
-                  <button
-                    key={t.id}
-                    className={tab === t.id ? "is-active" : undefined}
-                    onClick={() => {
-                      setTab(t.id);
-                      if (t.id !== "invoice") setEditingInvoice(null);
-                    }}
-                    style={{ ...s.tabBtn, ...(tab === t.id ? s.tabBtnActive : {}) }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
-      </div>
+    <div className={`shell${tab === "invoice" ? " is-invoice" : ""}`} style={s.app}>
+      <Navigation tab={tab} groups={tabGroups} onGo={go} onSearch={() => go("search")} userEmail={userEmail} onSignOut={onSignOut} />
 
+      <main className="app-main">
       <div className="app-body" style={s.body}>
         {tab === "dashboard" && (
           <AdminDashboard
@@ -420,7 +433,8 @@ function Invoicer({ userEmail, onSignOut }) {
             customers={customers}
             filaments={filaments}
             storeOrders={storeOrders}
-            onNavigate={setTab}
+            onNavigate={go}
+            onStartInvoice={startInvoice}
           />
         )}
         {tab === "sales" && <Sales invoices={invoices} storeOrders={storeOrders} onOpen={setTab} />}
@@ -461,11 +475,13 @@ function Invoicer({ userEmail, onSignOut }) {
         )}
         {tab === "invoice" && (
           <InvoiceBuilder
-            key={editingInvoice?.id ?? "new-invoice"}
+            key={editingInvoice?.id ?? `new-invoice-${prefill?.key ?? 0}`}
             items={items}
             customers={customers}
             filaments={filaments}
             invoiceNo={invoiceNo}
+            invoices={invoices}
+            prefill={prefill}
             initialInvoice={editingInvoice}
             onSave={editingInvoice ? handleUpdateInvoice : handleGenerateInvoice}
             onFinished={editingInvoice ? finishEditing : null}
@@ -482,15 +498,29 @@ function Invoicer({ userEmail, onSignOut }) {
           />
         )}
         {tab === "history" && (
-          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} onRefresh={refreshInvoices} showToast={showToast} />
+          <InvoiceHistory invoices={invoices} onEdit={handleEditInvoice} onUpdate={handleUpdateInvoice} onDelete={handleDeleteInvoice} onDuplicate={startInvoice} openId={openInvoiceId} onOpened={() => setOpenInvoiceId(null)} onRefresh={refreshInvoices} showToast={showToast} />
         )}
+        {tab === "search" && (
+          <SearchPage
+            invoices={invoices}
+            customers={customers}
+            items={items}
+            filaments={filaments}
+            storeOrders={storeOrders}
+            onOpenInvoice={openInvoice}
+            onNewInvoice={startInvoice}
+            onGo={go}
+          />
+        )}
+        {tab === "more" && <MoreMenu groups={tabGroups} onGo={go} userEmail={userEmail} onSignOut={onSignOut} />}
         {tab === "payouts" && <PayoutLedger showToast={showToast} />}
         {tab === "settings" && (
           <WebsiteSettings filaments={filaments} items={items} />
         )}
       </div>
+      </main>
 
-      {toast && <div style={s.toast}>{toast}</div>}
+      {toast && <div className="app-toast" style={s.toast}>{toast}</div>}
     </div>
   );
 }
@@ -502,16 +532,7 @@ const s = {
     backgroundImage: "linear-gradient(#EFEAE0 1px, transparent 1px), linear-gradient(90deg, #EFEAE0 1px, transparent 1px)",
     backgroundSize: "28px 28px",
     color: "#1B2A3D",
-    padding: "20px 16px 60px",
   },
-  header: { maxWidth: 980, margin: "0 auto 24px" },
-  brandRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 18 },
-  brandName: { fontSize: 20, fontWeight: 800 },
-  brandSub: { fontSize: 11.5, color: "#746A59", marginTop: 2 },
-  tabRow: { display: "flex", gap: 6, borderBottom: "2px solid #E4DFD3" },
-  tabBtn: { fontWeight: 700, fontSize: 13.5, padding: "9px 16px", background: "transparent", border: "none", borderBottom: "2px solid transparent", marginBottom: -2, cursor: "pointer", color: "#746A59" },
-  tabBtnActive: { color: "#B9531A", borderBottom: "2px solid #E8792D" },
-  body: { maxWidth: 980, margin: "0 auto" },
-  signOutBtn: { background: "#fff", color: "#1B2A3D", border: "1px solid #DCD5C6", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" },
+  body: { maxWidth: 1040, margin: "0 auto" },
   toast: { position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#1B2A3D", color: "#fff", padding: "10px 18px", borderRadius: 30, fontSize: 13, fontWeight: 600, boxShadow: "0 6px 20px rgba(0,0,0,0.2)" },
 };

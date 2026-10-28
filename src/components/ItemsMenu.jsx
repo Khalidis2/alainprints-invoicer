@@ -247,7 +247,7 @@ export default function ItemsMenu({ items, onAdd, onUpdate, onDelete, showToast 
 
             <label className="publish-control">
               <input type="checkbox" checked={Boolean(editing.publicVisible)} onChange={(e) => setEditing({ ...editing, publicVisible: e.target.checked })} />
-              <span><strong>Publish on PrintTools3D</strong><small>Only enable this when the image, name, description and price are ready.</small></span>
+              <span><strong>Publish on Alain Prints</strong><small>Only enable this when the image, name, description and price are ready.</small></span>
             </label>
 
             <label style={s.label}>Feature</label>
@@ -386,15 +386,15 @@ function wrapText(ctx, text, maxWidth, maxLines) {
 
 const s = {
   head: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, flexWrap: "wrap", gap: 12 },
-  h2: { fontSize: 22, fontWeight: 800, margin: 0 },
+  h2: { color: "#16324F", fontSize: 26, fontWeight: 850, margin: 0 },
   sub: { fontSize: 13, color: "#746A59", marginTop: 4 },
-  primaryBtn: { background: "#B9531A", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
-  secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
+  primaryBtn: { minHeight: 44, background: "#B9531A", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
+  secondaryBtn: { minHeight: 44, background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
   filterRow: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" },
   chip: { fontSize: 11.5, padding: "6px 12px", borderRadius: 20, border: "1.5px solid #DCD5C6", background: "#fff", color: "#746A59", cursor: "pointer" },
   chipActive: { borderColor: "#1B2A3D", color: "#1B2A3D", background: "#EFEAE0" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 },
-  card: { background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 8 },
+  card: { background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 8 },
   thumb: { width: "100%", height: 140, objectFit: "cover", borderRadius: 8, background: "#F1EDE3" },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   badge: { fontSize: 10, padding: "3px 8px", borderRadius: 6, fontWeight: 700 },
@@ -411,5 +411,5 @@ const s = {
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 },
   label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#746A59", marginTop: 12, marginBottom: 5 },
   labelRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, marginBottom: 5 },
-  input: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, border: "1.5px solid #DCD5C6", fontSize: 14, background: "#fff", color: "#1B2A3D" },
+  input: { minHeight: 46, width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 12, border: "1.5px solid #DCD5C6", fontSize: 14, background: "#fff", color: "#1B2A3D" },
 };

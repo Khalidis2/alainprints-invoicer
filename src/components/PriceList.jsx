@@ -160,14 +160,14 @@ export default function PriceList({ filaments, items, showToast }) {
 
 const s = {
   heading: { marginBottom: 14 },
-  title: { margin: 0, fontSize: 24 },
+  title: { margin: 0, color: "#16324F", fontSize: 26, fontWeight: 850 },
   sub: { margin: "5px 0 0", color: "#746A59", fontSize: 13, lineHeight: 1.5 },
   bar: { display: "flex", flexWrap: "wrap", gap: 8, margin: "0 0 10px" },
   primary: { flex: "1 1 220px", minHeight: 50, border: 0, borderRadius: 10, background: "#16324F", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" },
   secondary: { flex: "1 1 160px", display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 50, borderRadius: 10, background: "#25D366", color: "#073B1C", fontWeight: 800, textDecoration: "none" },
   options: { display: "flex", flexWrap: "wrap", gap: 14, margin: "0 0 14px", color: "#6B6355", fontSize: 13 },
   opt: { display: "flex", alignItems: "center", gap: 7, minHeight: 32 },
-  panel: { margin: "0 0 14px", padding: 14, border: "1px solid #E4DFD3", borderRadius: 12, background: "#fff" },
+  panel: { margin: "0 0 14px", padding: 14, border: "1px solid #E4DFD3", borderRadius: 14, background: "#fff" },
   panelHead: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 },
   h3: { margin: 0, fontSize: 17, color: "#16324F" },
   row: { display: "flex", gap: 6, flexWrap: "wrap" },

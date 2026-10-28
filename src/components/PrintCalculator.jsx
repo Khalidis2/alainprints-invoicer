@@ -272,12 +272,12 @@ function Field({ label, type = "text", value, onChange }) {
 
 const s = {
   card: { maxWidth: 760, margin: "0 auto", padding: 24, background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 14 },
-  h2: { margin: 0, fontSize: 24 },
+  h2: { margin: 0, color: "#16324F", fontSize: 26, fontWeight: 850 },
   sub: { margin: "6px 0 22px", color: "#746A59", fontSize: 13.5 },
   drop: { display: "grid", gap: 7, marginTop: 18, padding: 22, border: "1.5px dashed #DCD5C6", borderRadius: 10, textAlign: "center", cursor: "pointer" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12, marginTop: 18 },
   field: { display: "grid", gap: 5, color: "#6B6355", fontSize: 12, fontWeight: 700 },
-  input: { width: "100%", boxSizing: "border-box", padding: "10px 11px", border: "1.5px solid #DCD5C6", borderRadius: 8, fontSize: 14 },
+  input: { minHeight: 46, width: "100%", boxSizing: "border-box", padding: "10px 11px", border: "1.5px solid #DCD5C6", borderRadius: 12, fontSize: 14 },
   notice: { marginTop: 12, padding: 10, color: "#166534", background: "#F0FDF4", borderRadius: 8, fontSize: 13, fontWeight: 700 },
   error: { marginTop: 12, padding: 10, color: "#B3451D", background: "#FFF1EC", borderRadius: 8, fontSize: 13 },
   cost: { display: "grid", gap: 8, marginTop: 20, padding: 16, borderRadius: 10, background: "#F8FAFC", color: "#475569", fontSize: 12.5 },
@@ -285,5 +285,5 @@ const s = {
   levels: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 14 },
   level: { display: "grid", gap: 5, padding: 14, border: "1.5px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#1B2A3D", cursor: "pointer", textAlign: "left" },
   levelActive: { borderColor: "#E8792D", background: "#FFF5ED", boxShadow: "0 0 0 1px #E8792D" },
-  button: { width: "100%", marginTop: 14, padding: 13, border: 0, borderRadius: 8, background: "#B9531A", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" },
+  button: { width: "100%", marginTop: 14, padding: 13, border: 0, borderRadius: 10, background: "#B9531A", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" },
 };

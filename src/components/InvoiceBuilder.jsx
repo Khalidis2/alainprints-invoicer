@@ -1,13 +1,58 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AED, today, CAT_STYLE } from "../lib/helpers";
 import InvoicePrint from "./InvoicePrint";
+import CustomerPicker from "./CustomerPicker";
 import { autoLinkLines } from "../lib/stockCheck";
+import { createPaymentLink, fetchInvoiceTemplates, saveInvoiceTemplates } from "../lib/storage";
+import { addDays, paymentsOf, round2 } from "../lib/invoiceMath";
 
-export default function InvoiceBuilder({ items, customers = [], filaments = [], invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
+const StepBadge = ({ n }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: 999, background: "#0F6B64", color: "#fff", fontSize: 12.5, fontWeight: 850 }}>{n}</span>
+);
+
+// A one-row text box that grows when the text is long, so full item names stay visible on phones.
+function AutoText({ value, onChange, style, ...rest }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={onChange}
+      onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
+      style={{ ...style, resize: "none", overflow: "hidden", display: "block", lineHeight: 1.3 }}
+      {...rest}
+    />
+  );
+}
+
+export default function InvoiceBuilder({ items, customers = [], filaments = [], invoices = [], prefill = null, invoiceNo, initialInvoice, onSave, onFinished, onCancel, showToast }) {
   const editing = Boolean(initialInvoice);
-  const [customer, setCustomer] = useState(initialInvoice?.customer ?? { name: "", phone: "" });
-  const [lines, setLines] = useState(initialInvoice?.lines ?? []);
-  const [notes, setNotes] = useState(initialInvoice?.notes ?? "");
+  // A new invoice can start from a chosen customer, a duplicated invoice or a repeated order (prefill).
+  const seed = initialInvoice ?? prefill ?? null;
+  const [customer, setCustomer] = useState(seed?.customer ?? { name: "", phone: "", email: "" });
+  const [lines, setLines] = useState(() => {
+    if (!seed?.lines) return [];
+    const copy = seed.lines.map((line) => ({ ...line }));
+    // Editing keeps the stock links exactly as saved; a duplicate or repeated order is linked fresh.
+    return initialInvoice ? copy : autoLinkLines(copy, filaments).lines;
+  });
+  const [notes, setNotes] = useState(seed?.notes ?? "");
+  const [templates, setTemplates] = useState([]);
+  const phoneRef = useRef(null);
+  // Money already received on this invoice (read-only here) and a new deposit typed in now.
+  const receivedPayments = paymentsOf(initialInvoice);
+  // After saving: also create a one-time card payment link, and/or open the share screen straight away.
+  const [makeCardLink, setMakeCardLink] = useState(false);
+  const [shareAfter, setShareAfter] = useState(false);
+  const [depositInput, setDepositInput] = useState("");
+  const [depositMethod, setDepositMethod] = useState("Cash");
   const [customInvoiceNo, setCustomInvoiceNo] = useState(String(initialInvoice?.number ?? invoiceNo));
   const [invoiceDate, setInvoiceDate] = useState(initialInvoice?.date ?? today());
   const [dueDate, setDueDate] = useState(initialInvoice?.dueDate ?? "");
@@ -16,6 +61,8 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const [paidDate, setPaidDate] = useState(initialInvoice?.paidDate ?? "");
   const [paymentReference, setPaymentReference] = useState(initialInvoice?.paymentReference ?? "");
   const [discountInput, setDiscountInput] = useState(initialInvoice?.discount ? String(initialInvoice.discount) : "");
+  // The discount is typed either as an amount (AED) or as a percentage of the subtotal. Only the AED amount is saved.
+  const [discountMode, setDiscountMode] = useState("amount");
   const [finalized, setFinalized] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [search, setSearch] = useState("");
@@ -85,13 +132,101 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   const removeLine = (itemId) => setLines((prev) => prev.filter((l) => l.itemId !== itemId));
 
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
-  const discount = Math.min(Math.max(0, Number(discountInput) || 0), subtotal);
+  const typedDiscount = Math.max(0, Number(discountInput) || 0);
+  const discount = discountMode === "percent"
+    ? Math.round(subtotal * Math.min(typedDiscount, 100)) / 100
+    : Math.min(typedDiscount, subtotal);
   const total = subtotal - discount;
   const parsedInvoiceNo = Number(customInvoiceNo);
   const invoiceNumberIsValid = Number.isInteger(parsedInvoiceNo) && parsedInvoiceNo > 0;
 
-  const generate = async () => {
+  const receivedBefore = round2(receivedPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
+  const depositAmount = status === "Deposit" ? round2(Math.max(0, Number(depositInput) || 0)) : 0;
+  const leftToPay = round2(Math.max(0, total - receivedBefore - depositAmount));
+  const depositProblem = status === "Deposit" && (depositAmount <= 0 || depositAmount >= round2(total - receivedBefore))
+    ? (depositAmount >= round2(total - receivedBefore) && depositAmount > 0 ? "A deposit must be less than the amount still owed. Use Paid instead." : "Enter the deposit amount received.")
+    : "";
+
+  useEffect(() => {
+    fetchInvoiceTemplates().then(setTemplates).catch(() => {});
+  }, []);
+
+  const applyTemplate = (template) => {
+    setLines(autoLinkLines(template.lines.map((line) => ({ ...line })), filaments).lines);
+    if (template.notes && !notes) setNotes(template.notes);
+  };
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const persistTemplates = async (next, doneText) => {
+    try {
+      await saveInvoiceTemplates(next);
+      setTemplates(next);
+      if (doneText) showToast(doneText);
+      return true;
+    } catch {
+      showToast("Couldn't save templates, check connection");
+      return false;
+    }
+  };
+  const saveAsTemplate = async () => {
+    const name = templateName.trim();
+    if (lines.length === 0) return showToast("Add items first, then save them as a template");
+    if (!name) return;
+    const template = { id: `tpl-${Date.now()}`, name, notes, lines: lines.map(({ itemId, name: lineName, price, qty, filamentId, gramsPerUnit }) => ({ itemId, name: lineName, price, qty, filamentId: filamentId || null, gramsPerUnit: gramsPerUnit || 0 })) };
+    if (await persistTemplates([...templates, template], `Template "${name}" saved`)) {
+      setSavingTemplate(false);
+      setTemplateName("");
+    }
+  };
+  const renameTemplate = (template, name) => {
+    const clean = name.trim();
+    if (!clean || clean === template.name) return;
+    persistTemplates(templates.map((entry) => (entry.id === template.id ? { ...entry, name: clean } : entry)));
+  };
+  const removeTemplate = (template) => {
+    if (!window.confirm(`Delete template "${template.name}"?`)) return;
+    persistTemplates(templates.filter((entry) => entry.id !== template.id));
+  };
+
+  // Every customer we know: saved customers plus names from past invoices. Most recent first, then A to Z.
+  const customerOptions = useMemo(() => {
+    const byName = new Map();
+    invoices.forEach((invoice, index) => {
+      const name = String(invoice.customer?.name || "").trim();
+      const key = name.toLowerCase();
+      if (!name || byName.has(key)) return;
+      byName.set(key, { name, phone: invoice.customer?.phone || "", email: invoice.customer?.email || "", rank: index });
+    });
+    customers.forEach((saved) => {
+      const name = String(saved.name || "").trim();
+      const key = name.toLowerCase();
+      if (!name) return;
+      const known = byName.get(key);
+      if (known) known.phone = known.phone || saved.phone || "";
+      else byName.set(key, { name, phone: saved.phone || "", email: "", rank: Number.MAX_SAFE_INTEGER });
+    });
+    return [...byName.values()].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+  }, [customers, invoices]);
+  const lastOrder = useMemo(() => {
+    const name = customer.name.trim().toLowerCase();
+    if (!name) return null;
+    return invoices.find((invoice) => String(invoice.customer?.name || "").trim().toLowerCase() === name && invoice.id !== initialInvoice?.id) || null;
+  }, [invoices, customer.name, initialInvoice?.id]);
+  const repeatLastOrder = () => {
+    if (!lastOrder) return;
+    if (lines.length > 0 && !window.confirm("Replace the items on this invoice with that order?")) return;
+    setLines(autoLinkLines(lastOrder.lines.map((line) => ({ ...line })), filaments).lines);
+  };
+
+  const generate = async (share = false) => {
     if (lines.length === 0 || !invoiceNumberIsValid) return;
+    if (depositProblem) return showToast(depositProblem);
+    // A deposit is saved as an Unpaid invoice with a payment on it, so stock stays reserved.
+    const savedStatus = status === "Deposit" ? "Unpaid" : status;
+    const payments = [
+      ...receivedPayments,
+      ...(depositAmount > 0 ? [{ id: `pay-${Date.now()}`, date: today(), amount: depositAmount, method: depositMethod }] : []),
+    ];
     setGenerating(true);
     try {
       const saved = await onSave({
@@ -105,7 +240,8 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         number: parsedInvoiceNo,
         date: invoiceDate,
         dueDate,
-        status,
+        status: savedStatus,
+        payments,
         paymentMethod: status === "Paid" ? paymentMethod : "",
         paidDate: status === "Paid" ? (paidDate || today()) : "",
         paymentReference: status === "Paid" ? paymentReference : "",
@@ -115,8 +251,19 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         discount,
         total,
       });
-      setFinalized(saved);
-      const movesStock = ["Unpaid", "Paid"].includes(status) && lines.some((line) => line.filamentId);
+      let finalInvoice = saved;
+      // A card link charges the full total, so it is only offered for a plain Unpaid invoice (no deposit).
+      if (makeCardLink && status === "Unpaid" && saved?.id) {
+        try {
+          const url = await createPaymentLink(saved.id);
+          finalInvoice = { ...saved, stripeLinkUrl: url, stripeLinkAmount: Math.round(Number(saved.total) * 100) };
+        } catch (linkError) {
+          showToast(`Invoice saved, but the card link failed: ${linkError.message}`);
+        }
+      }
+      setShareAfter(share);
+      setFinalized(finalInvoice);
+      const movesStock = ["Unpaid", "Paid"].includes(savedStatus) && lines.some((line) => line.filamentId);
       showToast(`${editing ? "Invoice updated" : "Invoice saved"}${movesStock ? " · checking stock…" : ""}`);
     } catch (e) {
       showToast(e.code === "23505" ? `Invoice #${parsedInvoiceNo} already exists` : (e.message || "Couldn't save invoice — check connection"));
@@ -134,10 +281,11 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
   const startOver = () => {
     setFinalized(null);
-    setCustomer({ name: "", phone: "" });
+    setCustomer({ name: "", phone: "", email: "" });
     setLines([]);
     setNotes("");
     setDiscountInput("");
+    setDiscountMode("amount");
     setCustomInvoiceNo(String(invoiceNo));
     setInvoiceDate(today());
     setDueDate("");
@@ -145,6 +293,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
     setPaymentMethod("");
     setPaidDate("");
     setPaymentReference("");
+    setDepositInput("");
   };
 
   if (finalized) {
@@ -152,6 +301,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
       <InvoicePrint
         invoice={finalized}
         showPaymentLink
+        autoShare={shareAfter}
         showToast={showToast}
         onBack={editing ? onFinished : startOver}
         backLabel={editing ? "Back to history" : "New invoice"}
@@ -188,15 +338,12 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
   }, {});
   const itemCount = lines.reduce((sum, line) => sum + Number(line.qty || 0), 0);
 
-  const pickCustomerByName = (name) => {
-    const saved = customers.find((entry) => entry.name.toLowerCase() === name.trim().toLowerCase());
-    setCustomer(saved ? { name: saved.name, phone: saved.phone || customer.phone } : { ...customer, name });
-  };
+  const STATUS_COLOR = { Unpaid: "#B45309", Paid: "#0F6B64", Deposit: "#B45309", Draft: "#5B6573", Cancelled: "#B3451D" };
 
   const sections = [
     { id: "all", label: "All" },
     ...productCategories.map((category) => ({ id: category, label: category })),
-    { id: "spools", label: `Filament spools (${availableFilaments.length})` },
+    { id: "spools", label: `Spools (${availableFilaments.length})` },
   ];
 
   return (
@@ -240,7 +387,7 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
                 const cs = CAT_STYLE[item.category] || CAT_STYLE.Custom;
                 const inInvoice = qtyInInvoice(item.id);
                 return (
-                  <button key={item.id} type="button" style={{ ...s.pickCard, ...(inInvoice ? s.pickCardOn : {}) }} onClick={() => addItem(item)}>
+                  <button key={item.id} type="button" style={{ ...s.pickCard, borderLeftColor: cs.fg, ...(inInvoice ? s.pickCardOn : {}) }} onClick={() => addItem(item)}>
                     {inInvoice > 0 && <span style={s.qtyBadge}>×{inInvoice}</span>}
                     {item.imageUrl && <img src={item.imageUrl} alt="" style={s.pickThumb} />}
                     <span style={{ ...s.badge, color: cs.fg, background: cs.bg, alignSelf: "flex-start" }}>{item.category}</span>
@@ -300,59 +447,107 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
           <span>{itemCount} item{itemCount === 1 ? "" : "s"}</span>
         </div>
 
-        <div style={s.step}>1 · Customer</div>
-        <input
-          style={s.input}
-          list="saved-customers"
-          value={customer.name}
-          onChange={(e) => pickCustomerByName(e.target.value)}
-          placeholder="Customer name (saved ones appear as you type)"
-          aria-label="Customer name"
+        <div style={s.tplLabel}>Start from a template</div>
+        <div style={s.tplRow}>
+          <button type="button" style={{ ...s.tplChip, ...s.tplChipOn }} onClick={() => setLines([])}>Blank</button>
+          {templates.map((template) => (
+            <button key={template.id} type="button" style={{ ...s.tplChip, padding: "0 14px", cursor: "pointer" }} onClick={() => applyTemplate(template)}>{template.name}</button>
+          ))}
+          <button type="button" style={s.tplSave} onClick={() => setSavingTemplate((value) => !value)}>{savingTemplate ? "Cancel" : "+ Save as template"}</button>
+        </div>
+        {savingTemplate && (
+          <div style={s.tplForm}>
+            <input style={{ ...s.input, flex: 1 }} value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Template name, e.g. Mug + keychain set" aria-label="Template name" />
+            <button type="button" style={s.tplSaveBtn} disabled={!templateName.trim() || lines.length === 0} onClick={saveAsTemplate}>Save</button>
+          </div>
+        )}
+        {savingTemplate && lines.length === 0 && <div style={s.hint}>Add items first. The template keeps the items, prices and quantities.</div>}
+        {templates.length > 0 && (
+          <details style={s.tplManage}>
+            <summary style={s.tplManageSummary}>Manage templates</summary>
+            {templates.map((template) => (
+              <div key={template.id} style={s.tplManageRow}>
+                <input style={{ ...s.input, flex: 1 }} defaultValue={template.name} aria-label={`Rename template ${template.name}`} onBlur={(e) => renameTemplate(template, e.target.value)} />
+                <button type="button" style={s.tplDelete} onClick={() => removeTemplate(template)}>Delete</button>
+              </div>
+            ))}
+          </details>
+        )}
+
+        <div style={s.step}><StepBadge n={1} />Customer</div>
+        <CustomerPicker
+          options={customerOptions}
+          name={customer.name}
+          onType={(value) => {
+            // Typing a saved customer's exact name fills in their phone and email. Leaving it again
+            // clears them, so one customer's number never ends up on another customer's invoice.
+            const find = (text) => customerOptions.find((option) => option.name.toLowerCase() === text.trim().toLowerCase());
+            const was = find(customer.name);
+            const hit = find(value);
+            if (hit && hit !== was) setCustomer({ name: value, phone: hit.phone || "", email: hit.email || "" });
+            else if (!hit && was && customer.phone === (was.phone || "") && (customer.email || "") === (was.email || "")) setCustomer({ name: value, phone: "", email: "" });
+            else setCustomer({ ...customer, name: value });
+          }}
+          onPick={(option) => setCustomer({ name: option.name, phone: option.phone || "", email: option.email || "" })}
+          onNext={() => phoneRef.current?.focus()}
         />
-        <datalist id="saved-customers">
-          {customers.map((entry) => <option key={entry.id} value={entry.name}>{entry.phone || ""}</option>)}
-        </datalist>
         <input
           style={{ ...s.input, marginTop: 8 }}
+          ref={phoneRef}
           value={customer.phone}
           onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
           placeholder="Phone or Instagram (optional)"
           aria-label="Phone or Instagram"
         />
+        <input
+          type="email"
+          style={{ ...s.input, marginTop: 8 }}
+          value={customer.email || ""}
+          onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+          placeholder="Customer email (optional, to send the PDF)"
+          aria-label="Customer email"
+        />
+        {lastOrder && lines.length === 0 && (
+          <div style={s.lastOrder}>
+            Last order: {lastOrder.lines.slice(0, 2).map((line) => `${line.name} × ${line.qty}`).join(", ")}{lastOrder.lines.length > 2 ? "…" : ""}.{" "}
+            <button type="button" style={s.linkBtn} onClick={repeatLastOrder}>Repeat it</button>
+          </div>
+        )}
 
-        <div style={s.step}>2 · Items</div>
+        <div style={s.step}><StepBadge n={2} />Items</div>
         {lines.length === 0 ? (
           <div style={s.emptySmall}>Nothing added yet. Tap a product or spool.</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {lines.map((l) => (
               <div key={l.itemId} className="invoice-line-editor" style={s.lineRow}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input aria-label="Item name" style={s.lineNameInput} value={l.name} onChange={(e) => setLine(l.itemId, "name", e.target.value)} />
-                  <label style={s.priceLabel}>
-                    AED
-                    <input aria-label="Unit price" type="number" inputMode="decimal" min="0" step="0.01" style={s.priceInput} value={l.price} onChange={(e) => setLine(l.itemId, "price", e.target.value)} />
-                    each
-                  </label>
+                <AutoText aria-label="Item name" style={{ ...s.lineNameInput, gridArea: "name" }} value={l.name} onChange={(e) => setLine(l.itemId, "name", e.target.value)} />
+                <label style={{ ...s.priceBox, gridArea: "price" }}>
+                  <span>AED</span>
+                  <input aria-label="Unit price" type="number" inputMode="decimal" min="0" step="0.01" style={s.priceInput} value={l.price} onChange={(e) => setLine(l.itemId, "price", e.target.value)} />
+                </label>
+                <div style={{ ...s.stepper, gridArea: "stepper" }}>
+                  <button type="button" style={s.stepBtn} aria-label="One less" onClick={() => changeQty(l.itemId, -1)}>−</button>
+                  <input type="number" inputMode="numeric" min="1" aria-label="Quantity" value={l.qty} onChange={(e) => setQty(l.itemId, e.target.value)} style={s.qtyInput} />
+                  <button type="button" style={s.stepBtn} aria-label="One more" onClick={() => increaseLine(l.itemId)}>+</button>
+                </div>
+                <div style={{ ...s.lineTotal, gridArea: "total" }}>{AED(l.price * l.qty)}</div>
+                <button type="button" style={{ ...s.removeBtn, gridArea: "remove" }} aria-label="Remove" onClick={() => removeLine(l.itemId)}>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M4 4l10 10M14 4L4 14" /></svg>
+                </button>
+                <div style={{ gridArea: "stock" }}>
                   {l.filamentId ? (
-                    <div style={{ fontSize: 12, color: "#15803d", marginTop: 4 }}>📦 Takes {l.qty} spool(s) from stock</div>
+                    <div style={s.linked}>📦 Takes {l.qty} spool(s) from stock</div>
                   ) : (
-                    <div style={{ fontSize: 12, marginTop: 4, color: "#b45309" }}>
-                      ⚠ Not linked to stock — will NOT deduct.{" "}
-                      <select aria-label="Take from stock" value="" onChange={(e) => linkLine(l.itemId, e.target.value)} style={{ fontSize: 12, maxWidth: "100%" }}>
+                    <div style={s.unlinked}>
+                      <span>⚠ No stock link</span>
+                      <select aria-label="Take from stock" value="" onChange={(e) => linkLine(l.itemId, e.target.value)} style={s.linkSelect}>
                         <option value="">Link to a spool…</option>
                         {availableFilaments.map((f) => <option key={f.id} value={f.id}>{f.material} {f.color} ({f.availableSpools} left)</option>)}
                       </select>
                     </div>
                   )}
                 </div>
-                <div style={s.stepper}>
-                  <button type="button" style={s.stepBtn} aria-label="One less" onClick={() => changeQty(l.itemId, -1)}>−</button>
-                  <input type="number" inputMode="numeric" min="1" aria-label="Quantity" value={l.qty} onChange={(e) => setQty(l.itemId, e.target.value)} style={s.qtyInput} />
-                  <button type="button" style={s.stepBtn} aria-label="One more" onClick={() => increaseLine(l.itemId)}>+</button>
-                </div>
-                <div style={s.lineTotal}>{AED(l.price * l.qty)}</div>
-                <button type="button" style={s.removeBtn} aria-label="Remove" onClick={() => removeLine(l.itemId)}>×</button>
               </div>
             ))}
           </div>
@@ -360,8 +555,16 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
         <div className="two-column-fields" style={{ ...s.fieldGrid, marginTop: 6 }}>
           <div>
-            <label style={s.label}>Discount (AED)</label>
-            <input type="number" inputMode="decimal" min="0" max={subtotal} step="0.01" style={s.input} value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} placeholder="0" />
+            <label style={s.label}>
+              Discount
+              <span style={{ display: "inline-flex", marginLeft: 8, border: "1px solid #DCD5C6", borderRadius: 7, overflow: "hidden", verticalAlign: "middle" }}>
+                {[["amount", "AED"], ["percent", "%"]].map(([mode, label]) => (
+                  <button key={mode} type="button" onClick={() => { setDiscountMode(mode); setDiscountInput(""); }} style={{ padding: "3px 10px", border: 0, cursor: "pointer", fontSize: 12, fontWeight: 800, background: discountMode === mode ? "#0F6B64" : "#fff", color: discountMode === mode ? "#fff" : "#746A59" }}>{label}</button>
+                ))}
+              </span>
+            </label>
+            <input type="number" inputMode="decimal" min="0" max={discountMode === "percent" ? 100 : subtotal} step={discountMode === "percent" ? "0.5" : "0.01"} style={s.input} value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} placeholder={discountMode === "percent" ? "e.g. 10" : "0"} />
+            {discountMode === "percent" && discount > 0 && <div style={{ marginTop: 4, fontSize: 12, color: "#746A59" }}>= {AED(discount)} off</div>}
           </div>
           <div>
             <label style={s.label}>Note (optional)</label>
@@ -370,18 +573,18 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         </div>
 
         <div style={s.summaryRow}><span>Subtotal</span><span>{AED(subtotal)}</span></div>
-        {discount > 0 && <div style={s.summaryRow}><span>Discount</span><span>− {AED(discount)}</span></div>}
+        {discount > 0 && <div style={s.summaryRow}><span>Discount{discountMode === "percent" ? ` (${typedDiscount}%)` : ""}</span><span>− {AED(discount)}</span></div>}
         <div style={s.totalRow}><span>Total</span><span style={s.totalAmt}>{AED(total)}</span></div>
 
-        <div style={s.step}>3 · Payment</div>
+        <div style={s.step}><StepBadge n={3} />Payment</div>
         <div style={s.segment} role="radiogroup" aria-label="Status">
-          {["Unpaid", "Paid", "Draft", ...(editing ? ["Cancelled"] : [])].map((option) => (
+          {["Unpaid", "Paid", "Deposit", "Draft", ...(editing ? ["Cancelled"] : [])].map((option) => (
             <button
               key={option}
               type="button"
               role="radio"
               aria-checked={status === option}
-              style={{ ...s.segBtn, ...(status === option ? s.segBtnActive : {}) }}
+              style={{ ...s.segBtn, ...(status === option ? { ...s.segBtnActive, background: STATUS_COLOR[option], borderColor: STATUS_COLOR[option] } : {}) }}
               onClick={() => {
                 setStatus(option);
                 if (option === "Paid" && !paidDate) setPaidDate(today());
@@ -393,11 +596,56 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         </div>
         <div style={s.hint}>
           {status === "Draft" && "Draft: saved for later, stock is not touched."}
+          {status === "Deposit" && "Deposit: customer paid part now. Stock is reserved and the rest stays unpaid."}
           {status === "Unpaid" && "Unpaid: stock is reserved now, mark Paid later from Invoices."}
           {status === "Paid" && "Paid: stock is taken out and revenue is counted."}
           {status === "Cancelled" && "Cancelled: any spools on this invoice go back into stock."}
         </div>
 
+        {receivedPayments.length > 0 && (
+          <div style={s.hint}>Already received on this invoice: <b>{AED(receivedBefore)}</b></div>
+        )}
+        {status === "Deposit" && (
+          <div className="two-column-fields" style={s.fieldGrid}>
+            <div>
+              <label style={s.label}>Deposit received now (AED)</label>
+              <input type="number" inputMode="decimal" min="0" step="0.01" style={s.input} value={depositInput} onChange={(e) => setDepositInput(e.target.value)} placeholder="e.g. 100" />
+            </div>
+            <div>
+              <label style={s.label}>Paid by</label>
+              <div style={s.segmentSmall}>
+                {["Cash", "Card", "Bank Transfer"].map((method) => (
+                  <button key={method} type="button" style={{ ...s.segBtn, ...(depositMethod === method ? s.segBtnActive : {}) }} onClick={() => setDepositMethod(method)}>
+                    {method === "Bank Transfer" ? "Transfer" : method}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {status === "Deposit" && depositProblem && depositInput !== "" && <div style={s.error}>{depositProblem}</div>}
+        {status === "Deposit" && !depositProblem && (
+          <div style={s.summaryRow}><span>Still to pay after deposit</span><b>{AED(leftToPay)}</b></div>
+        )}
+        {["Unpaid", "Deposit"].includes(status) && (
+          <div style={s.dueRow}>
+            <span style={s.dueLabel}>Due</span>
+            {[["On receipt", 0], ["7 days", 7], ["14 days", 14]].map(([label, days]) => {
+              const value = addDays(invoiceDate, days);
+              return <button key={label} type="button" style={{ ...s.dueChip, ...(dueDate === value ? s.dueChipOn : {}) }} onClick={() => setDueDate(value)}>{label}</button>;
+            })}
+            {dueDate && <span style={s.dueDate}>{dueDate}</span>}
+          </div>
+        )}
+        {status === "Unpaid" && !initialInvoice?.stripeLinkUrl && (
+          <button type="button" role="switch" aria-checked={makeCardLink} style={s.switchRow} onClick={() => setMakeCardLink((value) => !value)}>
+            <span style={{ flex: 1, textAlign: "left" }}>
+              <b style={{ display: "block", color: "#16324F", fontSize: 14 }}>Add a card payment link</b>
+              <small style={{ color: "#6B6355", fontSize: 12.5 }}>Customer pays by card, the invoice marks itself Paid.</small>
+            </span>
+            <span style={{ ...s.switchTrack, background: makeCardLink ? "#16324F" : "#CFC7B5" }}><span style={{ ...s.switchKnob, left: makeCardLink ? 21 : 3 }} /></span>
+          </button>
+        )}
         {status === "Paid" && (
           <div className="two-column-fields" style={s.fieldGrid}>
             <div>
@@ -445,7 +693,10 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
         )}
         <div className="invoice-actions" style={s.actionRow}>
           {editing && <button type="button" style={s.secondaryBtn} disabled={generating} onClick={onCancel}>Cancel</button>}
-          <button type="button" style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || generating} onClick={generate}>
+          {!editing && (
+            <button type="button" style={s.secondaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || Boolean(depositProblem) || generating} onClick={() => generate(true)}>Create + share</button>
+          )}
+          <button type="button" className="invoice-primary" style={s.primaryBtn} disabled={lines.length === 0 || !customer.name || !invoiceNumberIsValid || !invoiceDate || Boolean(depositProblem) || generating} onClick={() => generate(false)}>
             {generating ? "Saving…" : editing ? `Update invoice · ${AED(total)}` : `Create invoice · ${AED(total)}`}
           </button>
         </div>
@@ -456,32 +707,57 @@ export default function InvoiceBuilder({ items, customers = [], filaments = [], 
 
 const s = {
   layout: { display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 24, alignItems: "start" },
-  h2: { fontSize: 22, fontWeight: 800, margin: 0 },
-  sub: { fontSize: 13, color: "#746A59", marginTop: 4, marginBottom: 16 },
+  h2: { fontSize: 26, fontWeight: 850, margin: 0, color: "#16324F", letterSpacing: "-0.01em" },
+  sub: { fontSize: 13.5, color: "#746A59", marginTop: 4, marginBottom: 18 },
   pickGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 10 },
-  pickCard: { position: "relative", textAlign: "left", background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 6, cursor: "pointer" },
+  pickCard: { position: "relative", textAlign: "left", background: "#fff", border: "1.5px solid #E4DFD3", borderLeftWidth: 5, borderRadius: 14, padding: "12px 12px 12px 14px", display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", minHeight: 104, boxShadow: "0 1px 2px rgba(22,50,79,.05)" },
   pickThumb: { width: "100%", height: 90, objectFit: "cover", borderRadius: 6, background: "#F1EDE3" },
-  pickName: { fontWeight: 700, fontSize: 13, color: "#1B2A3D" },
-  pickPrice: { fontSize: 12.5, color: "#746A59" },
+  pickName: { fontWeight: 750, fontSize: 14, lineHeight: 1.25, color: "#16324F" },
+  pickPrice: { marginTop: "auto", fontSize: 14, fontWeight: 800, color: "#0F6B64" },
   badge: { fontSize: 10, padding: "3px 8px", borderRadius: 6, fontWeight: 700 },
-  panel: { background: "#fff", border: "1.5px solid #E4DFD3", borderRadius: 14, padding: 18, position: "sticky", top: 16 },
+  panel: { background: "#fff", border: "1px solid #E4DFD3", borderRadius: 20, padding: 18, position: "sticky", top: 16, overflow: "hidden", boxShadow: "0 12px 32px rgba(22,50,79,.10)" },
   panelTitle: { fontSize: 13, fontWeight: 700, color: "#B9531A", marginBottom: 4 },
   label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "#746A59", marginTop: 12, marginBottom: 5 },
-  input: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, border: "1.5px solid #DCD5C6", fontSize: 14, background: "#fff", color: "#1B2A3D" },
+  input: { width: "100%", boxSizing: "border-box", minHeight: 46, padding: "10px 13px", borderRadius: 12, border: "1.5px solid #DCD5C6", fontSize: 14.5, background: "#FDFCF9", color: "#1B2A3D" },
   hr: { borderTop: "1.5px dashed #E4DFD3", margin: "14px 0" },
-  lineRow: { display: "flex", alignItems: "center", gap: 8 },
-  lineNameInput: { width: "100%", border: "none", borderBottom: "1px solid #E4DFD3", fontSize: 13, fontWeight: 700, color: "#1B2A3D", padding: "3px 0" },
-  priceInput: { width: 72, border: "none", borderBottom: "1px dashed #DCD5C6", fontSize: 12, color: "#1B2A3D", padding: "3px 0" },
-  qtyInput: { width: 40, height: 36, padding: 0, textAlign: "center", border: "none", fontSize: 14, fontWeight: 700 },
-  lineTotal: { width: 84, textAlign: "right", fontSize: 13, fontWeight: 700, color: "#1B2A3D" },
-  removeBtn: { background: "none", border: "none", color: "#B3451D", fontSize: 18, cursor: "pointer", lineHeight: 1 },
-  summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 13, color: "#6B6355" },
-  totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 14, borderTop: "2px solid #1B2A3D", fontWeight: 700, fontSize: 14, color: "#1B2A3D" },
-  totalAmt: { fontSize: 20, fontWeight: 800, color: "#B9531A" },
+  tplForm: { display: "flex", gap: 8, marginTop: 10 },
+  tplSaveBtn: { flex: "0 0 auto", minHeight: 46, padding: "0 18px", border: 0, borderRadius: 12, background: "#16324F", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" },
+  tplManage: { marginTop: 10 },
+  tplManageSummary: { minHeight: 40, display: "flex", alignItems: "center", color: "#2E7D8C", fontSize: 13, fontWeight: 800, cursor: "pointer" },
+  tplManageRow: { display: "flex", gap: 8, marginTop: 8 },
+  tplDelete: { flex: "0 0 auto", minHeight: 46, padding: "0 14px", border: "1.5px solid #FECACA", borderRadius: 12, background: "#FEF2F2", color: "#B91C1C", fontWeight: 800, fontSize: 13, cursor: "pointer" },
+  switchRow: { display: "flex", alignItems: "center", gap: 12, width: "100%", marginTop: 14, padding: "12px 14px", border: "1.5px dashed #B9B09B", borderRadius: 13, background: "#fff", cursor: "pointer" },
+  switchTrack: { position: "relative", flex: "0 0 auto", width: 46, height: 28, borderRadius: 14, transition: "background .15s" },
+  switchKnob: { position: "absolute", top: 3, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "left .15s" },
+  tplLabel: { margin: "14px 0 8px", color: "#6B6355", fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase" },
+  tplRow: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 },
+  tplChip: { display: "inline-flex", alignItems: "center", flex: "0 0 auto", minHeight: 44, border: "1.5px solid #DCD5C6", borderRadius: 999, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 13, overflow: "hidden" },
+  tplChipOn: { padding: "0 16px", background: "#16324F", borderColor: "#16324F", color: "#fff", cursor: "pointer" },
+  tplSave: { flex: "0 0 auto", minHeight: 44, padding: "0 14px", border: "1.5px dashed #B9B09B", borderRadius: 999, background: "transparent", color: "#16324F", fontWeight: 800, fontSize: 13, cursor: "pointer" },
+  lastOrder: { marginTop: 10, color: "#047857", fontSize: 12.5, fontWeight: 750 },
+  linkBtn: { padding: 0, border: 0, background: "none", color: "#2E7D8C", font: "inherit", fontWeight: 800, textDecoration: "underline", cursor: "pointer" },
+  priceBox: { display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, minHeight: 44, padding: "0 8px", border: "1.5px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#6B6355", fontSize: 12, fontWeight: 800 },
+  linked: { color: "#15803d", fontSize: 12.5, fontWeight: 700 },
+  unlinked: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 10px", borderRadius: 10, background: "#FEF3E2", color: "#B45309", fontSize: 12.5, fontWeight: 750, whiteSpace: "nowrap" },
+  linkSelect: { flex: "1 1 0", minWidth: 0, minHeight: 40, padding: "6px 8px", borderRadius: 10, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D", fontSize: 13 },
+  dueRow: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 14 },
+  dueLabel: { color: "#16324F", fontSize: 13, fontWeight: 800 },
+  dueChip: { minHeight: 40, padding: "0 14px", border: "1.5px solid #DCD5C6", borderRadius: 999, background: "#fff", color: "#16324F", fontWeight: 750, fontSize: 12.5, cursor: "pointer" },
+  dueChipOn: { background: "#16324F", borderColor: "#16324F", color: "#fff" },
+  dueDate: { color: "#6B6355", fontSize: 12.5, fontWeight: 700 },
+  lineRow: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gridTemplateAreas: '"name name remove" "price stepper total" "stock stock stock"', alignItems: "center", gap: "8px 10px", padding: 10, background: "#FBF9F4", border: "1px solid #EBE5D8", borderRadius: 14 },
+  lineNameInput: { width: "100%", minHeight: 44, border: "none", borderBottom: "1.5px solid #E4DFD3", background: "transparent", borderRadius: 0, fontSize: 14.5, fontWeight: 800, color: "#16324F", padding: "4px 0" },
+  priceInput: { width: "100%", minWidth: 0, minHeight: 40, border: "none", background: "transparent", fontSize: 15, fontWeight: 800, color: "#1B2A3D", padding: 0 },
+  qtyInput: { width: 34, height: 44, padding: 0, textAlign: "center", border: "none", fontSize: 16, fontWeight: 800, background: "#fff" },
+  lineTotal: { minWidth: 62, textAlign: "right", fontSize: 15, fontWeight: 850, color: "#16324F" },
+  removeBtn: { width: 44, height: 44, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "none", background: "#FBECE6", color: "#B3451D", cursor: "pointer" },
+  summaryRow: { display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 14, color: "#6B6355" },
+  totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, padding: "14px 16px", borderRadius: 14, background: "#FFF1E4", fontWeight: 800, fontSize: 15, color: "#16324F" },
+  totalAmt: { fontSize: 28, fontWeight: 900, color: "#B9531A", letterSpacing: "-0.01em" },
   fieldGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
   actionRow: { display: "flex", gap: 8, marginTop: 16 },
-  primaryBtn: { flex: 1, minHeight: 50, background: "#B9531A", color: "#fff", border: "none", borderRadius: 10, padding: "12px", fontWeight: 800, fontSize: 15, cursor: "pointer" },
-  secondaryBtn: { background: "#fff", color: "#1B2A3D", border: "1.5px solid #DCD5C6", borderRadius: 8, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer" },
+  primaryBtn: { flex: 1, minHeight: 56, background: "linear-gradient(180deg,#E8792D,#B9531A)", color: "#fff", border: "none", borderRadius: 14, padding: "12px", fontWeight: 850, fontSize: 16, cursor: "pointer", boxShadow: "0 6px 16px rgba(185,83,26,.28)" },
+  secondaryBtn: { minHeight: 56, background: "#fff", color: "#16324F", border: "1.5px solid #DCD5C6", borderRadius: 14, padding: "12px 18px", fontWeight: 750, fontSize: 14, cursor: "pointer" },
   empty: { padding: "30px 16px", textAlign: "center", color: "#746A59", fontSize: 13.5, border: "1.5px dashed #DCD5C6", borderRadius: 12, background: "#fff" },
   error: { marginTop: 4, color: "#B3451D", fontSize: 11.5 },
   filamentSection: { marginBottom: 22, padding: 14, border: "1.5px solid #D8E5DF", borderRadius: 10, background: "#F4FAF7" },
@@ -490,28 +766,28 @@ const s = {
   filamentCard: { position: "relative", textAlign: "left", background: "#fff", border: "1.5px solid #CFE0D8", borderRadius: 9, padding: 11, display: "flex", flexDirection: "column", gap: 5, cursor: "pointer" },
   filamentMaterial: { color: "#047857", fontSize: 10, fontWeight: 800, textTransform: "uppercase" },
   filamentStock: { color: "#6B6355", fontSize: 11.5 },
-  search: { minHeight: 44, fontSize: 15, marginBottom: 10 },
+  search: { minHeight: 50, fontSize: 15, marginBottom: 12, borderRadius: 14 },
   chips: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 12 },
-  chip: { flex: "0 0 auto", minHeight: 38, padding: "0 14px", borderRadius: 999, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" },
-  chipActive: { background: "#1B2A3D", borderColor: "#1B2A3D", color: "#fff" },
+  chip: { flex: "0 0 auto", minHeight: 42, padding: "0 16px", borderRadius: 999, border: "1.5px solid #DCD5C6", background: "#fff", color: "#16324F", fontWeight: 750, fontSize: 13.5, cursor: "pointer", whiteSpace: "nowrap" },
+  chipActive: { background: "#0F6B64", borderColor: "#0F6B64", color: "#fff" },
   group: { marginBottom: 18 },
   groupTitle: { color: "#16324F", fontSize: 14, fontWeight: 800, marginBottom: 8 },
   spoolGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px,1fr))", gap: 8, marginTop: 6 },
-  pickCardOn: { borderColor: "#E8792D", boxShadow: "0 0 0 1px #E8792D inset" },
+  pickCardOn: { borderColor: "#E8792D", background: "#FFF4EA", boxShadow: "0 0 0 1px #E8792D inset" },
   disabledCard: { opacity: 0.45, cursor: "not-allowed" },
-  qtyBadge: { position: "absolute", top: 6, right: 6, minWidth: 26, padding: "2px 7px", borderRadius: 999, background: "#B9531A", color: "#fff", fontSize: 11.5, fontWeight: 800, textAlign: "center" },
-  customBtn: { width: "100%", minHeight: 46, marginTop: 4, border: "1.5px dashed #DCD5C6", borderRadius: 10, background: "transparent", color: "#1B2A3D", fontWeight: 700, fontSize: 13.5, cursor: "pointer" },
-  panelHead: { display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 800, color: "#B9531A" },
-  step: { marginTop: 18, marginBottom: 8, color: "#1B2A3D", fontSize: 13, fontWeight: 800 },
-  emptySmall: { padding: "14px", textAlign: "center", color: "#746A59", fontSize: 13, border: "1.5px dashed #DCD5C6", borderRadius: 10 },
-  priceLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#746A59", marginTop: 2 },
-  stepper: { display: "flex", alignItems: "center", border: "1.5px solid #DCD5C6", borderRadius: 8, overflow: "hidden" },
-  stepBtn: { width: 34, height: 36, border: "none", background: "#F6F3EC", color: "#1B2A3D", fontSize: 17, fontWeight: 800, cursor: "pointer" },
+  qtyBadge: { position: "absolute", top: 8, right: 8, minWidth: 28, padding: "3px 8px", borderRadius: 999, background: "#B9531A", color: "#fff", fontSize: 12, fontWeight: 850, textAlign: "center" },
+  customBtn: { width: "100%", minHeight: 52, marginTop: 4, border: "1.5px dashed #B9B09B", borderRadius: 14, background: "transparent", color: "#16324F", fontWeight: 750, fontSize: 14, cursor: "pointer" },
+  panelHead: { display: "flex", justifyContent: "space-between", alignItems: "center", margin: "-18px -18px 4px", padding: "16px 18px", background: "#16324F", color: "#fff", fontSize: 17, fontWeight: 850 },
+  step: { display: "flex", alignItems: "center", gap: 9, marginTop: 22, marginBottom: 10, color: "#16324F", fontSize: 14.5, fontWeight: 850 },
+  emptySmall: { padding: "18px", textAlign: "center", color: "#746A59", fontSize: 13.5, border: "1.5px dashed #CFC7B5", borderRadius: 14, background: "#FBF9F4" },
+  priceLabel: { display: "flex", flexDirection: "column", gap: 3, fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "#746A59" },
+  stepper: { display: "flex", alignItems: "center", border: "1.5px solid #DCD5C6", borderRadius: 12, overflow: "hidden", background: "#fff" },
+  stepBtn: { width: 40, height: 44, border: "none", background: "#F1EDE3", color: "#16324F", fontSize: 20, fontWeight: 800, cursor: "pointer" },
   segment: { display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: 6 },
   segmentSmall: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 },
-  segBtn: { minHeight: 42, padding: "0 6px", borderRadius: 8, border: "1.5px solid #DCD5C6", background: "#fff", color: "#1B2A3D", fontWeight: 700, fontSize: 13, cursor: "pointer" },
-  segBtnActive: { background: "#1B2A3D", borderColor: "#1B2A3D", color: "#fff" },
-  hint: { marginTop: 8, color: "#6B6355", fontSize: 12, lineHeight: 1.45 },
+  segBtn: { minHeight: 46, padding: "0 6px", borderRadius: 12, border: "1.5px solid #DCD5C6", background: "#fff", color: "#16324F", fontWeight: 750, fontSize: 13.5, cursor: "pointer" },
+  segBtnActive: { background: "#16324F", borderColor: "#16324F", color: "#fff" },
+  hint: { marginTop: 10, color: "#6B6355", fontSize: 12.5, lineHeight: 1.5 },
   details: { marginTop: 16, borderTop: "1.5px dashed #E4DFD3", paddingTop: 10 },
   summary: { minHeight: 36, display: "flex", alignItems: "center", cursor: "pointer", color: "#1B2A3D", fontSize: 13, fontWeight: 700 },
 };

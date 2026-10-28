@@ -39,6 +39,7 @@ const profitOf = (price, cost, settings) =>
 export default function ProfitPanel({ filaments, onUpdate, showToast }) {
   const [settings, setSettings] = useState(loadSettings);
   const [costDraft, setCostDraft] = useState({});
+  const [priceDraft, setPriceDraft] = useState({});
   const [busy, setBusy] = useState(false);
 
   const change = (patch) => {
@@ -102,6 +103,12 @@ export default function ProfitPanel({ filaments, onUpdate, showToast }) {
     if (!(value >= 0) || costDraft[group.type] === undefined || costDraft[group.type] === "") return;
     applyToType(group, { purchaseCost: value }, `${group.type}: cost set to ${AED(value)} per spool`).then(() => setCostDraft((d) => ({ ...d, [group.type]: undefined })));
   };
+  const saveSellPrice = (group) => {
+    const value = Number(priceDraft[group.type]);
+    if (!(value > 0) || priceDraft[group.type] === undefined || priceDraft[group.type] === "") return;
+    if (!window.confirm(`Set the selling price of every ${group.type} spool to ${AED(value)}?`)) return;
+    applyToType(group, { sellingPrice: value }, `${group.type}: price set to ${AED(value)}`).then(() => setPriceDraft((d) => ({ ...d, [group.type]: undefined })));
+  };
   const applyPrice = (group) => {
     if (!group.suggested || !window.confirm(`Set the selling price of every ${group.type} spool to ${AED(group.suggested)}?`)) return;
     applyToType(group, { sellingPrice: group.suggested }, `${group.type}: price set to ${AED(group.suggested)}`);
@@ -147,7 +154,13 @@ export default function ProfitPanel({ filaments, onUpdate, showToast }) {
                     </span>
                     {hasCost && <div style={s.hint}>now {AED(group.cost)}{group.uncosted > 0 ? ` (${group.uncosted} spool${group.uncosted === 1 ? "" : "s"} have no cost)` : ""}</div>}
                   </td>
-                  <td style={s.num}>{AED(group.price)}</td>
+                  <td style={s.num}>
+                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                      <input style={{ ...s.input, width: 74 }} type="number" min="0" step="0.5" inputMode="decimal" placeholder={group.price.toFixed(2)} value={priceDraft[group.type] ?? ""} onChange={(e) => setPriceDraft({ ...priceDraft, [group.type]: e.target.value })} />
+                      <button style={s.small} disabled={busy || (priceDraft[group.type] ?? "") === ""} onClick={() => saveSellPrice(group)}>Save</button>
+                    </span>
+                    <div style={s.hint}>now {AED(group.price)}</div>
+                  </td>
                   <td style={{ ...s.num, color: hasCost ? (group.profit >= 0 ? "#047857" : "#B91C1C") : "#746A59", fontWeight: 800 }}>{hasCost ? AED(group.profit) : "-"}</td>
                   <td style={s.num}>{hasCost ? `${group.margin.toFixed(0)}%` : "-"}</td>
                   <td style={s.num}>
@@ -190,13 +203,13 @@ const s = {
   cardValue: { display: "block", marginTop: 3, color: "#16324F", fontSize: 17 },
   settings: { display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", margin: "10px 0 14px" },
   field: { display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, fontWeight: 700, color: "#6B6355" },
-  input: { padding: "7px 9px", border: "1px solid #DCD5C6", borderRadius: 8, fontSize: 13, width: 92, background: "#fff" },
+  input: { minHeight: 46, padding: "7px 9px", border: "1.5px solid #DCD5C6", borderRadius: 12, fontSize: 13, width: 92, background: "#fff" },
   tableWrap: { overflowX: "auto", border: "1px solid #EFEAE0", borderRadius: 10 },
   table: { width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: 13.5 },
   th: { padding: "9px 12px", background: "#F8F5EE", fontSize: 11, letterSpacing: ".05em", textTransform: "uppercase", color: "#6B6355", whiteSpace: "nowrap" },
   td: { padding: "9px 12px", borderTop: "1px solid #EFEAE0" },
   num: { padding: "9px 12px", borderTop: "1px solid #EFEAE0", textAlign: "right", whiteSpace: "nowrap" },
   hint: { marginTop: 3, color: "#746A59", fontSize: 11 },
-  small: { padding: "6px 10px", border: "1px solid #DCD5C6", borderRadius: 8, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 12, cursor: "pointer" },
+  small: { minHeight: 44, padding: "6px 10px", border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", color: "#16324F", fontWeight: 800, fontSize: 12, cursor: "pointer" },
   note: { margin: "10px 0 0", color: "#6B6355", fontSize: 12.5, lineHeight: 1.5 },
 };

@@ -113,6 +113,7 @@ export default function PayoutLedger({ showToast }) {
 
   return (
     <div>
+      <h2 style={{ margin: "0 0 14px", color: "#16324F", fontSize: 26, fontWeight: 850 }}>Payouts</h2>
       <div style={st.cards}>
         <Card label="He holds for you" value={AED(totals.balance)} strong color={totals.balance < 0 ? "#B3451D" : "#0F6B64"} />
         <Card label="Sent to him (paid)" value={AED(totals.sent)} />

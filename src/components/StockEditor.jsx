@@ -34,14 +34,17 @@ const Field = ({ label, hint, children }) => (
   <label style={s.field}><span style={s.label}>{label}</span>{children}{hint ? <small style={s.hint}>{hint}</small> : null}</label>
 );
 
-export function AddFilamentModal({ filaments, onSave, onClose, showToast }) {
+// `initial` ({ material, color }) pre-fills the form, e.g. from a scanned label. An unknown type becomes "Other type".
+export function AddFilamentModal({ filaments, onSave, onClose, showToast, initial }) {
   const types = useMemo(() => [...new Set([...COMMON_TYPES, ...filaments.map((entry) => entry.material).filter(Boolean)])].sort((a, b) => a.localeCompare(b)), [filaments]);
-  const [type, setType] = useState("PLA Matte");
-  const [custom, setCustom] = useState("");
-  const [color, setColor] = useState("");
+  const startMaterial = (initial?.material || "").trim();
+  const knownType = types.includes(startMaterial);
+  const [type, setType] = useState(startMaterial ? (knownType ? startMaterial : "__other") : "PLA Matte");
+  const [custom, setCustom] = useState(startMaterial && !knownType ? startMaterial : "");
+  const [color, setColor] = useState(initial?.color || "");
   const [spools, setSpools] = useState(1);
   const [status, setStatus] = useState("available");
-  const [price, setPrice] = useState(() => usualPrice(filaments, "PLA Matte"));
+  const [price, setPrice] = useState(() => usualPrice(filaments, knownType ? startMaterial : startMaterial ? (types.find((name) => startMaterial.startsWith(name)) || "PLA Matte") : "PLA Matte"));
   const [cost, setCost] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -166,12 +169,12 @@ const s = {
   overlay: { position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center", padding: 10, background: "rgba(15,23,42,.55)" },
   modal: { width: "100%", maxWidth: 520, maxHeight: "calc(100dvh - 20px)", overflowY: "auto", padding: 20, borderRadius: 16, background: "#fff", display: "grid", gap: 12 },
   head: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  title: { margin: 0, fontSize: 20, color: "#16324F" },
+  title: { margin: 0, fontSize: 26, fontWeight: 850, color: "#16324F" },
   close: { width: 38, height: 38, border: "1px solid #DCD5C6", borderRadius: 10, background: "#fff", fontSize: 16, cursor: "pointer" },
   field: { display: "grid", gap: 6 },
   label: { color: "#6B6355", fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".04em" },
   hint: { color: "#746A59", fontSize: 12 },
-  input: { width: "100%", minHeight: 46, padding: "10px 12px", border: "1px solid #DCD5C6", borderRadius: 10, fontSize: 16, background: "#fff", boxSizing: "border-box" },
+  input: { width: "100%", minHeight: 46, padding: "10px 12px", border: "1.5px solid #DCD5C6", borderRadius: 12, fontSize: 16, background: "#fff", boxSizing: "border-box" },
   inputBad: { borderColor: "#DC2626" },
   two: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "start" },
   stepper: { display: "grid", gridTemplateColumns: "56px 1fr 56px", gap: 8 },

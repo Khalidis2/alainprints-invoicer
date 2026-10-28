@@ -64,6 +64,25 @@ Then in Vercel:
 You'll get a `*.vercel.app` URL — open it on both PCs (and your phone) and
 they'll all read/write the same Supabase data, live.
 
+## What's in the app
+
+- **Navigation**: a sidebar on computers, a bottom tab bar on phones (Home, Invoices, New, Stock, More).
+  Press **Ctrl K** (or **/**) anywhere to search invoices, customers, orders, stock and products.
+- **Home**: payments this month split by item type (3D products, filament, sublimation, custom), unpaid and
+  paid-this-week totals, a **Needs attention** list (unpaid invoices with a WhatsApp reminder button, low
+  stock, pending website orders), top sellers and recent customers.
+- **New invoice**: compact item rows, **templates** (saved items you reuse), one-tap recent customers and
+  *Repeat last order*, **Deposit** (part payment) status, due-date chips, an optional card payment link, and
+  *Create + share*.
+- **Invoice detail** (tap an invoice): how much is still to pay, WhatsApp reminder, add a payment (paying the
+  rest marks it Paid), duplicate, share, print, edit, change status and an activity timeline.
+
+Where the new data lives (no database change needed):
+
+- Deposits are saved as `payments` inside the invoice's existing `__invoice_meta__` line. The invoice stays
+  **Unpaid** until the full amount is in, so stock and Stripe behave exactly as before.
+- Templates are saved in the existing `settings` table under the key `invoice_templates`.
+
 ## Project structure
 
 ```
@@ -75,9 +94,14 @@ alainprints-invoicer/
 │   ├── lib/
 │   │   ├── supabaseClient.js   # Supabase client (reads .env vars)
 │   │   ├── storage.js          # all DB reads/writes + realtime subscribe
-│   │   └── helpers.js          # formatting, categories, seed data
+│   │   ├── helpers.js          # formatting, categories, seed data
+│   │   └── invoiceMath.js      # deposits, part paid, monthly report by item type
 │   └── components/
 │       ├── ItemsMenu.jsx       # catalog: add/edit/delete items
+│       ├── Navigation.jsx      # sidebar, bottom tab bar, More page
+│       ├── AdminDashboard.jsx  # Home
+│       ├── SearchPage.jsx      # Ctrl K search
+│       ├── InvoiceDetail.jsx   # one invoice: payments, reminders, timeline
 │       ├── InvoiceBuilder.jsx  # build + generate an invoice
 │       ├── InvoicePrint.jsx    # printable invoice layout (shared)
 │       └── InvoiceHistory.jsx  # past invoices, reopen to reprint

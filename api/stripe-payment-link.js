@@ -1,13 +1,11 @@
-import { META_ID, applyRefund, getInvoiceRow, hasInvoiceColumns, metaToColumns, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
+import { META_ID, applyRefund, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // Adds fields to the invoice meta line only. Unlike save_invoice this never re-checks or moves stock,
 // so paid invoices from before can be linked to Stripe without touching the inventory.
 async function linkMetaOnly(row, patch, token) {
+  const lines = (row.lines || []).filter((line) => line.itemId !== META_ID);
   const meta = { ...readMeta(row), ...patch, itemId: META_ID };
-  const body = hasInvoiceColumns(row)
-    ? metaToColumns(meta)
-    : { lines: [...(row.lines || []).filter((line) => line.itemId !== META_ID), meta] };
-  await supabaseFetch(`/rest/v1/invoices?id=eq.${encodeURIComponent(row.id)}`, { token, method: "PATCH", body });
+  await supabaseFetch(`/rest/v1/invoices?id=eq.${encodeURIComponent(row.id)}`, { token, method: "PATCH", body: { lines: [...lines, meta] } });
 }
 
 // POST { invoiceId } with the logged-in admin's Supabase token.

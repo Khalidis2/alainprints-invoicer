@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
-import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder } from "./_store-shared.js";
+import { getStoreOrder, markStoreOrderPaid, updateStoreOrder, emailOrder, emailInvoicePaid } from "./_store-shared.js";
 import { savePayout } from "./_payouts.js";
-import { applyRefund, env, findInvoiceBy, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
+import { invoicePdfFromRow } from "./_invoice-pdf.js";
+import { applyRefund, env, getInvoiceRow, readMeta, saveInvoiceMeta, stripe, supabaseConfig, supabaseFetch, uaeDate } from "./_stripe-shared.js";
 
 // Stripe calls this when a payment link is paid. It marks the matching invoice Paid.
 export const config = { api: { bodyParser: false } };
@@ -68,10 +69,24 @@ export default async function handler(request, response) {
       paymentReference: `${session.payment_intent || session.id}${Number(session.amount_total) !== Math.round(Number(row.total) * 100) ? ` (paid AED ${(Number(session.amount_total) / 100).toFixed(2)}, check amount)` : ""}`,
       stripePaidAmount: session.amount_total,
     });
-    return response.status(200).json({ marked: "Paid", invoice: row.number });
+    // Receipt to the customer (Stripe collected their email, Apple Pay included) and a copy to the owner.
+    // The PDF invoice is attached to both emails. If building it fails, the emails still go out without it.
+    const pdf = await invoicePdf(row, meta, { paidDate: uaeDate(session.created || event.created), paymentReference: session.payment_intent || session.id });
+    const emails = await emailInvoicePaid(row, { customerEmail: session.customer_details?.email || session.customer_email || meta.customerEmail, paymentIntent: session.payment_intent, pdf });
+    if (emails.customer?.failed || emails.owner?.failed) console.error("Invoice paid email problem", row.number, JSON.stringify(emails));
+    return response.status(200).json({ marked: "Paid", invoice: row.number, emails });
   } catch (error) {
     // 500 makes Stripe retry later (e.g. a brief Supabase hiccup).
     return response.status(500).json({ error: error.message || "Webhook failed" });
+  }
+}
+
+async function invoicePdf(row, meta, paid) {
+  try {
+    return await invoicePdfFromRow(row, meta, { status: "Paid", paidDate: paid.paidDate, paymentMethod: "Card (Stripe)", paymentReference: paid.paymentReference, payUrl: "" });
+  } catch (error) {
+    console.error("Invoice PDF failed", row.number, error.message);
+    return null;
   }
 }
 
@@ -82,7 +97,9 @@ async function findInvoice(session) {
     if (row) return row;
   }
   if (!session.payment_link) return null;
-  return findInvoiceBy("stripe_link_id", "stripeLinkId", session.payment_link);
+  const filter = encodeURIComponent(JSON.stringify([{ stripeLinkId: session.payment_link }]));
+  const rows = await supabaseFetch(`/rest/v1/invoices?lines=cs.${filter}&select=*`);
+  return rows?.[0] || null;
 }
 
 function verifySignature(raw, header) {
