@@ -524,7 +524,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="r
   .type-stack { display: none; }
 }
 @media (min-width: 900px) {
-  .home-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .home-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .home-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
   .home-actions { max-width: 560px; }
 }
