@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { fetchComingPayouts } from "../lib/storage";
 import { Breakdown, buildEntries } from "./Sales";
 
 function money(value) {
@@ -29,6 +30,39 @@ function buildPayments(invoices, storeOrders) {
   return [...fromInvoices, ...fromOrders].sort((a, b) => b.when - a.when);
 }
 
+// Future payouts: card money Stripe holds for you plus payouts already sent but not yet in your bank.
+function ComingPayouts() {
+  const [state, setState] = useState({ loading: true });
+  useEffect(() => {
+    let alive = true;
+    fetchComingPayouts()
+      .then((result) => alive && setState({ loading: false, ...result }))
+      .catch(() => alive && setState({ loading: false, failed: true }));
+    return () => { alive = false; };
+  }, []);
+
+  const transit = (state.inTransit || []).reduce((sum, row) => sum + row.amount, 0);
+  const total = (state.inStripe || 0) + transit;
+  return (
+    <article className="admin-card dash-wide dash-coming">
+      <span>Coming from Stripe · future payouts</span>
+      {state.loading && <p className="dash-empty">Checking Stripe…</p>}
+      {state.failed && <p className="dash-empty">Couldn't load payouts right now.</p>}
+      {!state.loading && !state.failed && (
+        <>
+          <div className="dash-stats">
+            <div><small>Still in Stripe, not paid out yet</small><strong>{state.inStripe === null ? "—" : money(state.inStripe)}</strong></div>
+            <div><small>On its way to your bank</small><strong>{money(transit)}</strong></div>
+            <div><small>Total coming to you</small><strong className="dash-total-inline">{state.inStripe === null ? money(transit) : money(total)}</strong></div>
+          </div>
+          {state.inStripe === null && <p className="dash-empty">Stripe balance unavailable ({state.balanceError}). If it says permission, give the Stripe key Balance: Read.</p>}
+          {state.inTransit.length > 0 && <p className="dash-empty">{state.inTransit.map((row) => `${money(row.amount)} arriving ${dayLabel(new Date(`${row.date}T00:00:00`).getTime())}`).join(" · ")}</p>}
+        </>
+      )}
+    </article>
+  );
+}
+
 function DashboardCards({ invoices, storeOrders, filaments, onNavigate }) {
   const payments = useMemo(() => buildPayments(invoices, storeOrders), [invoices, storeOrders]);
   const now = Date.now();
@@ -51,6 +85,7 @@ function DashboardCards({ invoices, storeOrders, filaments, onNavigate }) {
 
   return (
     <div className="dash-cards">
+      <ComingPayouts />
       <article className="admin-card dash-wide">
         <span>Money received</span>
         <div className="dash-stats">

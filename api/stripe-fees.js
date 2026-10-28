@@ -25,6 +25,18 @@ export default async function handler(request, response) {
     }
   }
 
+  // Money Stripe is holding for you: it reaches your bank in a future payout.
+  if (body.balance === true) {
+    try {
+      const balance = await stripe("/balance");
+      const cents = (list) => (list || []).filter((entry) => String(entry.currency).toLowerCase() === "aed").reduce((sum, entry) => sum + Number(entry.amount || 0), 0) / 100;
+      response.setHeader("Cache-Control", "no-store");
+      return response.status(200).json({ pending: cents(balance.pending), available: cents(balance.available) });
+    } catch (error) {
+      return response.status(200).json({ error: error.message || "Couldn't read the Stripe balance" });
+    }
+  }
+
   const ids = [...new Set((Array.isArray(body.paymentIntents) ? body.paymentIntents : []).map(String))].filter((id) => /^pi_[A-Za-z0-9]+$/.test(id)).slice(0, 40);
   const fees = {};
 

@@ -766,3 +766,20 @@ export async function fetchStripeFees(paymentIntents) {
   }
   return Object.fromEntries(wanted.map((id) => [id, feeCache.get(id)]));
 }
+
+// Money Stripe still holds for you (pending + available) and payouts already on their way to the bank.
+export async function fetchComingPayouts() {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const balance = await fetch("/api/stripe-fees", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ balance: true }),
+  }).then((response) => response.json()).catch(() => ({ error: "Couldn't reach Stripe" }));
+  const ledger = await supabase.from("payout_ledger").select("amount,entry_date").eq("kind", "payout").eq("status", "in_transit").order("entry_date");
+  return {
+    inStripe: balance.error ? null : Number(balance.pending || 0) + Number(balance.available || 0),
+    balanceError: balance.error || "",
+    inTransit: (ledger.data || []).map((row) => ({ amount: Number(row.amount) || 0, date: row.entry_date })),
+  };
+}
