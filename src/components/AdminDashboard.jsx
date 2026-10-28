@@ -45,18 +45,14 @@ function ComingPayouts() {
   const total = (state.inStripe || 0) + transit;
   return (
     <article className="admin-card dash-wide dash-coming">
-      <span>Coming from Stripe · future payouts</span>
+      <span>Future payouts</span>
       {state.loading && <p className="dash-empty">Checking Stripe…</p>}
       {state.failed && <p className="dash-empty">Couldn't load payouts right now.</p>}
       {!state.loading && !state.failed && (
         <>
-          <div className="dash-stats">
-            <div><small>Still in Stripe, not paid out yet</small><strong>{state.inStripe === null ? "—" : money(state.inStripe)}</strong></div>
-            <div><small>On its way to your bank</small><strong>{money(transit)}</strong></div>
-            <div><small>Total coming to you</small><strong className="dash-total-inline">{state.inStripe === null ? money(transit) : money(total)}</strong></div>
-          </div>
-          {state.inStripe === null && <p className="dash-empty">Stripe balance unavailable ({state.balanceError}). If it says permission, give the Stripe key Balance: Read.</p>}
-          {state.inTransit.length > 0 && <p className="dash-empty">{state.inTransit.map((row) => `${money(row.amount)} arriving ${dayLabel(new Date(`${row.date}T00:00:00`).getTime())}`).join(" · ")}</p>}
+          <strong className="dash-total-inline">{money(total)}</strong>
+          <p className="dash-empty">Paid by customers in Stripe, not in your bank yet.</p>
+          {state.inStripe === null && <p className="dash-empty">Stripe balance unavailable, so this only counts payouts already sent. Give the Stripe key Balance: Read.</p>}
         </>
       )}
     </article>
