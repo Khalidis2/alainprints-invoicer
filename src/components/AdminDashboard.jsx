@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { fetchFuturePayouts } from "../lib/storage";
 import { AED } from "../lib/helpers";
 import { Breakdown, buildEntries } from "./Sales";
 import { Icon } from "./Navigation";
@@ -64,6 +65,14 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
       const total = data.filter((row) => row.status === "done").reduce((sum, row) => sum + (row.kind === "payout" ? Number(row.amount) : -Number(row.amount)), 0);
       setHeld(total);
     });
+    return () => { alive = false; };
+  }, []);
+
+  // Paid by customers in Stripe, not in your bank yet.
+  const [future, setFuture] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    fetchFuturePayouts().then((result) => alive && setFuture(result)).catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -187,6 +196,11 @@ export default function AdminDashboard({ items, invoices, customers, filaments, 
           <small>PAID THIS WEEK</small>
           <strong style={{ color: "#047857" }}>{aed0(week.total)}</strong>
           <span>{week.count} payment{week.count === 1 ? "" : "s"}</span>
+        </button>
+        <button type="button" className="home-card" onClick={() => onNavigate("payouts")}>
+          <small>FUTURE PAYOUTS</small>
+          <strong style={{ color: "#16324F" }}>{future ? aed0(future.total) : "…"}</strong>
+          <span>{future?.partial ? "Sent payouts only (Stripe balance unavailable)" : "On its way from Stripe"}</span>
         </button>
         <button type="button" className="home-card" onClick={() => onNavigate("store-orders")}>
           <small>WEBSITE ORDERS</small>

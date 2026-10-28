@@ -865,3 +865,17 @@ export async function saveInvoiceTemplates(templates) {
   const { error } = await supabase.from("settings").upsert({ key: "invoice_templates", value: templates }, { onConflict: "key" });
   if (error) throw error;
 }
+
+// Future payouts: money Stripe still holds for you (pending + available) plus payouts sent but not yet in the bank.
+export async function fetchFuturePayouts() {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const balance = await fetch("/api/stripe-fees", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ balance: true }),
+  }).then((response) => response.json()).catch(() => ({ error: "Couldn't reach Stripe" }));
+  const ledger = await supabase.from("payout_ledger").select("amount").eq("kind", "payout").eq("status", "in_transit");
+  const inTransit = (ledger.data || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+  return { total: (balance.error ? 0 : Number(balance.pending || 0) + Number(balance.available || 0)) + inTransit, partial: Boolean(balance.error) };
+}
